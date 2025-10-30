@@ -1,5 +1,5 @@
 // API Service Layer for Dashboard
-const API_BASE_URL = 'https://dashboard-scraper-454311427577.us-central1.run.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://dashboard-scraper-454311427577.us-central1.run.app';
 
 export interface CityStatus {
   id: number;
@@ -112,6 +112,7 @@ export async function fetchSummary(): Promise<Summary> {
       active_cities: 0,
       completed_cities: 0,
       properties_today: 0,
+      properties_updated_today: 0,
       properties_total: 0,
       avg_speed_ms: 0
     };
@@ -227,6 +228,7 @@ function getMockData(): DashboardData {
       active_cities: 3,
       completed_cities: 1,
       properties_today: 1247,
+      properties_updated_today: 2746,
       properties_total: 45678,
       avg_speed_ms: 3200
     },
