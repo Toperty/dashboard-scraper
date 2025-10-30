@@ -1,13 +1,31 @@
+"use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Home, TrendingUp, RefreshCw } from "lucide-react"
+import type { Summary } from "@/lib/api"
 
-const inventoryData = [
-  { label: "Propiedades Nuevas", value: "1,247", icon: Home, change: "+12%" },
-  { label: "Actualizaciones", value: "3,891", icon: RefreshCw, change: "+8%" },
-  { label: "Total Inventario", value: "45,623", icon: TrendingUp, change: "+5%" },
-]
+interface PropertyInventoryProps {
+  summary: Summary | null
+}
 
-export function PropertyInventory() {
+export function PropertyInventory({ summary }: PropertyInventoryProps) {
+  const inventoryData = [
+    { 
+      label: "Propiedades Nuevas Hoy", 
+      value: summary ? summary.properties_today.toLocaleString() : "0", 
+      icon: Home
+    },
+    { 
+      label: "Actualizaciones", 
+      value: summary ? summary.properties_updated_today.toLocaleString() : "0", 
+      icon: RefreshCw
+    },
+    { 
+      label: "Total Inventario", 
+      value: summary ? summary.properties_total.toLocaleString() : "0", 
+      icon: TrendingUp
+    },
+  ]
+
   return (
     <Card>
       <CardHeader>
@@ -18,7 +36,7 @@ export function PropertyInventory() {
           {inventoryData.map((item, index) => {
             const Icon = item.icon
             return (
-              <div key={index} className="flex items-center justify-between p-4 rounded-lg border bg-card">
+              <div key={index} className="flex items-center p-4 rounded-lg border bg-card">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-primary/10">
                     <Icon className="h-5 w-5 text-primary" />
@@ -27,10 +45,6 @@ export function PropertyInventory() {
                     <p className="text-sm text-muted-foreground">{item.label}</p>
                     <p className="text-2xl font-bold">{item.value}</p>
                   </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm font-semibold text-green-600">{item.change}</span>
-                  <p className="text-xs text-muted-foreground">vs. anterior</p>
                 </div>
               </div>
             )

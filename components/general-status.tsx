@@ -1,14 +1,42 @@
+"use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Activity, Zap, Target, TrendingUp } from "lucide-react"
+import { Activity, Building2, CheckCircle, TrendingUp } from "lucide-react"
+import type { Summary } from "@/lib/api"
 
-const kpis = [
-  { label: "Tasa de Éxito", value: "94.2%", icon: Activity, color: "text-green-600" },
-  { label: "Velocidad Promedio", value: "2.3 pág/min", icon: Zap, color: "text-blue-600" },
-  { label: "Cobertura", value: "87.5%", icon: Target, color: "text-purple-600" },
-  { label: "Eficiencia", value: "91.8%", icon: TrendingUp, color: "text-orange-600" },
-]
+interface GeneralStatusProps {
+  summary: Summary | null
+}
 
-export function GeneralStatus() {
+export function GeneralStatus({ summary }: GeneralStatusProps) {
+  const kpis = [
+    { 
+      label: "Ciudades Activas", 
+      value: summary ? `${summary.active_cities}/${summary.total_cities}` : "0/0", 
+      icon: Building2, 
+      color: "text-green-600" 
+    },
+    { 
+      label: "Completadas", 
+      value: summary ? `${summary.completed_cities}` : "0", 
+      icon: CheckCircle, 
+      color: "text-blue-600" 
+    },
+    { 
+      label: "Props Hoy", 
+      value: summary ? summary.properties_today.toLocaleString() : "0", 
+      icon: TrendingUp, 
+      color: "text-purple-600" 
+    },
+    { 
+      label: "Velocidad", 
+      value: summary && summary.avg_speed_ms > 0 
+        ? `${(summary.avg_speed_ms / 1000).toFixed(1)}s` 
+        : "N/A", 
+      icon: Activity, 
+      color: "text-orange-600" 
+    },
+  ]
+
   return (
     <Card>
       <CardHeader>
@@ -29,6 +57,13 @@ export function GeneralStatus() {
             )
           })}
         </div>
+        {summary && (
+          <div className="mt-4 pt-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Total de propiedades en BD: {summary.properties_total.toLocaleString()}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

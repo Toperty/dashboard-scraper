@@ -1,29 +1,12 @@
+"use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, AlertCircle, Info } from "lucide-react"
+import type { Alert } from "@/lib/api"
 
-const alerts = [
-  {
-    level: "critical",
-    message: "Scraper de Cali detenido por error de conexión",
-    time: "5 min",
-  },
-  {
-    level: "warning",
-    message: "Velocidad de Bogotá por debajo del promedio",
-    time: "12 min",
-  },
-  {
-    level: "info",
-    message: "Medellín completó ejecución exitosamente",
-    time: "15 min",
-  },
-  {
-    level: "warning",
-    message: "Próxima ejecución de Barranquilla en 30 minutos",
-    time: "30 min",
-  },
-]
+interface AlertsPanelProps {
+  alerts: Alert[]
+}
 
 const alertConfig = {
   critical: {
@@ -46,7 +29,24 @@ const alertConfig = {
   },
 }
 
-export function AlertsPanel() {
+function getTimeAgo(timestamp: string): string {
+  try {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`
+    }
+    return `${minutes} min`
+  } catch {
+    return "N/A"
+  }
+}
+
+export function AlertsPanel({ alerts }: AlertsPanelProps) {
   return (
     <Card>
       <CardHeader>
@@ -54,23 +54,35 @@ export function AlertsPanel() {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {alerts.map((alert, index) => {
-            const config = alertConfig[alert.level as keyof typeof alertConfig]
-            const Icon = config.icon
+          {alerts.length === 0 ? (
+            <div className="text-center py-4 text-muted-foreground text-sm">
+              No hay alertas activas
+            </div>
+          ) : (
+            alerts.slice(0, 5).map((alert, index) => {
+              const config = alertConfig[alert.level as keyof typeof alertConfig] || alertConfig.info
+              const Icon = config.icon
 
-            return (
-              <div key={index} className={`p-3 rounded-lg border ${config.color}`}>
-                <div className="flex items-start gap-3">
-                  <Icon className={`h-4 w-4 mt-0.5 flex-shrink-0 ${config.iconColor}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-relaxed">{alert.message}</p>
-                    <span className="text-xs text-muted-foreground mt-1 block">Hace {alert.time}</span>
+              return (
+                <div key={index} className={`p-3 rounded-lg border ${config.color}`}>
+                  <div className="flex items-start gap-3">
+                    <Icon className={`h-4 w-4 mt-1 ${config.iconColor}`} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={config.badgeColor}>
+                          {alert.level.toUpperCase()}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {alert.city} • hace {getTimeAgo(alert.timestamp)}
+                        </span>
+                      </div>
+                      <p className="text-sm">{alert.message}</p>
+                    </div>
                   </div>
-                  <Badge className={`${config.badgeColor} flex-shrink-0`}>{alert.level}</Badge>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
       </CardContent>
     </Card>
