@@ -6,7 +6,7 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile.dev
-    container_name: dashboard_backend
+    container_name: dashboard_backend_dev
     ports:
       - "8000:8000"
     environment:
@@ -17,34 +17,35 @@ services:
       - DB_PORT=${DB_PORT}
       - API_HOST=0.0.0.0
       - API_PORT=8000
-      - DEBUG=false
-      - LOG_LEVEL=INFO
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
     networks:
       - dashboard_network
+    volumes:
+      - ./backend:/app
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  # Next.js Frontend
+  # Next.js Frontend con hot reload
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    container_name: dashboard_frontend
+    image: node:18-alpine
+    container_name: dashboard_frontend_dev
+    working_dir: /app
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NODE_ENV=production
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "npm install -g pnpm && pnpm install && pnpm dev"
     depends_on:
       - backend
     networks:
       - dashboard_network
     restart: unless-stopped
-
 
 networks:
   dashboard_network:

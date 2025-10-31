@@ -133,6 +133,11 @@ export interface Property {
   maps_link?: string;
   latitude?: number;
   longitude?: number;
+  baths?: number;
+  garages?: number;
+  stratum?: number;
+  antiquity?: string;  // Ahora es string con el rango formateado
+  is_new?: boolean;
 }
 
 export interface PropertiesResponse {
@@ -180,7 +185,16 @@ export async function fetchProperties(
     max_price?: number;
     min_area?: number;
     max_area?: number;
-    rooms?: number;
+    rooms?: string;
+    baths?: string;
+    garages?: string;
+    stratum?: string | number;
+    min_antiquity?: number;
+    max_antiquity?: number;
+    antiquity_filter?: string;
+    property_type?: string;
+    updated_date_from?: string;
+    updated_date_to?: string;
   } = {}
 ): Promise<PropertiesResponse> {
   try {

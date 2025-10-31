@@ -58,14 +58,14 @@ export function DashboardView() {
         <GeneralStatus summary={data?.summary || null} />
       </div>
 
-      {/* City Status Table */}
-      <CityStatusTable cities={data?.cities || []} />
-
       {/* Bottom Row: Alerts and Property Inventory */}
       <div className="grid gap-6 md:grid-cols-2">
         <AlertsPanel alerts={data?.alerts || []} />
         <PropertyInventory summary={data?.summary || null} />
       </div>
+
+      {/* City Status Table */}
+      <CityStatusTable cities={data?.cities || []} />
     </div>
   )
 }
