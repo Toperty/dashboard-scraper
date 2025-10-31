@@ -1,6 +1,7 @@
 "use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AlertTriangle, AlertCircle, Info } from "lucide-react"
 import type { Alert } from "@/lib/api"
 
@@ -49,42 +50,59 @@ function getTimeAgo(timestamp: string): string {
 export function AlertsPanel({ alerts }: AlertsPanelProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Alertas del Sistema</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {alerts.length === 0 ? (
-            <div className="text-center py-4 text-muted-foreground text-sm">
-              No hay alertas activas
-            </div>
-          ) : (
-            alerts.slice(0, 5).map((alert, index) => {
-              const config = alertConfig[alert.level as keyof typeof alertConfig] || alertConfig.info
-              const Icon = config.icon
+        <CardHeader>
+          <CardTitle>Alertas del Sistema</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {alerts.length === 0 ? (
+              <div className="text-center py-4 text-muted-foreground text-sm">
+                No hay alertas activas
+              </div>
+            ) : (
+              alerts.slice(0, 5).map((alert, index) => {
+                const config = alertConfig[alert.level as keyof typeof alertConfig] || alertConfig.info
+                const Icon = config.icon
 
-              return (
-                <div key={index} className={`p-3 rounded-lg border ${config.color}`}>
-                  <div className="flex items-start gap-3">
-                    <Icon className={`h-4 w-4 mt-1 ${config.iconColor}`} />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge className={config.badgeColor}>
-                          {alert.level.toUpperCase()}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {alert.city} • hace {getTimeAgo(alert.timestamp)}
-                        </span>
+                return (
+                  <Tooltip key={index}>
+                    <TooltipTrigger asChild>
+                      <div className={`p-3 rounded-lg border ${config.color} cursor-help`}>
+                        <div className="flex items-start gap-3">
+                          <Icon className={`h-4 w-4 mt-1 ${config.iconColor}`} />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="cursor-help">
+                                    <Badge className={config.badgeColor}>
+                                      {alert.level.toUpperCase()}
+                                    </Badge>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Nivel de alerta: {alert.level}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <span className="text-xs text-muted-foreground">
+                                {alert.city} • hace {getTimeAgo(alert.timestamp)}
+                              </span>
+                            </div>
+                            <p className="text-sm">{alert.message}</p>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-sm">{alert.message}</p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-      </CardContent>
-    </Card>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Alerta de nivel {alert.level} desde {alert.city}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Timestamp: {new Date(alert.timestamp).toLocaleString()}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )
+              })
+            )}
+          </div>
+        </CardContent>
+      </Card>
   )
 }

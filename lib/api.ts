@@ -24,6 +24,8 @@ export interface Summary {
   properties_updated_today: number;
   properties_total: number;
   avg_speed_ms: number;
+  last_execution_time?: string;
+  recent_errors_count?: number;
   changes?: {
     properties_today_change: number;
     cities_change: number;

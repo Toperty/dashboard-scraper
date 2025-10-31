@@ -232,24 +232,92 @@ def get_property_stats(session, city_id=None):
         return 0, 0
 
 def get_avg_speed(session):
-    """Obtener velocidad promedio real de scraper_logs"""
+    """Calcular páginas por minuto desde PAGE_NAVIGATION logs"""
     from sqlmodel import select, func
     from models.scraper_log import ScraperLog
     from datetime import datetime, timedelta
     
     try:
-        # Promedio de execution_time_ms de las últimas 24 horas
+        # Últimas 24 horas
         yesterday = get_local_now() - timedelta(hours=24)
         
-        avg_query = select(func.avg(ScraperLog.execution_time_ms)).where(
+        # Contar logs de PAGE_NAVIGATION en las últimas 24 horas
+        page_count_query = select(func.count(ScraperLog.id)).where(
             ScraperLog.timestamp >= yesterday,
-            ScraperLog.execution_time_ms.is_not(None)
+            ScraperLog.log_type == "PAGE_NAVIGATION"
         )
         
-        avg_speed = session.exec(avg_query).first()
-        return round(float(avg_speed), 1) if avg_speed else 3200.0
+        page_count = session.exec(page_count_query).first()
+        
+        if page_count and page_count > 0:
+            # Calcular páginas por minuto (24 horas = 1440 minutos)
+            pages_per_minute = page_count / 1440
+            return round(float(pages_per_minute), 2)
+        else:
+            return 0.0
     except Exception as e:
-        return 3200.0
+        print(f"Error calculating pages per minute: {e}")
+        return 0.0
+
+def get_last_execution_time(session):
+    """Obtener tiempo desde la última ejecución obteniendo el timestamp más reciente de la BD"""
+    try:
+        from sqlalchemy import text
+        
+        # Obtener el último timestamp de scraper_logs
+        query = text("""
+            SELECT MAX(timestamp) FROM scraper_logs
+        """)
+        
+        result = session.execute(query).fetchone()
+        
+        if result and result[0]:
+            now = get_local_now()
+            
+            diff = now - result[0]
+            total_seconds = abs(diff.total_seconds())
+            
+            if total_seconds < 60:
+                return "Hace unos segundos"
+            elif total_seconds < 3600:
+                minutes = int(total_seconds // 60)
+                return f"Hace {minutes} min"
+            elif total_seconds < 86400:
+                hours = int(total_seconds // 3600)
+                return f"Hace {hours} hora{'s' if hours > 1 else ''}"
+            else:
+                days = int(total_seconds // 86400)
+                return f"Hace {days} día{'s' if days > 1 else ''}"
+        else:
+            return "N/A"
+            
+    except Exception as e:
+        print(f"Error getting last execution time: {e}")
+        return "N/A"
+
+def get_recent_errors_count(session):
+    """Obtener conteo de errores usando SQL directo"""
+    try:
+        from sqlalchemy import text
+        from datetime import timedelta
+        
+        yesterday = get_local_now() - timedelta(hours=24)
+        
+        # Contar errores en las últimas 24h
+        query = text("""
+            SELECT COUNT(*) FROM scraper_logs 
+            WHERE timestamp >= :yesterday 
+            AND log_level = 'ERROR'
+        """)
+        result = session.execute(query, {"yesterday": yesterday}).fetchone()
+        count = int(result[0]) if result else 0
+        
+        return count
+    except Exception as e:
+        print(f"Error getting recent errors count: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
 
 def get_system_alerts(session):
     """Obtener alertas del sistema desde scraper_logs - último log de cada categoría"""
@@ -410,7 +478,9 @@ async def get_dashboard():
                         "properties_today": today_properties_global,
                         "properties_updated_today": properties_updated_today,
                         "properties_total": total_properties_global,
-                        "avg_speed_ms": avg_speed
+                        "avg_speed_ms": avg_speed,
+                        "last_execution_time": get_last_execution_time(session),
+                        "recent_errors_count": get_recent_errors_count(session)
                     },
                     "cities": city_data,
                     "next_executions": get_next_executions(session),
@@ -480,6 +550,8 @@ async def get_summary_with_changes():
                     "properties_today": today_count,
                     "properties_total": total_properties,
                     "avg_speed_ms": get_avg_speed(session),
+                    "last_execution_time": get_last_execution_time(session),
+                    "recent_errors_count": get_recent_errors_count(session),
                     "changes": {
                         "properties_today_change": properties_change,
                         "cities_change": cities_change,
