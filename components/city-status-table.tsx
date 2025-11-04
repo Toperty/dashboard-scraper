@@ -83,9 +83,9 @@ export function CityStatusTable({ cities }: CityStatusTableProps) {
 
                 return (
                   <div key={city.id} className="p-4 rounded-lg border bg-card space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 flex-wrap min-w-0">
+                        <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <h3 className="text-lg font-semibold">{city.name}</h3>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -116,7 +116,7 @@ export function CityStatusTable({ cities }: CityStatusTableProps) {
                       </div>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="text-sm text-muted-foreground cursor-help">
+                          <span className="text-xs text-muted-foreground cursor-help whitespace-nowrap flex-shrink-0">
                             Actualizado hace {getTimeAgo(city.last_update)}
                           </span>
                         </TooltipTrigger>
@@ -133,7 +133,7 @@ export function CityStatusTable({ cities }: CityStatusTableProps) {
                           <div className="space-y-2 cursor-help">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium">Venta</span>
-                              <span className="text-sm font-mono text-muted-foreground">{city.sell_pages}</span>
+                              <span className="text-sm text-muted-foreground">{city.sell_pages}</span>
                             </div>
                             <Progress value={city.sell_progress} className="h-2" />
                             <span className="text-xs text-muted-foreground">{city.sell_progress.toFixed(1)}%</span>
@@ -150,7 +150,7 @@ export function CityStatusTable({ cities }: CityStatusTableProps) {
                           <div className="space-y-2 cursor-help">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium">Arriendo</span>
-                              <span className="text-sm font-mono text-muted-foreground">{city.rent_pages}</span>
+                              <span className="text-sm text-muted-foreground">{city.rent_pages}</span>
                             </div>
                             <Progress value={city.rent_progress} className="h-2" />
                             <span className="text-xs text-muted-foreground">{city.rent_progress.toFixed(1)}%</span>

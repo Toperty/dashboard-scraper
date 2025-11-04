@@ -3,14 +3,20 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { AlertProvider } from "@/hooks/use-alert"
+import { ConfirmProvider } from "@/hooks/use-confirm"
 import "./globals.css"
 
-const _inter = Inter({ subsets: ["latin"] })
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
-  generator: "v0.app",
+  title: "Dashboard Scraper - Toperty",
+  description: "Sistema de monitoreo y análisis de propiedades inmobiliarias",
+  generator: "Toperty",
+  icons: {
+    icon: '/logo-toperty-square.png',
+    apple: '/logo-toperty-square.png',
+  },
 }
 
 export default function RootLayout({
@@ -19,11 +25,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={`font-sans antialiased ${_inter.className}`}>
-        <TooltipProvider>
-          {children}
-        </TooltipProvider>
+    <html lang="es">
+      <body className={`font-sans antialiased ${inter.className}`}>
+        <AlertProvider>
+          <ConfirmProvider>
+            <TooltipProvider>
+              {children}
+            </TooltipProvider>
+          </ConfirmProvider>
+        </AlertProvider>
         <Analytics />
       </body>
     </html>

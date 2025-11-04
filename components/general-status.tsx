@@ -15,7 +15,7 @@ export function GeneralStatus({ summary }: GeneralStatusProps) {
       value: summary ? `${summary.completed_cities}/${summary.total_cities}` : "0/0", 
       icon: CheckCircle, 
       color: "text-green-600",
-      tooltip: "Número de ciudades que han completado su proceso de scraping del total de ciudades configuradas"
+      tooltip: "Número de ciudades que han completado su proceso de scraping del total de ciudades configuradas, cuando finalice el proceso se reiniciarán automáticamente"
     },
     { 
       label: "Última Ejecución", 

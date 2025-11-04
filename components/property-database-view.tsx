@@ -6,15 +6,20 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Search, ChevronLeft, ChevronRight, Filter, ExternalLink, MapPin } from "lucide-react"
+import { Search, ChevronLeft, ChevronRight, ExternalLink, MapPin, Download, RotateCcw } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { fetchProperties, fetchCitiesList, type Property, type PropertiesResponse, type CityOption } from "@/lib/api"
+import { downloadPropertiesAsExcel } from "@/lib/excel-export"
+import { useAlert } from "@/hooks/use-alert"
+import { useConfirm } from "@/hooks/use-confirm"
 
 export function PropertyDatabaseView() {
   const [data, setData] = useState<PropertiesResponse | null>(null)
   const [cities, setCities] = useState<CityOption[]>([])
+  const { success: showSuccess, error: showError } = useAlert()
+  const { confirm } = useConfirm()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [initialized, setInitialized] = useState(false)
   
   // Filtros
   const [filters, setFilters] = useState({
@@ -122,7 +127,6 @@ export function PropertyDatabaseView() {
           updated_date_to: ''
         }
         loadProperties(1, emptyFilters)
-        setInitialized(true)
       } catch (error) {
         console.error('Error loading initial data:', error)
         setError('Error al cargar datos iniciales')
@@ -179,6 +183,112 @@ export function PropertyDatabaseView() {
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('es-CO')
+  }
+
+  const handleExportToExcel = async () => {
+    if (!data || data.pagination.total_count === 0) {
+      showError('No hay datos para exportar')
+      return
+    }
+
+    const totalCount = data.pagination.total_count
+    const confirmed = await confirm(`¿Deseas descargar TODAS las ${totalCount.toLocaleString()} propiedades disponibles?\n\nEsto incluirá todas las páginas de resultados.`)
+    
+    if (!confirmed) return
+
+    try {
+      // Mostrar loading
+      const exportBtn = document.querySelector('[data-export-btn]') as HTMLButtonElement
+      if (exportBtn) {
+        exportBtn.disabled = true
+        exportBtn.textContent = 'Descargando...'
+      }
+
+      // Obtener todas las propiedades página por página
+      const allProperties: Property[] = []
+      const totalPages = data.pagination.total_pages
+      
+      console.log(`Iniciando descarga de ${totalPages} páginas...`)
+      console.log('Filtros actuales:', filters)
+      
+      for (let page = 1; page <= totalPages; page++) {
+        // Usar exactamente la misma lógica de conversión que loadProperties
+        let min_antiquity = undefined;
+        let max_antiquity = undefined;
+        let antiquity_filter = undefined;
+        
+        if (filters.antiquity !== 'any') {
+          switch(filters.antiquity) {
+            case '0-1': min_antiquity = 0; max_antiquity = 0; break;
+            case '1-8': min_antiquity = 1; max_antiquity = 8; break;
+            case '9-15': min_antiquity = 9; max_antiquity = 15; break;
+            case '16-30': min_antiquity = 16; max_antiquity = 30; break;
+            case '30+': min_antiquity = 31; max_antiquity = 999; break;
+            case 'unspecified': antiquity_filter = 'unspecified'; break;
+          }
+        }
+        
+        const cleanFilters = {
+          city_id: filters.city_id === 'all' ? undefined : parseInt(filters.city_id),
+          offer_type: filters.offer_type === 'all' ? undefined : filters.offer_type,
+          min_price: filters.min_price ? parseFloat(filters.min_price) : undefined,
+          max_price: filters.max_price ? parseFloat(filters.max_price) : undefined,
+          min_area: filters.min_area ? parseFloat(filters.min_area) : undefined,
+          max_area: filters.max_area ? parseFloat(filters.max_area) : undefined,
+          rooms: filters.rooms === 'any' ? undefined : filters.rooms,
+          baths: filters.baths === 'any' ? undefined : filters.baths,
+          garages: filters.garages === 'any' ? undefined : filters.garages,
+          stratum: filters.stratum === 'any' ? undefined : (filters.stratum === 'unspecified' ? 'unspecified' : parseInt(filters.stratum)),
+          min_antiquity: min_antiquity,
+          max_antiquity: max_antiquity,
+          antiquity_filter: antiquity_filter,
+          property_type: filters.property_type === 'any' ? undefined : filters.property_type,
+          updated_date_from: filters.updated_date_from || undefined,
+          updated_date_to: filters.updated_date_to || undefined
+        }
+        
+        console.log(`Página ${page} - Filtros enviados:`, cleanFilters)
+        const response = await fetchProperties(page, 100, cleanFilters) // 100 items per page for faster download
+        console.log(`Página ${page}: ${response.properties.length} propiedades`)
+        console.log(`Página ${page} - Respuesta completa:`, response)
+        allProperties.push(...response.properties)
+        
+        // Actualizar progreso
+        if (exportBtn) {
+          exportBtn.textContent = `Descargando... (${Math.round((page / totalPages) * 100)}%)`
+        }
+      }
+
+      console.log(`Total descargado: ${allProperties.length} propiedades`)
+      
+      // Verificar que tenemos datos antes de continuar
+      if (allProperties.length === 0) {
+        showError('No se encontraron propiedades para exportar con los filtros actuales.')
+        return
+      }
+
+      // Generar y descargar el archivo
+      const result = downloadPropertiesAsExcel(allProperties, {
+        filename: 'propiedades_completa'
+      })
+      
+      if (result.success) {
+        showSuccess(`¡Archivo descargado exitosamente!\n\nSe descargaron ${allProperties.length.toLocaleString()} propiedades.`)
+      } else {
+        showError(result.error || 'Error al generar el archivo')
+      }
+
+    } catch (error) {
+      console.error('Error al exportar:', error)
+      showError('Error al descargar el archivo. Por favor, inténtalo de nuevo.')
+    } finally {
+      // Restaurar botón
+      const exportBtn = document.querySelector('[data-export-btn]') as HTMLButtonElement
+      if (exportBtn) {
+        exportBtn.disabled = false
+        exportBtn.textContent = 'Descargar Excel'
+      }
+    }
   }
 
   return (
@@ -389,14 +499,56 @@ export function PropertyDatabaseView() {
             />
           </div>
 
-          <div className="flex items-end gap-2 lg:col-span-2">
-            <Button onClick={handleSearch} className="flex-1">
-              <Search className="h-4 w-4 mr-2" />
-              Buscar
-            </Button>
-            <Button variant="outline" onClick={handleClearFilters}>
-              <Filter className="h-4 w-4" />
-            </Button>
+          {/* Botones de acción */}
+          <div className="lg:col-span-full">
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={handleSearch} className="w-full sm:w-auto sm:min-w-[120px]">
+                    <Search className="h-4 w-4 mr-2" />
+                    Buscar
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Aplicar filtros y buscar propiedades</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={handleClearFilters} className="w-full sm:w-auto sm:min-w-[120px] flex items-center justify-center gap-2">
+                    <RotateCcw className="h-4 w-4" />
+                    Limpiar Filtros
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Limpiar todos los filtros y mostrar todas las propiedades</p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleExportToExcel}
+                    disabled={!data || data.pagination.total_count === 0}
+                    className="w-full sm:w-auto sm:min-w-[140px] flex items-center justify-center gap-2"
+                    data-export-btn
+                  >
+                    <Download className="h-4 w-4" />
+                    Descargar Excel
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Descargar todas las propiedades de la consulta actual como archivo Excel</p>
+                  {data && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total: {data.pagination.total_count.toLocaleString()} propiedades
+                    </p>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
         </div>
 
@@ -443,7 +595,7 @@ export function PropertyDatabaseView() {
               ) : (
                 data?.properties.map((property) => (
                   <TableRow key={property.id}>
-                    <TableCell className="font-mono text-sm">{property.id}</TableCell>
+                    <TableCell className="text-sm">{property.id}</TableCell>
                     <TableCell>{property.city}</TableCell>
                     <TableCell>
                       <Badge variant={property.offer_type === 'Venta' ? 'default' : 'secondary'}>

@@ -1,5 +1,5 @@
 // API Service Layer for Dashboard
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://dashboard-scraper-454311427577.us-central1.run.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:8000';
 
 export interface CityStatus {
   id: number;
