@@ -19,7 +19,7 @@ export function PropertyDatabaseView() {
   const [cities, setCities] = useState<CityOption[]>([])
   const { success: showSuccess, error: showError } = useAlert()
   const { confirm } = useConfirm()
-  const { showToast, updateToast, hideToast } = useToast()
+  const { showToast, hideToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [geocoding, setGeocoding] = useState(false)
@@ -277,10 +277,7 @@ export function PropertyDatabaseView() {
     
     try {
       setSendingEmail(true)
-      loadingToastId = showToast(`Preparando Excel para ${email}...`, 'loading')
-      
-      // Inicializar progreso
-      updateToast(loadingToastId!, `Aplicando filtros...`, 10)
+      loadingToastId = showToast(`Enviando Excel a ${email}...`, 'loading')
       
       // Preparar filtros para el backend
       let min_antiquity = undefined;
@@ -321,9 +318,6 @@ export function PropertyDatabaseView() {
         radius: filters.radius ? parseInt(filters.radius) : undefined
       }
       
-      // Actualizar progreso
-      updateToast(loadingToastId!, `Generando archivo Excel...`, 30)
-      
       // Llamar al endpoint del backend para enviar el Excel por email
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/properties/send-excel`, {
         method: 'POST',
@@ -335,9 +329,6 @@ export function PropertyDatabaseView() {
           filters: cleanFilters
         })
       })
-      
-      // Progreso mientras se procesa
-      updateToast(loadingToastId!, `Enviando por email...`, 80)
       
       const result = await response.json()
       
@@ -623,62 +614,60 @@ export function PropertyDatabaseView() {
               }
             </p>
           </div>
+        </div>
 
-          {/* Botones de acción */}
-          <div className="lg:col-span-full">
-            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    onClick={handleSearch} 
-                    className="w-full sm:w-auto sm:min-w-[120px]" 
-                    disabled={geocoding || loading}
-                  >
-                    <Search className="h-4 w-4 mr-2" />
-                    {geocoding ? 'Geocodificando...' : 'Buscar'}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{geocoding ? 'Obteniendo coordenadas de la dirección...' : 'Aplicar filtros y buscar propiedades'}</p>
-                </TooltipContent>
-              </Tooltip>
+        {/* Botones de acción */}
+        <div className="flex flex-col md:flex-row gap-3 md:justify-end">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                onClick={handleSearch} 
+                className="w-full md:w-auto md:min-w-[120px]" 
+                disabled={geocoding || loading}
+              >
+                <Search className="h-4 w-4 mr-2" />
+                {geocoding ? 'Geocodificando...' : 'Buscar'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{geocoding ? 'Obteniendo coordenadas de la dirección...' : 'Aplicar filtros y buscar propiedades'}</p>
+            </TooltipContent>
+          </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" onClick={handleClearFilters} className="w-full sm:w-auto sm:min-w-[120px] flex items-center justify-center gap-2">
-                    <RotateCcw className="h-4 w-4" />
-                    Limpiar Filtros
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Limpiar todos los filtros y mostrar todas las propiedades</p>
-                </TooltipContent>
-              </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" onClick={handleClearFilters} className="w-full md:w-auto md:min-w-[120px] flex items-center justify-center gap-2">
+                <RotateCcw className="h-4 w-4" />
+                Limpiar Filtros
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Limpiar todos los filtros y mostrar todas las propiedades</p>
+            </TooltipContent>
+          </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleExportToExcel}
-                    disabled={!data || data.pagination.total_count === 0}
-                    className="w-full sm:w-auto sm:min-w-[140px] flex items-center justify-center gap-2"
-                    data-export-btn
-                  >
-                    <Download className="h-4 w-4" />
-                    Enviar Excel por Email
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Enviar todas las propiedades de la consulta actual por email en formato Excel</p>
-                  {data && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Total: {data.pagination.total_count.toLocaleString()} propiedades
-                    </p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="outline" 
+                onClick={handleExportToExcel}
+                disabled={!data || data.pagination.total_count === 0}
+                className="w-full md:w-auto md:min-w-[180px] flex items-center justify-center gap-2 text-sm"
+                data-export-btn
+              >
+                <Download className="h-4 w-4" />
+                Enviar Excel por Email
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Enviar todas las propiedades de la consulta actual por email en formato Excel</p>
+              {data && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Total: {data.pagination.total_count.toLocaleString()} propiedades
+                </p>
+              )}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {error && (
