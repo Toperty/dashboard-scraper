@@ -140,6 +140,8 @@ export interface Property {
   stratum?: number;
   antiquity?: string;  // Ahora es string con el rango formateado
   is_new?: boolean;
+  address?: string;  // Campo dirección
+  distance?: number; // Campo distancia en metros
 }
 
 export interface PropertiesResponse {
@@ -197,6 +199,10 @@ export async function fetchProperties(
     property_type?: string;
     updated_date_from?: string;
     updated_date_to?: string;
+    search_address?: string;
+    latitude?: number;
+    longitude?: number;
+    radius?: number;
   } = {}
 ): Promise<PropertiesResponse> {
   try {

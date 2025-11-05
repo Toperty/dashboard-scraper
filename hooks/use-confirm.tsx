@@ -11,6 +11,12 @@ import {
   AlertDialogHeader, 
   AlertDialogTitle 
 } from "@/components/ui/alert-dialog"
+import { Input } from "@/components/ui/input"
+
+interface ConfirmOptions {
+  requireEmail?: boolean
+  emailPlaceholder?: string
+}
 
 interface ConfirmState {
   isOpen: boolean
@@ -20,10 +26,17 @@ interface ConfirmState {
   onCancel?: () => void
   confirmText: string
   cancelText: string
+  requireEmail: boolean
+  emailPlaceholder: string
+}
+
+interface ConfirmResult {
+  confirmed: boolean
+  email?: string
 }
 
 interface ConfirmContextType {
-  confirm: (message: string, title?: string) => Promise<boolean>
+  confirm: (message: string, title?: string, options?: ConfirmOptions) => Promise<ConfirmResult>
 }
 
 const ConfirmContext = createContext<ConfirmContextType | undefined>(undefined)
@@ -46,44 +59,78 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
     title: '',
     description: '',
     confirmText: 'Confirmar',
-    cancelText: 'Cancelar'
+    cancelText: 'Cancelar',
+    requireEmail: false,
+    emailPlaceholder: 'correo@ejemplo.com'
   })
   
-  const [resolvePromise, setResolvePromise] = useState<((value: boolean) => void) | null>(null)
+  const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [resolvePromise, setResolvePromise] = useState<((value: ConfirmResult) => void) | null>(null)
   
-  const confirm = (message: string, title?: string): Promise<boolean> => {
+  const confirm = (message: string, title?: string, options?: ConfirmOptions): Promise<ConfirmResult> => {
     return new Promise((resolve) => {
       setState({
         isOpen: true,
         title: title || 'Confirmar acción',
         description: message,
-        confirmText: 'Confirmar',
-        cancelText: 'Cancelar'
+        confirmText: options?.requireEmail ? 'Enviar' : 'Confirmar',
+        cancelText: 'Cancelar',
+        requireEmail: options?.requireEmail || false,
+        emailPlaceholder: options?.emailPlaceholder || 'correo@ejemplo.com'
       })
+      setEmail('')
+      setEmailError('')
       setResolvePromise(() => resolve)
     })
   }
   
   const handleConfirm = () => {
+    // Si requiere email, validar antes de continuar
+    if (state.requireEmail) {
+      const trimmedEmail = email.trim()
+      
+      if (!trimmedEmail || !trimmedEmail.includes('@') || trimmedEmail.length < 5) {
+        setEmailError('Por favor ingresa un email válido')
+        return // No cerrar el modal
+      }
+      setEmailError('')
+    }
     if (resolvePromise) {
-      resolvePromise(true)
+      resolvePromise({
+        confirmed: true,
+        email: state.requireEmail ? email.trim() : undefined
+      })
       setResolvePromise(null)
     }
     setState(prev => ({ ...prev, isOpen: false }))
+    setEmail('')
+    setEmailError('')
   }
   
   const handleCancel = () => {
     if (resolvePromise) {
-      resolvePromise(false)
+      resolvePromise({ confirmed: false })
       setResolvePromise(null)
     }
     setState(prev => ({ ...prev, isOpen: false }))
+    setEmail('')
+    setEmailError('')
   }
   
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
-      <AlertDialog open={state.isOpen} onOpenChange={handleCancel}>
+      <AlertDialog open={state.isOpen} onOpenChange={(open) => {
+        // Solo permitir cerrar si no requiere email o si el email es válido
+        if (!open) {
+          if (state.requireEmail && (!email.trim() || !email.includes('@'))) {
+            // No cerrar si requiere email y no es válido
+            return
+          }
+          handleCancel()
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -93,6 +140,30 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
               {state.description}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          
+          {state.requireEmail && (
+            <div className="grid gap-2 py-4">
+              <Input
+                type="email"
+                placeholder={state.emailPlaceholder}
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  if (emailError) setEmailError('') // Limpiar error al escribir
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleConfirm()
+                  }
+                }}
+                autoFocus
+              />
+              {emailError && (
+                <p className="text-sm text-red-600 mt-1">{emailError}</p>
+              )}
+            </div>
+          )}
+          
           <AlertDialogFooter>
             <AlertDialogCancel onClick={handleCancel}>
               {state.cancelText}

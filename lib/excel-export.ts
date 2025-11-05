@@ -14,7 +14,7 @@ export function propertiesToCSV(properties: Property[], options: ExportOptions =
   
   // Definir las columnas y sus headers con separador especial para Excel
   const columns = [
-    { key: 'id', header: 'ID' },
+    { key: 'id', header: 'Property_ID' },
     { key: 'title', header: 'Título' },
     { key: 'city', header: 'Ciudad' },
     { key: 'offer_type', header: 'Tipo' },

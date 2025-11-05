@@ -1,0 +1,69 @@
+"use client"
+
+import React from 'react'
+import { cn } from "@/lib/utils"
+
+interface ToastProps {
+  message: string
+  type: 'success' | 'error' | 'info' | 'loading'
+  isVisible: boolean
+  progress?: number
+  onClose: () => void
+}
+
+export function Toast({ message, type, isVisible, progress, onClose }: ToastProps) {
+  const baseClasses = "fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transition-all duration-300 transform"
+  
+  const typeClasses = {
+    success: "bg-green-600 text-white",
+    error: "bg-red-600 text-white", 
+    info: "bg-blue-600 text-white",
+    loading: "bg-gray-600 text-white"
+  }
+  
+  const typeIcons = {
+    success: "✅",
+    error: "❌",
+    info: "ℹ️", 
+    loading: "📧"
+  }
+
+  if (!isVisible) return null
+
+  return (
+    <div 
+      className={cn(
+        baseClasses,
+        typeClasses[type],
+        isVisible ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span>{typeIcons[type]}</span>
+        <span className="text-sm font-medium flex-1">{message}</span>
+        <button 
+          onClick={onClose}
+          className="ml-auto text-white hover:text-gray-200 text-lg leading-none"
+        >
+          ×
+        </button>
+      </div>
+      
+      {/* Barra de progreso */}
+      {type === 'loading' && progress !== undefined && (
+        <div className="mt-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span>Progreso</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <div className="w-full bg-gray-400 rounded-full h-2">
+            <div 
+              className="bg-white h-2 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

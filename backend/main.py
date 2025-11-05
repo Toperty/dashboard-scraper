@@ -581,7 +581,12 @@ async def get_properties(
     antiquity_filter: str = None,
     property_type: str = None,
     updated_date_from: str = None,
-    updated_date_to: str = None
+    updated_date_to: str = None,
+    # Parámetros de ubicación para filtrar por distancia
+    search_address: str = None,
+    latitude: float = None,
+    longitude: float = None,
+    radius: int = None
 ):
     """Obtener propiedades con filtros y paginación"""
     from sqlmodel import Session, select
@@ -801,21 +806,112 @@ async def get_properties(
             if filters:
                 query = query.where(and_(*filters))
             
-            # Contar total para paginación
-            count_query = select(Property).outerjoin(City, Property.city_id == City.id)
-            if filters:
-                count_query = count_query.where(and_(*filters))
+            # SI HAY FILTRO POR DISTANCIA, primero geocodificar la dirección
+            if search_address and radius is not None:
+                print(f"🏠 Geocodificando dirección: {search_address}")
+                
+                # Geocodificar la dirección usando Google Maps API directamente
+                import requests
+                import os
+                
+                try:
+                    api_key = os.getenv('GOOGLE_API_KEY')
+                    if not api_key:
+                        print("❌ GOOGLE_API_KEY no encontrada")
+                        latitude = longitude = None
+                    else:
+                        # Llamar directamente a la API de Google Maps
+                        url = f"https://maps.googleapis.com/maps/api/geocode/json"
+                        params = {
+                            'address': search_address,
+                            'key': api_key,
+                            'region': 'co',
+                            'language': 'es'
+                        }
+                        
+                        response = requests.get(url, params=params)
+                        data = response.json()
+                        
+                        if data['status'] == 'OK' and data['results']:
+                            location = data['results'][0]['geometry']['location']
+                            latitude = location['lat']
+                            longitude = location['lng']
+                            formatted_address = data['results'][0]['formatted_address']
+                            print(f"📍 Coordenadas obtenidas: {latitude}, {longitude}")
+                            print(f"📮 Dirección formateada: {formatted_address}")
+                        else:
+                            print(f"❌ No se pudo geocodificar: {data.get('status', 'Error')}")
+                            latitude = longitude = None
+                except Exception as e:
+                    print(f"❌ Error en geocodificación: {e}")
+                    latitude = longitude = None
             
-            total_count = len(session.exec(count_query).all())
+            # Inicializar distance_map vacío
+            distance_map = {}
             
-            # Aplicar paginación
-            offset = (page - 1) * limit
-            query = query.offset(offset).limit(limit).order_by(Property.creation_date.desc())
-            
-            results = session.exec(query).all()
+            # Ahora aplicar filtro por distancia si tenemos coordenadas
+            if latitude is not None and longitude is not None and radius is not None:
+                print(f"🔍 Filtrado por distancia activado: lat={latitude}, lng={longitude}, radius={radius}m")
+                from math import radians, cos, sin, asin, sqrt
+                
+                def calculate_distance(lat1, lng1, lat2, lng2):
+                    """Calcula distancia entre dos puntos en metros usando Haversine"""
+                    R = 6371000  # Radio de la Tierra en metros
+                    lat1, lng1, lat2, lng2 = map(radians, [lat1, lng1, lat2, lng2])
+                    dlat = lat2 - lat1
+                    dlng = lng2 - lng1
+                    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlng/2)**2
+                    c = 2 * asin(sqrt(a))
+                    return round(R * c)
+                
+                # 1. Obtener TODAS las propiedades (sin paginación)
+                all_results = session.exec(query.order_by(Property.creation_date.desc())).all()
+                print(f"📊 Total propiedades antes del filtro: {len(all_results)}")
+                
+                # 2. Calcular distancias y filtrar
+                filtered_results = []
+                for prop, city in all_results:
+                    if prop.latitude and prop.longitude:
+                        distance = calculate_distance(latitude, longitude, prop.latitude, prop.longitude)
+                        if distance <= radius:
+                            # Almacenar distancia en diccionario separado
+                            distance_map[prop.fr_property_id] = distance
+                            filtered_results.append((prop, city))
+                
+                # 3. Ordenar por distancia (más cercanas primero)
+                filtered_results.sort(key=lambda x: distance_map.get(x[0].fr_property_id, float('inf')))
+                
+                # 4. Actualizar total_count
+                total_count = len(filtered_results)
+                print(f"✅ Propiedades encontradas dentro de {radius}m: {total_count}")
+                
+                # 5. Aplicar paginación DESPUÉS del filtrado
+                offset = (page - 1) * limit
+                results = filtered_results[offset:offset + limit]
+                
+            else:
+                # Sin filtro de distancia, usar lógica normal
+                # Contar total para paginación usando COUNT de SQL
+                from sqlmodel import func
+                count_query = select(func.count(Property.fr_property_id)).outerjoin(City, Property.city_id == City.id)
+                if filters:
+                    count_query = count_query.where(and_(*filters))
+                
+                total_count = session.exec(count_query).one()
+                
+                # Aplicar filtros a la consulta principal solo si hay filtros
+                if filters:
+                    query = query.where(and_(*filters))
+                
+                # Aplicar paginación
+                offset = (page - 1) * limit
+                query = query.offset(offset).limit(limit).order_by(Property.creation_date.desc())
+                
+                results = session.exec(query).all()
             
             # Formatear resultados
             properties = []
+            
             for prop, city in results:
                 # Construir link de FincaRaiz
                 finca_raiz_link = None
@@ -917,7 +1013,9 @@ async def get_properties(
                     "garages": garages_value,
                     "stratum": stratum_value,
                     "antiquity": antiquity_display,
-                    "is_new": prop.is_new
+                    "is_new": prop.is_new,
+                    "address": getattr(prop, 'address', None),
+                    "distance": distance_map.get(prop.fr_property_id, None)
                 })
             
             total_pages = (total_count + limit - 1) // limit
@@ -937,6 +1035,501 @@ async def get_properties(
                 }
             }
     except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+@app.post("/api/properties/send-excel")
+async def send_properties_excel(request: dict):
+    """Enviar propiedades por email en formato Excel"""
+    import smtplib
+    import os
+    import io
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+    from datetime import datetime
+    import openpyxl
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from sqlmodel import Session, select
+    from config.db_connection import engine
+    from models.property import Property
+    from models.city import City
+    from sqlalchemy import and_, or_
+    
+    try:
+        # Obtener parámetros del request
+        email_destinatario = request.get('email')
+        filters = request.get('filters', {})
+        
+        if not email_destinatario:
+            return {"status": "error", "detail": "Email es requerido"}
+        
+        # Aplicar los mismos filtros que en el endpoint de properties
+        with Session(engine) as session:
+            query = select(Property, City).outerjoin(City, Property.city_id == City.id)
+            
+            # Aplicar filtros (mismo código que en get_properties)
+            filter_conditions = []
+            
+            if filters.get('city_id'):
+                filter_conditions.append(Property.city_id == filters['city_id'])
+            
+            if filters.get('offer_type'):
+                filter_conditions.append(Property.offer == filters['offer_type'])
+                
+            if filters.get('min_price') is not None:
+                filter_conditions.append(Property.price >= filters['min_price'])
+                
+            if filters.get('max_price') is not None:
+                filter_conditions.append(Property.price <= filters['max_price'])
+                
+            if filters.get('min_area') is not None:
+                filter_conditions.append(Property.area >= filters['min_area'])
+                
+            if filters.get('max_area') is not None:
+                filter_conditions.append(Property.area <= filters['max_area'])
+            
+            # Filtro de habitaciones
+            if filters.get('rooms') is not None:
+                rooms = filters.get('rooms')
+                if rooms == "unspecified":
+                    filter_conditions.append(or_(
+                        Property.rooms == None,
+                        Property.rooms == '',
+                        Property.rooms == 'N/A'
+                    ))
+                elif rooms.endswith('+'):
+                    min_value = int(rooms[:-1])
+                    from sqlalchemy import cast, Integer
+                    filter_conditions.append(and_(
+                        Property.rooms.regexp_match('^[0-9]+$'),
+                        cast(Property.rooms, Integer) >= min_value
+                    ))
+                else:
+                    filter_conditions.append(Property.rooms == rooms)
+            
+            # Filtro de baños
+            if filters.get('baths') is not None:
+                baths = filters.get('baths')
+                if baths == "unspecified":
+                    filter_conditions.append(or_(
+                        Property.baths == None,
+                        Property.baths == '',
+                        Property.baths == 'N/A'
+                    ))
+                elif baths.endswith('+'):
+                    min_value = int(baths[:-1])
+                    from sqlalchemy import cast, Integer
+                    filter_conditions.append(and_(
+                        Property.baths.regexp_match('^[0-9]+$'),
+                        cast(Property.baths, Integer) >= min_value
+                    ))
+                else:
+                    filter_conditions.append(Property.baths == baths)
+            
+            # Filtro de garajes
+            if filters.get('garages') is not None:
+                garages = filters.get('garages')
+                if garages == "unspecified":
+                    filter_conditions.append(or_(
+                        Property.garages == None,
+                        Property.garages == '',
+                        Property.garages == 'N/A'
+                    ))
+                elif garages.endswith('+'):
+                    min_value = int(garages[:-1])
+                    from sqlalchemy import cast, Integer
+                    filter_conditions.append(and_(
+                        Property.garages.regexp_match('^[0-9]+$'),
+                        cast(Property.garages, Integer) >= min_value
+                    ))
+                else:
+                    filter_conditions.append(Property.garages == garages)
+            
+            # Filtro de estrato
+            if filters.get('stratum') is not None:
+                stratum = filters.get('stratum')
+                if stratum == "unspecified":
+                    filter_conditions.append(or_(
+                        Property.stratum == None,
+                        Property.stratum == '',
+                        Property.stratum == 'Sin especificar'
+                    ))
+                else:
+                    stratum_str = f"Estrato {stratum}"
+                    filter_conditions.append(Property.stratum == stratum_str)
+            
+            # Filtro de antigüedad
+            min_antiquity = filters.get('min_antiquity')
+            max_antiquity = filters.get('max_antiquity')
+            antiquity_filter = filters.get('antiquity_filter')
+            
+            if min_antiquity is not None and max_antiquity is not None:
+                antiquity_conditions = []
+                
+                if min_antiquity == 0 and max_antiquity == 0:
+                    # Menos de 1 año
+                    antiquity_conditions.extend([
+                        Property.antiquity == 'LESS_THAN_1_YEAR',
+                        Property.antiquity == 'Menos de 1 año',
+                        Property.antiquity == '0'
+                    ])
+                elif min_antiquity == 1 and max_antiquity == 8:
+                    # 1 a 8 años
+                    antiquity_conditions.extend([
+                        Property.antiquity == 'FROM_1_TO_8_YEARS',
+                        Property.antiquity == '1 a 8 años'
+                    ])
+                    # Agregar valores numéricos del 1 al 8
+                    for i in range(1, 9):
+                        antiquity_conditions.append(Property.antiquity == str(i))
+                        antiquity_conditions.append(Property.antiquity == i)
+                elif min_antiquity == 9 and max_antiquity == 15:
+                    # 9 a 15 años
+                    antiquity_conditions.extend([
+                        Property.antiquity == 'FROM_9_TO_15_YEARS',
+                        Property.antiquity == '9 a 15 años'
+                    ])
+                    # Agregar valores numéricos del 9 al 15
+                    for i in range(9, 16):
+                        antiquity_conditions.append(Property.antiquity == str(i))
+                        antiquity_conditions.append(Property.antiquity == i)
+                elif min_antiquity == 16 and max_antiquity == 30:
+                    # 16 a 30 años
+                    antiquity_conditions.extend([
+                        Property.antiquity == 'FROM_16_TO_30_YEARS',
+                        Property.antiquity == '16 a 30 años'
+                    ])
+                    # Agregar valores numéricos del 16 al 30
+                    for i in range(16, 31):
+                        antiquity_conditions.append(Property.antiquity == str(i))
+                        antiquity_conditions.append(Property.antiquity == i)
+                elif min_antiquity == 31:
+                    # Más de 30 años
+                    antiquity_conditions.append(Property.antiquity == 'MORE_THAN_30_YEARS')
+                    # Agregar valores numéricos mayores a 30
+                    for i in range(31, 100):
+                        antiquity_conditions.append(Property.antiquity == str(i))
+                        antiquity_conditions.append(Property.antiquity == i)
+                
+                if antiquity_conditions:
+                    filter_conditions.append(or_(*antiquity_conditions))
+            elif antiquity_filter == 'unspecified':
+                # Filtrar solo propiedades sin especificar antigüedad
+                filter_conditions.append(or_(
+                    Property.antiquity == 'UNDEFINED',
+                    Property.antiquity == 'Sin especificar',
+                    Property.antiquity == None
+                ))
+            
+            # Filtro de tipo de propiedad
+            if filters.get('property_type'):
+                property_type = filters.get('property_type')
+                property_type_lower = property_type.lower()
+                if property_type_lower == "apartamento":
+                    filter_conditions.append(or_(
+                        Property.title.ilike("%apartamento%"),
+                        Property.title.ilike("%apto%")
+                    ))
+                elif property_type_lower == "casa":
+                    filter_conditions.append(and_(
+                        Property.title.ilike("%casa%"),
+                        ~Property.title.ilike("%apartamento%"),
+                        ~Property.title.ilike("%apto%")
+                    ))
+                elif property_type_lower == "oficina":
+                    filter_conditions.append(Property.title.ilike("%oficina%"))
+                elif property_type_lower == "local":
+                    filter_conditions.append(Property.title.ilike("%local%"))
+                elif property_type_lower == "lote":
+                    filter_conditions.append(or_(
+                        Property.title.ilike("%lote%"),
+                        Property.title.ilike("%terreno%")
+                    ))
+            
+            # Filtro de fechas de actualización
+            if filters.get('updated_date_from'):
+                from datetime import datetime
+                date_from = datetime.strptime(filters.get('updated_date_from'), '%Y-%m-%d').date()
+                filter_conditions.append(Property.last_update >= date_from)
+            
+            if filters.get('updated_date_to'):
+                from datetime import datetime
+                date_to = datetime.strptime(filters.get('updated_date_to'), '%Y-%m-%d').date()
+                filter_conditions.append(Property.last_update <= date_to)
+            
+            if filter_conditions:
+                query = query.where(and_(*filter_conditions))
+            
+            # Obtener propiedades
+            results = session.exec(query.order_by(Property.creation_date.desc())).all()
+            
+            # Procesar filtro de distancia si está presente
+            distance_map = {}
+            search_lat = filters.get('latitude')
+            search_lng = filters.get('longitude')
+            radius = filters.get('radius')
+            
+            if search_lat is not None and search_lng is not None and radius is not None:
+                print(f"🔍 Procesando filtro de distancia para Excel: lat={search_lat}, lng={search_lng}, radius={radius}m")
+                from math import radians, cos, sin, asin, sqrt
+                
+                def calculate_distance(lat1, lng1, lat2, lng2):
+                    """Calcula distancia entre dos puntos en metros usando Haversine"""
+                    R = 6371000  # Radio de la Tierra en metros
+                    lat1, lng1, lat2, lng2 = map(radians, [lat1, lng1, lat2, lng2])
+                    dlat = lat2 - lat1
+                    dlng = lng2 - lng1
+                    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlng/2)**2
+                    c = 2 * asin(sqrt(a))
+                    return round(R * c)
+                
+                # Filtrar y calcular distancias - SOLO incluir propiedades dentro del radio
+                filtered_results = []
+                for prop, city in results:
+                    if prop.latitude and prop.longitude:
+                        distance = calculate_distance(search_lat, search_lng, prop.latitude, prop.longitude)
+                        if distance <= radius:
+                            distance_map[prop.fr_property_id] = distance
+                            filtered_results.append((prop, city))
+                    # NO incluir propiedades sin coordenadas cuando hay filtro de distancia
+                
+                # Ordenar por distancia (más cercanas primero)
+                filtered_results.sort(key=lambda x: distance_map.get(x[0].fr_property_id, float('inf')))
+                results = filtered_results
+                print(f"✅ Propiedades filtradas por distancia: {len(results)}")
+            
+            # Función para formatear antigüedad
+            def format_antiquity(antiquity_value):
+                """Convierte valores de antigüedad a formato español estándar"""
+                if not antiquity_value:
+                    return "Sin especificar"
+                
+                # Diccionario de mapeo de strings en inglés
+                english_to_spanish = {
+                    'LESS_THAN_1_YEAR': '1',
+                    'FROM_1_TO_8_YEARS': '2', 
+                    'FROM_9_TO_15_YEARS': '3',
+                    'FROM_16_TO_30_YEARS': '4',
+                    'MORE_THAN_30_YEARS': '5',
+                    'UNDEFINED': 'Sin especificar'
+                }
+                
+                # Diccionario de mapeo de IDs numéricos
+                id_to_spanish = {
+                    1: "Menos de 1 año",
+                    2: "1 a 8 años", 
+                    3: "9 a 15 años",
+                    4: "16 a 30 años",
+                    5: "Más de 30 años"
+                }
+                
+                # Convertir a string para procesamiento
+                antiquity_str = str(antiquity_value).strip()
+                
+                # Si es un string en inglés, convertir a ID
+                if antiquity_str in english_to_spanish:
+                    mapped_value = english_to_spanish[antiquity_str]
+                    if mapped_value == 'Sin especificar':
+                        return mapped_value
+                    antiquity_str = mapped_value
+                
+                # Si es un número o string numérico, convertir a español
+                try:
+                    antiquity_id = int(antiquity_str)
+                    return id_to_spanish.get(antiquity_id, "Sin especificar")
+                except ValueError:
+                    # Si no es numérico y no está en el mapeo, verificar si contiene palabras clave
+                    antiquity_lower = antiquity_str.lower()
+                    if any(word in antiquity_lower for word in ['sin especificar', 'undefined', 'n/a', 'none']):
+                        return "Sin especificar"
+                    # Si contiene texto español ya formateado, devolverlo tal como está
+                    return antiquity_str
+
+            # Crear archivo Excel
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Propiedades"
+            
+            # Encabezados con estilo
+            headers = [
+                'ID', 'Título', 'Ciudad', 'Tipo', 'Precio (COP)', 
+                'Área (m²)', 'Habitaciones', 'Baños', 'Garajes', 
+                'Estrato', 'Antigüedad', 'Distancia (m)', 'Fecha Creación', 
+                'Última Actualización', 'FincaRaiz', 'Google Maps'
+            ]
+            
+            # Aplicar estilos a los encabezados
+            header_font = Font(bold=True, color="FFFFFF")
+            header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # Verificar límite razonable para Excel (optimización)
+            if len(results) > 50000:
+                return {"status": "error", "detail": f"Demasiadas propiedades ({len(results):,}). El límite para Excel es 50,000 propiedades. Aplica más filtros."}
+            
+            print(f"📊 Generando Excel con {len(results):,} propiedades...")
+            
+            # Agregar datos en lotes para mejor rendimiento
+            batch_size = 1000
+            total_batches = (len(results) + batch_size - 1) // batch_size
+            
+            for batch_num in range(total_batches):
+                start_idx = batch_num * batch_size
+                end_idx = min(start_idx + batch_size, len(results))
+                batch = results[start_idx:end_idx]
+                
+                print(f"📝 Procesando lote {batch_num + 1}/{total_batches} ({len(batch)} propiedades)")
+                
+                for i, (prop, city) in enumerate(batch):
+                    row_idx = start_idx + i + 2  # +2 porque empezamos en fila 2 (después del header)
+                    ws.cell(row=row_idx, column=1, value=prop.fr_property_id)
+                    ws.cell(row=row_idx, column=2, value=prop.title)
+                    ws.cell(row=row_idx, column=3, value=city.name if city else "Sin especificar")
+                    ws.cell(row=row_idx, column=4, value="Venta" if prop.offer == "sell" else "Renta")
+                    ws.cell(row=row_idx, column=5, value=prop.price)
+                    ws.cell(row=row_idx, column=6, value=prop.area)
+                    ws.cell(row=row_idx, column=7, value=prop.rooms)
+                    ws.cell(row=row_idx, column=8, value=prop.baths)
+                    ws.cell(row=row_idx, column=9, value=prop.garages)
+                    ws.cell(row=row_idx, column=10, value=prop.stratum)
+                    ws.cell(row=row_idx, column=11, value=format_antiquity(prop.antiquity))
+                    
+                    # Agregar distancia (columna 12)
+                    distance = distance_map.get(prop.fr_property_id, None)
+                    if distance is not None:
+                        ws.cell(row=row_idx, column=12, value=f"{distance:,} m")
+                    else:
+                        ws.cell(row=row_idx, column=12, value="")
+                    
+                    ws.cell(row=row_idx, column=13, value=prop.creation_date.isoformat() if prop.creation_date else "")
+                    ws.cell(row=row_idx, column=14, value=prop.last_update.isoformat() if prop.last_update else "")
+                    
+                    # Agregar hipervínculo de FincaRaiz
+                    if prop.fr_property_id:
+                        cell = ws.cell(row=row_idx, column=15)
+                        cell.hyperlink = f"https://www.fincaraiz.com.co/inmueble/{prop.fr_property_id}"
+                        cell.value = "Ver en FincaRaiz"
+                        cell.style = "Hyperlink"
+                    else:
+                        ws.cell(row=row_idx, column=15, value="")
+                    
+                    # Agregar hipervínculo de Google Maps
+                    if prop.latitude and prop.longitude:
+                        cell = ws.cell(row=row_idx, column=16)
+                        cell.hyperlink = f"https://www.google.com/maps?q={prop.latitude},{prop.longitude}"
+                        cell.value = "Ver en Maps"
+                        cell.style = "Hyperlink"
+                    else:
+                        ws.cell(row=row_idx, column=16, value="")
+            
+            # Ajustar ancho de columnas con valores predefinidos (más rápido)
+            column_widths = {
+                'A': 12,  # ID
+                'B': 40,  # Título  
+                'C': 15,  # Ciudad
+                'D': 10,  # Tipo
+                'E': 15,  # Precio
+                'F': 12,  # Área
+                'G': 12,  # Habitaciones
+                'H': 8,   # Baños
+                'I': 8,   # Garajes
+                'J': 8,   # Estrato
+                'K': 15,  # Antigüedad
+                'L': 15,  # Distancia
+                'M': 12,  # Fecha Creación
+                'N': 12,  # Última Actualización
+                'O': 15,  # FincaRaiz
+                'P': 15   # Google Maps
+            }
+            
+            for col_letter, width in column_widths.items():
+                ws.column_dimensions[col_letter].width = width
+            
+            # Guardar Excel en memoria
+            excel_file = io.BytesIO()
+            wb.save(excel_file)
+            excel_file.seek(0)
+            
+            # Enviar email
+            print(f"📧 Enviando email a {email_destinatario}...")
+            
+            # Configuración del servidor SMTP
+            smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+            smtp_port = int(os.getenv("SMTP_PORT", "587"))
+            smtp_user = os.getenv("SMTP_USER")
+            smtp_password = os.getenv("SMTP_PASSWORD")
+            from_email = os.getenv("FROM_EMAIL", smtp_user)
+            
+            if not smtp_user or not smtp_password:
+                return {"status": "error", "detail": "Credenciales SMTP no configuradas"}
+            
+            # Crear mensaje
+            msg = MIMEMultipart()
+            msg['From'] = from_email
+            msg['To'] = email_destinatario
+            msg['Cc'] = from_email
+            msg['Subject'] = f"Dashboard Scraper - Propiedades Exportadas"
+            
+            # Cuerpo del correo
+            # Agregar información de búsqueda por dirección si aplica
+            address_info = ""
+            if search_lat is not None and search_lng is not None and filters.get('search_address'):
+                address_info = f"\n• Propiedad consultada: {filters.get('search_address')}"
+                if radius:
+                    address_info += f"\n• Radio de búsqueda: {radius:,} metros"
+            
+            body = f"""Dashboard Scraper - Propiedades
+
+Adjunto encontrarás el archivo Excel con las propiedades solicitadas.
+
+Resumen:
+• Total de propiedades exportadas: {len(results)}
+• Fecha de exportación: {get_local_now().strftime("%d/%m/%Y %H:%M")}{address_info}
+
+El archivo Excel contiene información detallada de cada propiedad incluyendo:
+• Información básica (título, ciudad, tipo)
+• Detalles de precio y características  
+• Enlaces directos a FincaRaiz
+• Coordenadas geográficas
+
+Si tienes alguna pregunta, no dudes en contactarnos.
+
+Saludos cordiales,
+Equipo de Avalúos"""
+            
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Adjuntar Excel
+            filename = f"propiedades_{get_local_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            attachment = MIMEBase('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            attachment.set_payload(excel_file.read())
+            encoders.encode_base64(attachment)
+            attachment.add_header('Content-Disposition', f'attachment; filename={filename}')
+            msg.attach(attachment)
+            
+            # Enviar correo
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+            
+            print(f"✅ Email enviado exitosamente a {email_destinatario}")
+            
+            return {
+                "status": "success",
+                "message": f"Excel enviado exitosamente a {email_destinatario}",
+                "properties_count": len(results)
+            }
+            
+    except Exception as e:
+        print(f"❌ Error enviando email: {e}")
         return {"status": "error", "detail": str(e)}
 
 @app.get("/api/cities/list")
@@ -961,8 +1554,14 @@ async def get_cities_list():
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
-@app.get("/api/health")
+@app.get("/health")
 async def health():
+    """Endpoint simple para healthcheck de Docker"""
+    return {"status": "healthy", "timestamp": get_local_now()}
+
+@app.get("/api/health")
+async def api_health():
+    """Endpoint de health con más detalles para la API"""
     return {"status": "healthy", "timestamp": get_local_now()}
 
 @app.get("/")

@@ -9,17 +9,23 @@ import { Badge } from "@/components/ui/badge"
 import { Search, ChevronLeft, ChevronRight, ExternalLink, MapPin, Download, RotateCcw } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { fetchProperties, fetchCitiesList, type Property, type PropertiesResponse, type CityOption } from "@/lib/api"
-import { downloadPropertiesAsExcel } from "@/lib/excel-export"
 import { useAlert } from "@/hooks/use-alert"
 import { useConfirm } from "@/hooks/use-confirm"
+import { useToast } from "@/hooks/use-toast"
+import { GeocodingService, type GeocodeResult } from "@/lib/geocoding"
 
 export function PropertyDatabaseView() {
   const [data, setData] = useState<PropertiesResponse | null>(null)
   const [cities, setCities] = useState<CityOption[]>([])
   const { success: showSuccess, error: showError } = useAlert()
   const { confirm } = useConfirm()
+  const { showToast, updateToast, hideToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [geocoding, setGeocoding] = useState(false)
+  const [lastGeocodedAddress, setLastGeocodedAddress] = useState<string>('')
+  const [currentCoordinates, setCurrentCoordinates] = useState<{lat: number, lng: number} | null>(null)
+  const [sendingEmail, setSendingEmail] = useState(false)
   
   // Filtros
   const [filters, setFilters] = useState({
@@ -36,7 +42,10 @@ export function PropertyDatabaseView() {
     antiquity: 'any',
     property_type: 'any',
     updated_date_from: '',
-    updated_date_to: ''
+    updated_date_to: '',
+    // Nuevos filtros de ubicación
+    search_address: '',
+    radius: '1000' // Radio en metros por defecto
   })
   
   // Paginación
@@ -81,12 +90,25 @@ export function PropertyDatabaseView() {
         antiquity_filter: antiquity_filter,
         property_type: newFilters.property_type === 'any' ? undefined : newFilters.property_type,
         updated_date_from: newFilters.updated_date_from || undefined,
-        updated_date_to: newFilters.updated_date_to || undefined
+        updated_date_to: newFilters.updated_date_to || undefined,
+        // Filtros de ubicación
+        search_address: newFilters.search_address || undefined,
+        latitude: currentCoordinates?.lat,
+        longitude: currentCoordinates?.lng,
+        radius: newFilters.radius ? parseInt(newFilters.radius) : undefined
       }
       
       // Debug: log para ver qué filtros se están enviando
       console.log('Sending filters to API:', cleanFilters)
       console.log('ROOMS VALUE BEING SENT:', cleanFilters.rooms)
+      
+      // Debug específico para ubicación
+      if (cleanFilters.search_address) {
+        console.log('LOCATION FILTERS:')
+        console.log('- Address:', cleanFilters.search_address)
+        console.log('- Coordinates:', cleanFilters.latitude, cleanFilters.longitude)
+        console.log('- Radius:', cleanFilters.radius)
+      }
       
       const result = await fetchProperties(page, pageSize, cleanFilters)
       setData(result)
@@ -124,7 +146,10 @@ export function PropertyDatabaseView() {
           antiquity: 'any',
           property_type: 'any',
           updated_date_from: '',
-          updated_date_to: ''
+          updated_date_to: '',
+          // Nuevos filtros de ubicación
+          search_address: '',
+          radius: '1000'
         }
         loadProperties(1, emptyFilters)
       } catch (error) {
@@ -140,8 +165,46 @@ export function PropertyDatabaseView() {
     setFilters(prev => ({ ...prev, [key]: value }))
   }
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setCurrentPage(1)
+    
+    // Si hay una dirección y no hemos geocodificado esta dirección antes
+    if (filters.search_address && filters.search_address !== lastGeocodedAddress) {
+      setGeocoding(true)
+      
+      try {
+        const geocodeResult = await GeocodingService.geocodeAddress(filters.search_address)
+        
+        if (geocodeResult.success) {
+          setCurrentCoordinates({
+            lat: geocodeResult.latitude,
+            lng: geocodeResult.longitude
+          })
+          setLastGeocodedAddress(filters.search_address)
+          console.log('Coordenadas geocodificadas:', {
+            lat: geocodeResult.latitude,
+            lng: geocodeResult.longitude,
+            address: geocodeResult.formatted_address
+          })
+          showSuccess(`Dirección encontrada: ${geocodeResult.formatted_address}`)
+        } else {
+          showError(`Error al geocodificar: ${geocodeResult.error}`)
+          setCurrentCoordinates(null)
+        }
+      } catch (error) {
+        showError('Error al obtener coordenadas de la dirección')
+        setCurrentCoordinates(null)
+      } finally {
+        setGeocoding(false)
+      }
+    }
+    
+    // Si no hay dirección, limpiar coordenadas
+    if (!filters.search_address) {
+      setCurrentCoordinates(null)
+      setLastGeocodedAddress('')
+    }
+    
     loadProperties(1, filters)
   }
 
@@ -160,7 +223,10 @@ export function PropertyDatabaseView() {
       antiquity: 'any',
       property_type: 'any',
       updated_date_from: '',
-      updated_date_to: ''
+      updated_date_to: '',
+      // Nuevos filtros de ubicación
+      search_address: '',
+      radius: '1000'
     }
     setFilters(emptyFilters)
     setCurrentPage(1)
@@ -192,116 +258,125 @@ export function PropertyDatabaseView() {
     }
 
     const totalCount = data.pagination.total_count
-    const confirmed = await confirm(`¿Deseas descargar TODAS las ${totalCount.toLocaleString()} propiedades disponibles?\n\nEsto incluirá todas las páginas de resultados.`)
+    const result = await confirm(
+      `¿Deseas enviar por email TODAS las ${totalCount.toLocaleString()} propiedades disponibles?\n\nEsto incluirá todas las páginas de resultados en un archivo Excel.`,
+      'Enviar Excel por Email',
+      { 
+        requireEmail: true,
+        emailPlaceholder: 'correo@ejemplo.com'
+      }
+    )
     
-    if (!confirmed) return
+    if (!result.confirmed || !result.email) return
 
+    await handleSendExcelByEmail(result.email)
+  }
+
+  const handleSendExcelByEmail = async (email: string) => {
+    let loadingToastId: string | null = null
+    
     try {
-      // Mostrar loading
-      const exportBtn = document.querySelector('[data-export-btn]') as HTMLButtonElement
-      if (exportBtn) {
-        exportBtn.disabled = true
-        exportBtn.textContent = 'Descargando...'
-      }
-
-      // Obtener todas las propiedades página por página
-      const allProperties: Property[] = []
-      const totalPages = data.pagination.total_pages
+      setSendingEmail(true)
+      loadingToastId = showToast(`Preparando Excel para ${email}...`, 'loading')
       
-      console.log(`Iniciando descarga de ${totalPages} páginas...`)
-      console.log('Filtros actuales:', filters)
+      // Inicializar progreso
+      updateToast(loadingToastId!, `Aplicando filtros...`, 10)
       
-      for (let page = 1; page <= totalPages; page++) {
-        // Usar exactamente la misma lógica de conversión que loadProperties
-        let min_antiquity = undefined;
-        let max_antiquity = undefined;
-        let antiquity_filter = undefined;
-        
-        if (filters.antiquity !== 'any') {
-          switch(filters.antiquity) {
-            case '0-1': min_antiquity = 0; max_antiquity = 0; break;
-            case '1-8': min_antiquity = 1; max_antiquity = 8; break;
-            case '9-15': min_antiquity = 9; max_antiquity = 15; break;
-            case '16-30': min_antiquity = 16; max_antiquity = 30; break;
-            case '30+': min_antiquity = 31; max_antiquity = 999; break;
-            case 'unspecified': antiquity_filter = 'unspecified'; break;
-          }
-        }
-        
-        const cleanFilters = {
-          city_id: filters.city_id === 'all' ? undefined : parseInt(filters.city_id),
-          offer_type: filters.offer_type === 'all' ? undefined : filters.offer_type,
-          min_price: filters.min_price ? parseFloat(filters.min_price) : undefined,
-          max_price: filters.max_price ? parseFloat(filters.max_price) : undefined,
-          min_area: filters.min_area ? parseFloat(filters.min_area) : undefined,
-          max_area: filters.max_area ? parseFloat(filters.max_area) : undefined,
-          rooms: filters.rooms === 'any' ? undefined : filters.rooms,
-          baths: filters.baths === 'any' ? undefined : filters.baths,
-          garages: filters.garages === 'any' ? undefined : filters.garages,
-          stratum: filters.stratum === 'any' ? undefined : (filters.stratum === 'unspecified' ? 'unspecified' : parseInt(filters.stratum)),
-          min_antiquity: min_antiquity,
-          max_antiquity: max_antiquity,
-          antiquity_filter: antiquity_filter,
-          property_type: filters.property_type === 'any' ? undefined : filters.property_type,
-          updated_date_from: filters.updated_date_from || undefined,
-          updated_date_to: filters.updated_date_to || undefined
-        }
-        
-        console.log(`Página ${page} - Filtros enviados:`, cleanFilters)
-        const response = await fetchProperties(page, 100, cleanFilters) // 100 items per page for faster download
-        console.log(`Página ${page}: ${response.properties.length} propiedades`)
-        console.log(`Página ${page} - Respuesta completa:`, response)
-        allProperties.push(...response.properties)
-        
-        // Actualizar progreso
-        if (exportBtn) {
-          exportBtn.textContent = `Descargando... (${Math.round((page / totalPages) * 100)}%)`
+      // Preparar filtros para el backend
+      let min_antiquity = undefined;
+      let max_antiquity = undefined;
+      let antiquity_filter = undefined;
+      
+      if (filters.antiquity !== 'any') {
+        switch(filters.antiquity) {
+          case '0-1': min_antiquity = 0; max_antiquity = 0; break;
+          case '1-8': min_antiquity = 1; max_antiquity = 8; break;
+          case '9-15': min_antiquity = 9; max_antiquity = 15; break;
+          case '16-30': min_antiquity = 16; max_antiquity = 30; break;
+          case '30+': min_antiquity = 31; max_antiquity = 999; break;
+          case 'unspecified': antiquity_filter = 'unspecified'; break;
         }
       }
-
-      console.log(`Total descargado: ${allProperties.length} propiedades`)
       
-      // Verificar que tenemos datos antes de continuar
-      if (allProperties.length === 0) {
-        showError('No se encontraron propiedades para exportar con los filtros actuales.')
-        return
+      const cleanFilters = {
+        city_id: filters.city_id === 'all' ? undefined : parseInt(filters.city_id),
+        offer_type: filters.offer_type === 'all' ? undefined : filters.offer_type,
+        min_price: filters.min_price ? parseFloat(filters.min_price) : undefined,
+        max_price: filters.max_price ? parseFloat(filters.max_price) : undefined,
+        min_area: filters.min_area ? parseFloat(filters.min_area) : undefined,
+        max_area: filters.max_area ? parseFloat(filters.max_area) : undefined,
+        rooms: filters.rooms === 'any' ? undefined : filters.rooms,
+        baths: filters.baths === 'any' ? undefined : filters.baths,
+        garages: filters.garages === 'any' ? undefined : filters.garages,
+        stratum: filters.stratum === 'any' ? undefined : (filters.stratum === 'unspecified' ? 'unspecified' : parseInt(filters.stratum)),
+        min_antiquity: min_antiquity,
+        max_antiquity: max_antiquity,
+        antiquity_filter: antiquity_filter,
+        property_type: filters.property_type === 'any' ? undefined : filters.property_type,
+        updated_date_from: filters.updated_date_from || undefined,
+        updated_date_to: filters.updated_date_to || undefined,
+        search_address: filters.search_address || undefined,
+        latitude: currentCoordinates?.lat,
+        longitude: currentCoordinates?.lng,
+        radius: filters.radius ? parseInt(filters.radius) : undefined
       }
-
-      // Generar y descargar el archivo
-      const result = downloadPropertiesAsExcel(allProperties, {
-        filename: 'propiedades_completa'
+      
+      // Actualizar progreso
+      updateToast(loadingToastId!, `Generando archivo Excel...`, 30)
+      
+      // Llamar al endpoint del backend para enviar el Excel por email
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/properties/send-excel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          filters: cleanFilters
+        })
       })
       
-      if (result.success) {
-        showSuccess(`¡Archivo descargado exitosamente!\n\nSe descargaron ${allProperties.length.toLocaleString()} propiedades.`)
+      // Progreso mientras se procesa
+      updateToast(loadingToastId!, `Enviando por email...`, 80)
+      
+      const result = await response.json()
+      
+      // Ocultar toast de loading
+      if (loadingToastId) {
+        hideToast(loadingToastId)
+      }
+
+      if (result.status === 'success') {
+        showToast(`Excel enviado exitosamente a ${email}. ${result.properties_count} propiedades exportadas.`, 'success')
       } else {
-        showError(result.error || 'Error al generar el archivo')
+        showToast(result.detail || 'Error al enviar el archivo', 'error')
       }
 
     } catch (error) {
-      console.error('Error al exportar:', error)
-      showError('Error al descargar el archivo. Por favor, inténtalo de nuevo.')
-    } finally {
-      // Restaurar botón
-      const exportBtn = document.querySelector('[data-export-btn]') as HTMLButtonElement
-      if (exportBtn) {
-        exportBtn.disabled = false
-        exportBtn.textContent = 'Descargar Excel'
+      // Ocultar toast de loading
+      if (loadingToastId) {
+        hideToast(loadingToastId)
       }
+      
+      console.error('Error al enviar email:', error)
+      showToast('Error al enviar el archivo por email. Por favor, inténtalo de nuevo.', 'error')
+    } finally {
+      setSendingEmail(false)
     }
   }
 
   return (
-    <Card>
+    <>
+    <Card className="w-full max-w-none">
       <CardHeader>
         <CardTitle>Base de Datos de Propiedades</CardTitle>
         <p className="text-sm text-muted-foreground">
           Explora y filtra el inventario completo de propiedades
         </p>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 p-6">
         {/* Filtros */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           <div className="space-y-2">
             <label className="text-sm font-medium">Ciudad</label>
             <Select value={filters.city_id} onValueChange={(value) => handleFilterChange('city_id', value)}>
@@ -499,18 +574,72 @@ export function PropertyDatabaseView() {
             />
           </div>
 
+          {/* Filtros de ubicación */}
+          <div className="lg:col-span-2 space-y-2">
+            <label className="text-sm font-medium">Buscar por Dirección</label>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Ej: Carrera 15 #45-67, Bogotá"
+                value={filters.search_address}
+                onChange={(e) => handleFilterChange('search_address', e.target.value)}
+                disabled={geocoding}
+              />
+              {geocoding && (
+                <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                </div>
+              )}
+            </div>
+            <div className="text-xs space-y-1">
+              <p className="text-muted-foreground">Busca propiedades cercanas a esta dirección</p>
+              {currentCoordinates && (
+                <div className="space-y-1">
+                  <p className="text-green-600 font-medium">
+                    ✓ Coordenadas obtenidas: {currentCoordinates.lat.toFixed(4)}, {currentCoordinates.lng.toFixed(4)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Radio de Búsqueda (metros)</label>
+            <Input
+              type="number"
+              value={filters.radius || ''}
+              onChange={(e) => handleFilterChange('radius', e.target.value)}
+              placeholder="Ej: 1000, 2500, 5000..."
+              disabled={!filters.search_address}
+              min="100"
+              max="50000"
+              step="100"
+            />
+            <p className="text-xs text-muted-foreground">
+              {!filters.search_address 
+                ? 'Requiere dirección para activar búsqueda por proximidad'
+                : 'Distancia máxima desde la dirección ingresada'
+              }
+            </p>
+          </div>
+
           {/* Botones de acción */}
           <div className="lg:col-span-full">
             <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button onClick={handleSearch} className="w-full sm:w-auto sm:min-w-[120px]">
+                  <Button 
+                    onClick={handleSearch} 
+                    className="w-full sm:w-auto sm:min-w-[120px]" 
+                    disabled={geocoding || loading}
+                  >
                     <Search className="h-4 w-4 mr-2" />
-                    Buscar
+                    {geocoding ? 'Geocodificando...' : 'Buscar'}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Aplicar filtros y buscar propiedades</p>
+                  <p>{geocoding ? 'Obteniendo coordenadas de la dirección...' : 'Aplicar filtros y buscar propiedades'}</p>
                 </TooltipContent>
               </Tooltip>
 
@@ -536,11 +665,11 @@ export function PropertyDatabaseView() {
                     data-export-btn
                   >
                     <Download className="h-4 w-4" />
-                    Descargar Excel
+                    Enviar Excel por Email
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Descargar todas las propiedades de la consulta actual como archivo Excel</p>
+                  <p>Enviar todas las propiedades de la consulta actual por email en formato Excel</p>
                   {data && (
                     <p className="text-xs text-muted-foreground mt-1">
                       Total: {data.pagination.total_count.toLocaleString()} propiedades
@@ -559,36 +688,38 @@ export function PropertyDatabaseView() {
         )}
 
         {/* Tabla de propiedades */}
-        <div className="border rounded-lg">
-          <Table>
+        <div className="border rounded-lg w-full">
+          <div className="overflow-x-auto w-full">
+            <Table className="w-full table-auto" style={{minWidth: '1400px'}}>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Ciudad</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Área (m²)</TableHead>
-                <TableHead>Habitaciones</TableHead>
-                <TableHead>Baños</TableHead>
-                <TableHead>Garajes</TableHead>
-                <TableHead>Estrato</TableHead>
-                <TableHead>Antigüedad</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>FincaRaiz</TableHead>
-                <TableHead>Ubicación</TableHead>
-                <TableHead>Fecha Actualización</TableHead>
-                <TableHead>Fecha Creación</TableHead>
+                <TableHead className="min-w-[60px]">ID</TableHead>
+                <TableHead className="min-w-[100px]">Ciudad</TableHead>
+                <TableHead className="min-w-[70px]">Tipo</TableHead>
+                <TableHead className="min-w-[80px]">Área (m²)</TableHead>
+                <TableHead className="min-w-[90px]">Habitaciones</TableHead>
+                <TableHead className="min-w-[60px]">Baños</TableHead>
+                <TableHead className="min-w-[70px]">Garajes</TableHead>
+                <TableHead className="min-w-[70px]">Estrato</TableHead>
+                <TableHead className="min-w-[90px]">Antigüedad</TableHead>
+                <TableHead className="min-w-[120px]">Precio</TableHead>
+                <TableHead className="min-w-[100px]">Distancia (m)</TableHead>
+                <TableHead className="min-w-[80px]">FincaRaiz</TableHead>
+                <TableHead className="min-w-[80px]">Ubicación</TableHead>
+                <TableHead className="min-w-[140px]">Fecha Actualización</TableHead>
+                <TableHead className="min-w-[120px]">Fecha Creación</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center py-8">
+                  <TableCell colSpan={15} className="text-center py-8">
                     Cargando propiedades...
                   </TableCell>
                 </TableRow>
               ) : data?.properties.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={15} className="text-center py-8 text-muted-foreground">
                     No se encontraron propiedades con los filtros aplicados
                   </TableCell>
                 </TableRow>
@@ -610,6 +741,9 @@ export function PropertyDatabaseView() {
                     <TableCell>{property.antiquity || 'Sin especificar'}</TableCell>
                     <TableCell className="font-medium">
                       {property.price ? formatPrice(property.price) : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      {property.distance ? `${property.distance.toLocaleString()}` : 'N/A'}
                     </TableCell>
                     <TableCell>
                       {property.finca_raiz_link ? (
@@ -647,7 +781,8 @@ export function PropertyDatabaseView() {
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </div>
 
         {/* Paginación */}
@@ -688,5 +823,7 @@ export function PropertyDatabaseView() {
         )}
       </CardContent>
     </Card>
+
+  </>
   )
 }

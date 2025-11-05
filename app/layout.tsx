@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AlertProvider } from "@/hooks/use-alert"
 import { ConfirmProvider } from "@/hooks/use-confirm"
+import { ToastProvider } from "@/hooks/use-toast"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -29,9 +30,11 @@ export default function RootLayout({
       <body className={`font-sans antialiased ${inter.className}`}>
         <AlertProvider>
           <ConfirmProvider>
-            <TooltipProvider>
-              {children}
-            </TooltipProvider>
+            <ToastProvider>
+              <TooltipProvider>
+                {children}
+              </TooltipProvider>
+            </ToastProvider>
           </ConfirmProvider>
         </AlertProvider>
         <Analytics />

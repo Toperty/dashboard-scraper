@@ -61,7 +61,7 @@ export function UpcomingExecutions({ executions }: UpcomingExecutionsProps) {
                     </TooltipContent>
                   </Tooltip>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm text-muted-foreground font-medium">
                       {formatTime(execution.scheduled_time)}
                     </span>
                     <Tooltip>
