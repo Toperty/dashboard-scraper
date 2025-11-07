@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { LogOut, AlertCircle, Settings } from "lucide-react"
 import AuthService, { isGoogleAuthConfigured } from "@/lib/auth"
 import { TopertyLogo, TopertyLogoCompact } from "@/components/toperty-logo"
+import { useConfirm } from "@/hooks/use-confirm"
 
 interface AuthGateProps {
   children: React.ReactNode
@@ -19,6 +20,7 @@ export function AuthGate({ children }: AuthGateProps) {
   })
   
   const authService = AuthService.getInstance()
+  const { confirm } = useConfirm()
 
   useEffect(() => {
     // Verificar si Google Auth está configurado
@@ -64,8 +66,21 @@ export function AuthGate({ children }: AuthGateProps) {
     googleButtonDiv.style.display = 'none'
     document.body.appendChild(googleButtonDiv)
 
+    // Listener para errores de email inválido
+    const handleInvalidEmail = async (event: CustomEvent) => {
+      await confirm(
+        'Acceso restringido',
+        `Solo se permite el acceso a correos corporativos de @toperty.co.
+
+El correo ${event.detail.email} no está autorizado para acceder al sistema.`
+      )
+    }
+
+    window.addEventListener('auth-invalid-email', handleInvalidEmail as unknown as EventListener)
+
     return () => {
       unsubscribe()
+      window.removeEventListener('auth-invalid-email', handleInvalidEmail as unknown as EventListener)
       const buttonDiv = document.getElementById('google-signin-button')
       if (buttonDiv) {
         buttonDiv.remove()
@@ -212,7 +227,7 @@ export function AuthGate({ children }: AuthGateProps) {
         <div className="flex h-14 w-full items-center px-4">
           <div className="flex flex-1 items-center justify-between">
             <div className="flex items-center gap-3">
-              <TopertyLogoCompact width={140} height={40} />
+              <TopertyLogoCompact width={110} height={40} />
             </div>
             
             <div className="flex items-center gap-4">

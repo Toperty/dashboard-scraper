@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Search, ChevronLeft, ChevronRight, ExternalLink, MapPin, Download, RotateCcw } from "lucide-react"
+import { Search, ChevronLeft, ChevronRight, ExternalLink, MapPin, Download, RotateCcw, ChevronDown } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { fetchProperties, fetchCitiesList, type Property, type PropertiesResponse, type CityOption } from "@/lib/api"
+import { fetchProperties, fetchCitiesList, type PropertiesResponse, type CityOption } from "@/lib/api"
 import { useAlert } from "@/hooks/use-alert"
 import { useConfirm } from "@/hooks/use-confirm"
 import { useToast } from "@/hooks/use-toast"
-import { GeocodingService, type GeocodeResult } from "@/lib/geocoding"
+import { GeocodingService } from "@/lib/geocoding"
 
 export function PropertyDatabaseView() {
   const [data, setData] = useState<PropertiesResponse | null>(null)
@@ -25,7 +25,7 @@ export function PropertyDatabaseView() {
   const [geocoding, setGeocoding] = useState(false)
   const [lastGeocodedAddress, setLastGeocodedAddress] = useState<string>('')
   const [currentCoordinates, setCurrentCoordinates] = useState<{lat: number, lng: number} | null>(null)
-  const [sendingEmail, setSendingEmail] = useState(false)
+  const [propertyTypeDropdownOpen, setPropertyTypeDropdownOpen] = useState(false)
   
   // Filtros
   const [filters, setFilters] = useState({
@@ -33,6 +33,10 @@ export function PropertyDatabaseView() {
     offer_type: 'all',
     min_price: '',
     max_price: '',
+    min_sale_price: '',
+    max_sale_price: '',
+    min_rent_price: '',
+    max_rent_price: '',
     min_area: '',
     max_area: '',
     rooms: 'any',
@@ -40,7 +44,7 @@ export function PropertyDatabaseView() {
     garages: 'any',
     stratum: 'any',
     antiquity: 'any',
-    property_type: 'any',
+    property_type: [] as string[],
     updated_date_from: '',
     updated_date_to: '',
     // Nuevos filtros de ubicación
@@ -52,55 +56,87 @@ export function PropertyDatabaseView() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(50)
 
-  const loadProperties = async (page: number = 1, newFilters = filters) => {
+  // Función para formatear input de precio mientras se escribe
+  const formatPriceInput = (value: string): string => {
+    if (!value) return ''
+    // Remover caracteres no numéricos
+    const numericValue = value.replace(/[^0-9]/g, '')
+    if (!numericValue) return ''
+    // Formatear con separadores de miles
+    const formatted = parseInt(numericValue).toLocaleString('es-CO')
+    return `$${formatted}`
+  }
+
+  // Función para limpiar formato de precio y obtener solo números
+  const cleanPrice = (formattedPrice: string): string => {
+    return formattedPrice.replace(/[^0-9]/g, '')
+  }
+
+  const loadPropertiesWithCoords = async (page: number = 1, newFilters = filters, coords: {lat: number, lng: number} | null = null) => {
     try {
       setLoading(true)
       setError(null)
       
-      // Convertir strings vacíos a undefined y parsear números
-      let min_antiquity = undefined;
-      let max_antiquity = undefined;
+      // Usar las coordenadas pasadas como parámetro si están disponibles, sino usar currentCoordinates
+      // Si coords es explícitamente null, no usar coordenadas
+      const coordsToUse = coords === null ? null : (coords || currentCoordinates)
       
-      // Procesar rangos de antigüedad
+      // Debug temprano para ver las coordenadas
+      console.log('🔍 COORDS DEBUG:')
+      console.log('- coords param:', coords)
+      console.log('- currentCoordinates:', currentCoordinates)
+      console.log('- coordsToUse:', coordsToUse)
+      
+      // Convertir strings vacíos a undefined y parsear números
+      
+      // Procesar rangos de antigüedad usando IDs categóricos
       let antiquity_filter = undefined;
+      let antiquity_category = undefined;
+      console.log('🔍 FRONTEND - newFilters.antiquity:', newFilters.antiquity)
       if (newFilters.antiquity !== 'any') {
         switch(newFilters.antiquity) {
-          case '0-1': min_antiquity = 0; max_antiquity = 0; break;
-          case '1-8': min_antiquity = 1; max_antiquity = 8; break;
-          case '9-15': min_antiquity = 9; max_antiquity = 15; break;
-          case '16-30': min_antiquity = 16; max_antiquity = 30; break;
-          case '30+': min_antiquity = 31; max_antiquity = 999; break;
+          case '0-1': antiquity_category = 1; break;  // Menos de 1 año
+          case '1-8': antiquity_category = 2; break;  // 1 a 8 años  
+          case '9-15': antiquity_category = 3; break; // 9 a 15 años
+          case '16-30': antiquity_category = 4; break; // 16 a 30 años
+          case '30+': antiquity_category = 5; break;  // Más de 30 años
           case 'unspecified': antiquity_filter = 'unspecified'; break;
         }
       }
+      console.log('🔍 FRONTEND - Procesados: category=', antiquity_category, 'filter=', antiquity_filter)
       
       const cleanFilters = {
         city_id: newFilters.city_id === 'all' ? undefined : parseInt(newFilters.city_id),
         offer_type: newFilters.offer_type === 'all' ? undefined : newFilters.offer_type,
-        min_price: newFilters.min_price ? parseFloat(newFilters.min_price) : undefined,
-        max_price: newFilters.max_price ? parseFloat(newFilters.max_price) : undefined,
+        min_price: newFilters.min_price ? parseFloat(cleanPrice(newFilters.min_price)) : undefined,
+        max_price: newFilters.max_price ? parseFloat(cleanPrice(newFilters.max_price)) : undefined,
+        min_sale_price: newFilters.min_sale_price ? parseFloat(cleanPrice(newFilters.min_sale_price)) : undefined,
+        max_sale_price: newFilters.max_sale_price ? parseFloat(cleanPrice(newFilters.max_sale_price)) : undefined,
+        min_rent_price: newFilters.min_rent_price ? parseFloat(cleanPrice(newFilters.min_rent_price)) : undefined,
+        max_rent_price: newFilters.max_rent_price ? parseFloat(cleanPrice(newFilters.max_rent_price)) : undefined,
         min_area: newFilters.min_area ? parseFloat(newFilters.min_area) : undefined,
         max_area: newFilters.max_area ? parseFloat(newFilters.max_area) : undefined,
         rooms: newFilters.rooms === 'any' ? undefined : newFilters.rooms,
         baths: newFilters.baths === 'any' ? undefined : newFilters.baths,
         garages: newFilters.garages === 'any' ? undefined : newFilters.garages,
         stratum: newFilters.stratum === 'any' ? undefined : (newFilters.stratum === 'unspecified' ? 'unspecified' : parseInt(newFilters.stratum)),
-        min_antiquity: min_antiquity,
-        max_antiquity: max_antiquity,
+        antiquity_category: antiquity_category,
         antiquity_filter: antiquity_filter,
-        property_type: newFilters.property_type === 'any' ? undefined : newFilters.property_type,
+        property_type: newFilters.property_type.length === 0 ? undefined : newFilters.property_type,
         updated_date_from: newFilters.updated_date_from || undefined,
         updated_date_to: newFilters.updated_date_to || undefined,
         // Filtros de ubicación
         search_address: newFilters.search_address || undefined,
-        latitude: currentCoordinates?.lat,
-        longitude: currentCoordinates?.lng,
+        latitude: coordsToUse?.lat,
+        longitude: coordsToUse?.lng,
         radius: newFilters.radius ? parseInt(newFilters.radius) : undefined
       }
       
       // Debug: log para ver qué filtros se están enviando
       console.log('Sending filters to API:', cleanFilters)
-      console.log('ROOMS VALUE BEING SENT:', cleanFilters.rooms)
+      console.log('PROPERTY_TYPE FILTER:', cleanFilters.property_type)
+      console.log('PROPERTY_TYPE TYPE:', typeof cleanFilters.property_type)
+      console.log('PROPERTY_TYPE LENGTH:', cleanFilters.property_type?.length)
       
       // Debug específico para ubicación
       if (cleanFilters.search_address) {
@@ -115,7 +151,9 @@ export function PropertyDatabaseView() {
       
       // Debug: log para ver la respuesta
       console.log('API response:', result)
-      console.log('Properties data:', result.properties.map(p => ({id: p.id, rooms: p.rooms})))
+      if (result && result.properties) {
+        console.log('Properties data:', result.properties.map(p => ({id: p.id, rooms: p.rooms})))
+      }
     } catch (err) {
       setError('Error al cargar propiedades')
       console.error('Error loading properties:', err)
@@ -123,6 +161,7 @@ export function PropertyDatabaseView() {
       setLoading(false)
     }
   }
+
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -137,6 +176,10 @@ export function PropertyDatabaseView() {
           offer_type: 'all',
           min_price: '',
           max_price: '',
+          min_sale_price: '',
+          max_sale_price: '',
+          min_rent_price: '',
+          max_rent_price: '',
           min_area: '',
           max_area: '',
           rooms: 'any',
@@ -144,14 +187,14 @@ export function PropertyDatabaseView() {
           garages: 'any',
           stratum: 'any',
           antiquity: 'any',
-          property_type: 'any',
+          property_type: [] as string[],
           updated_date_from: '',
           updated_date_to: '',
           // Nuevos filtros de ubicación
           search_address: '',
           radius: '1000'
         }
-        loadProperties(1, emptyFilters)
+        loadPropertiesWithCoords(1, emptyFilters)
       } catch (error) {
         console.error('Error loading initial data:', error)
         setError('Error al cargar datos iniciales')
@@ -161,12 +204,46 @@ export function PropertyDatabaseView() {
     loadInitialData()
   }, [])
 
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element
+      if (!target.closest('.property-type-dropdown')) {
+        setPropertyTypeDropdownOpen(false)
+      }
+    }
+
+    if (propertyTypeDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [propertyTypeDropdownOpen])
+
   const handleFilterChange = (key: string, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
+    // Formatear campos de precio
+    if (key.includes('price') && value) {
+      const formattedValue = formatPriceInput(value)
+      setFilters(prev => ({ ...prev, [key]: formattedValue }))
+    } else {
+      setFilters(prev => ({ ...prev, [key]: value }))
+    }
   }
+
+  const handlePropertyTypeToggle = (propertyType: string) => {
+    setFilters(prev => ({
+      ...prev,
+      property_type: prev.property_type.includes(propertyType)
+        ? prev.property_type.filter(type => type !== propertyType)
+        : [...prev.property_type, propertyType]
+    }))
+  }
+
+
 
   const handleSearch = async () => {
     setCurrentPage(1)
+    
+    let coordsToUse = currentCoordinates
     
     // Si hay una dirección y no hemos geocodificado esta dirección antes
     if (filters.search_address && filters.search_address !== lastGeocodedAddress) {
@@ -176,10 +253,11 @@ export function PropertyDatabaseView() {
         const geocodeResult = await GeocodingService.geocodeAddress(filters.search_address)
         
         if (geocodeResult.success) {
-          setCurrentCoordinates({
+          coordsToUse = {
             lat: geocodeResult.latitude,
             lng: geocodeResult.longitude
-          })
+          }
+          setCurrentCoordinates(coordsToUse)
           setLastGeocodedAddress(filters.search_address)
           console.log('Coordenadas geocodificadas:', {
             lat: geocodeResult.latitude,
@@ -189,10 +267,12 @@ export function PropertyDatabaseView() {
           showSuccess(`Dirección encontrada: ${geocodeResult.formatted_address}`)
         } else {
           showError(`Error al geocodificar: ${geocodeResult.error}`)
+          coordsToUse = null
           setCurrentCoordinates(null)
         }
       } catch (error) {
         showError('Error al obtener coordenadas de la dirección')
+        coordsToUse = null
         setCurrentCoordinates(null)
       } finally {
         setGeocoding(false)
@@ -201,19 +281,25 @@ export function PropertyDatabaseView() {
     
     // Si no hay dirección, limpiar coordenadas
     if (!filters.search_address) {
+      coordsToUse = null
       setCurrentCoordinates(null)
       setLastGeocodedAddress('')
     }
     
-    loadProperties(1, filters)
+    // Llamar loadProperties con las coordenadas correctas
+    await loadPropertiesWithCoords(1, filters, coordsToUse)
   }
 
-  const handleClearFilters = () => {
+  const handleClearFilters = async () => {
     const emptyFilters = {
       city_id: 'all',
       offer_type: 'all',
       min_price: '',
       max_price: '',
+      min_sale_price: '',
+      max_sale_price: '',
+      min_rent_price: '',
+      max_rent_price: '',
       min_area: '',
       max_area: '',
       rooms: 'any',
@@ -221,21 +307,36 @@ export function PropertyDatabaseView() {
       garages: 'any',
       stratum: 'any',
       antiquity: 'any',
-      property_type: 'any',
+      property_type: [] as string[],
       updated_date_from: '',
       updated_date_to: '',
       // Nuevos filtros de ubicación
       search_address: '',
       radius: '1000'
     }
-    setFilters(emptyFilters)
+    
+    // Limpiar TODOS los estados relacionados de inmediato
+    setCurrentCoordinates(null)
+    setLastGeocodedAddress('')
     setCurrentPage(1)
-    loadProperties(1, emptyFilters)
+    setPropertyTypeDropdownOpen(false)
+    setGeocoding(false)
+    setError(null)
+    
+    // Limpiar datos actuales antes de cargar nuevos
+    setData(null)
+    setLoading(true)
+    
+    // Actualizar filtros
+    setFilters(emptyFilters)
+    
+    // Cargar propiedades con filtros completamente limpios - usar null explícitamente para coordenadas
+    await loadPropertiesWithCoords(1, emptyFilters, null)
   }
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
-    loadProperties(newPage, filters)
+    loadPropertiesWithCoords(newPage, filters)
   }
 
   const formatPrice = (price: number) => {
@@ -276,21 +377,19 @@ export function PropertyDatabaseView() {
     let loadingToastId: string | null = null
     
     try {
-      setSendingEmail(true)
       loadingToastId = showToast(`Enviando Excel a ${email}...`, 'loading')
       
       // Preparar filtros para el backend
-      let min_antiquity = undefined;
-      let max_antiquity = undefined;
       let antiquity_filter = undefined;
+      let antiquity_category = undefined;
       
       if (filters.antiquity !== 'any') {
         switch(filters.antiquity) {
-          case '0-1': min_antiquity = 0; max_antiquity = 0; break;
-          case '1-8': min_antiquity = 1; max_antiquity = 8; break;
-          case '9-15': min_antiquity = 9; max_antiquity = 15; break;
-          case '16-30': min_antiquity = 16; max_antiquity = 30; break;
-          case '30+': min_antiquity = 31; max_antiquity = 999; break;
+          case '0-1': antiquity_category = 1; break;  // Menos de 1 año
+          case '1-8': antiquity_category = 2; break;  // 1 a 8 años  
+          case '9-15': antiquity_category = 3; break; // 9 a 15 años
+          case '16-30': antiquity_category = 4; break; // 16 a 30 años
+          case '30+': antiquity_category = 5; break;  // Más de 30 años
           case 'unspecified': antiquity_filter = 'unspecified'; break;
         }
       }
@@ -298,18 +397,21 @@ export function PropertyDatabaseView() {
       const cleanFilters = {
         city_id: filters.city_id === 'all' ? undefined : parseInt(filters.city_id),
         offer_type: filters.offer_type === 'all' ? undefined : filters.offer_type,
-        min_price: filters.min_price ? parseFloat(filters.min_price) : undefined,
-        max_price: filters.max_price ? parseFloat(filters.max_price) : undefined,
+        min_price: filters.min_price ? parseFloat(cleanPrice(filters.min_price)) : undefined,
+        max_price: filters.max_price ? parseFloat(cleanPrice(filters.max_price)) : undefined,
+        min_sale_price: filters.min_sale_price ? parseFloat(cleanPrice(filters.min_sale_price)) : undefined,
+        max_sale_price: filters.max_sale_price ? parseFloat(cleanPrice(filters.max_sale_price)) : undefined,
+        min_rent_price: filters.min_rent_price ? parseFloat(cleanPrice(filters.min_rent_price)) : undefined,
+        max_rent_price: filters.max_rent_price ? parseFloat(cleanPrice(filters.max_rent_price)) : undefined,
         min_area: filters.min_area ? parseFloat(filters.min_area) : undefined,
         max_area: filters.max_area ? parseFloat(filters.max_area) : undefined,
         rooms: filters.rooms === 'any' ? undefined : filters.rooms,
         baths: filters.baths === 'any' ? undefined : filters.baths,
         garages: filters.garages === 'any' ? undefined : filters.garages,
         stratum: filters.stratum === 'any' ? undefined : (filters.stratum === 'unspecified' ? 'unspecified' : parseInt(filters.stratum)),
-        min_antiquity: min_antiquity,
-        max_antiquity: max_antiquity,
+        antiquity_category: antiquity_category,
         antiquity_filter: antiquity_filter,
-        property_type: filters.property_type === 'any' ? undefined : filters.property_type,
+        property_type: filters.property_type.length === 0 ? undefined : filters.property_type,
         updated_date_from: filters.updated_date_from || undefined,
         updated_date_to: filters.updated_date_to || undefined,
         search_address: filters.search_address || undefined,
@@ -351,8 +453,6 @@ export function PropertyDatabaseView() {
       
       console.error('Error al enviar email:', error)
       showToast('Error al enviar el archivo por email. Por favor, inténtalo de nuevo.', 'error')
-    } finally {
-      setSendingEmail(false)
     }
   }
 
@@ -399,25 +499,71 @@ export function PropertyDatabaseView() {
             </Select>
           </div>
           
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Precio Mínimo</label>
-            <Input
-              type="number"
-              placeholder="0"
-              value={filters.min_price}
-              onChange={(e) => handleFilterChange('min_price', e.target.value)}
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Precio Máximo</label>
-            <Input
-              type="number"
-              placeholder="Sin límite"
-              value={filters.max_price}
-              onChange={(e) => handleFilterChange('max_price', e.target.value)}
-            />
-          </div>
+          {filters.offer_type === 'all' ? (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio Venta Mínimo</label>
+                <Input
+                  type="text"
+                  placeholder="$0"
+                  value={filters.min_sale_price}
+                  onChange={(e) => handleFilterChange('min_sale_price', e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio Venta Máximo</label>
+                <Input
+                  type="text"
+                  placeholder="Sin límite"
+                  value={filters.max_sale_price}
+                  onChange={(e) => handleFilterChange('max_sale_price', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio Arriendo Mínimo</label>
+                <Input
+                  type="text"
+                  placeholder="$0"
+                  value={filters.min_rent_price}
+                  onChange={(e) => handleFilterChange('min_rent_price', e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio Arriendo Máximo</label>
+                <Input
+                  type="text"
+                  placeholder="Sin límite"
+                  value={filters.max_rent_price}
+                  onChange={(e) => handleFilterChange('max_rent_price', e.target.value)}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio Mínimo</label>
+                <Input
+                  type="text"
+                  placeholder="$0"
+                  value={filters.min_price}
+                  onChange={(e) => handleFilterChange('min_price', e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Precio Máximo</label>
+                <Input
+                  type="text"
+                  placeholder="Sin límite"
+                  value={filters.max_price}
+                  onChange={(e) => handleFilterChange('max_price', e.target.value)}
+                />
+              </div>
+            </>
+          )}
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Área Mínima (m²)</label>
@@ -532,19 +678,52 @@ export function PropertyDatabaseView() {
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Tipo de Inmueble</label>
-            <Select value={filters.property_type} onValueChange={(value) => handleFilterChange('property_type', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Cualquiera..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Cualquiera</SelectItem>
-                <SelectItem value="apartamento">Apartamento</SelectItem>
-                <SelectItem value="casa">Casa</SelectItem>
-                <SelectItem value="oficina">Oficina</SelectItem>
-                <SelectItem value="local">Local</SelectItem>
-                <SelectItem value="bodega">Bodega</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative property-type-dropdown">
+              <Button
+                variant="outline"
+                onClick={() => setPropertyTypeDropdownOpen(!propertyTypeDropdownOpen)}
+                className="w-full justify-between text-left font-normal h-10"
+              >
+                <span className="truncate">
+                  {filters.property_type.length === 0
+                    ? "Cualquiera..."
+                    : filters.property_type.length === 1
+                    ? filters.property_type[0].charAt(0).toUpperCase() + filters.property_type[0].slice(1)
+                    : filters.property_type.map(type => type.charAt(0).toUpperCase() + type.slice(1)).join(", ")
+                  }
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </Button>
+              
+              {propertyTypeDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="p-2 space-y-1">
+                    {[
+                      { value: 'apartamento', label: 'Apartamento' },
+                      { value: 'casa', label: 'Casa' },
+                      { value: 'oficina', label: 'Oficina' },
+                      { value: 'local', label: 'Local' },
+                      { value: 'bodega', label: 'Bodega' },
+                      { value: 'lote', label: 'Lote' },
+                      { value: 'finca', label: 'Finca' }
+                    ].map((type) => (
+                      <div
+                        key={type.value}
+                        className="flex items-center space-x-2 p-2 hover:bg-accent rounded cursor-pointer"
+                        onClick={() => handlePropertyTypeToggle(type.value)}
+                      >
+                        <div className="w-4 h-4 border border-input rounded flex items-center justify-center">
+                          {filters.property_type.includes(type.value) && (
+                            <div className="w-2 h-2 bg-primary rounded" />
+                          )}
+                        </div>
+                        <span className="text-sm">{type.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -561,6 +740,7 @@ export function PropertyDatabaseView() {
             <Input
               type="date"
               value={filters.updated_date_to}
+              max={new Date().toISOString().split('T')[0]}
               onChange={(e) => handleFilterChange('updated_date_to', e.target.value)}
             />
           </div>
@@ -732,7 +912,7 @@ export function PropertyDatabaseView() {
                       {property.price ? formatPrice(property.price) : 'N/A'}
                     </TableCell>
                     <TableCell>
-                      {property.distance ? `${property.distance.toLocaleString()}` : 'N/A'}
+                      {property.distance !== null && property.distance !== undefined ? `${Math.round(property.distance)} m` : 'N/A'}
                     </TableCell>
                     <TableCell>
                       {property.finca_raiz_link ? (

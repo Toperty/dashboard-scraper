@@ -7,7 +7,7 @@ interface TopertyLogoProps {
   height?: number
 }
 
-export function TopertyLogo({ className = '', width = 140, height = 50 }: TopertyLogoProps) {
+export function TopertyLogo({ className = '', width = 110, height = 50 }: TopertyLogoProps) {
   return (
     <Image
       src="/logo-toperty-horizontal.png"

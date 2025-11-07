@@ -48,22 +48,6 @@ export function Toast({ message, type, isVisible, progress, onClose }: ToastProp
           ×
         </button>
       </div>
-      
-      {/* Barra de progreso */}
-      {type === 'loading' && progress !== undefined && (
-        <div className="mt-3">
-          <div className="flex justify-between text-xs mb-1">
-            <span>Progreso</span>
-            <span>{Math.round(progress)}%</span>
-          </div>
-          <div className="w-full bg-gray-400 rounded-full h-2">
-            <div 
-              className="bg-white h-2 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   )
 }

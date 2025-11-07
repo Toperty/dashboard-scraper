@@ -95,7 +95,10 @@ export class AuthService {
       
       // Verificar que el email sea de @toperty.co
       if (!userInfo.email.endsWith('@toperty.co')) {
-        alert('Solo se permite el acceso a correos de @toperty.co');
+        // Emitir evento personalizado para que el componente pueda manejarlo
+        window.dispatchEvent(new CustomEvent('auth-invalid-email', {
+          detail: { email: userInfo.email }
+        }));
         this.logout();
         return;
       }

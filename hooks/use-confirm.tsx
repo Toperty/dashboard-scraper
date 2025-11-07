@@ -136,7 +136,7 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
             <AlertDialogTitle>
               {state.title}
             </AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="whitespace-pre-line">
               {state.description}
             </AlertDialogDescription>
           </AlertDialogHeader>

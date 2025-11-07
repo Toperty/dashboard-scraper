@@ -196,7 +196,11 @@ export async function fetchProperties(
     min_antiquity?: number;
     max_antiquity?: number;
     antiquity_filter?: string;
-    property_type?: string;
+    property_type?: string[];
+    min_sale_price?: number;
+    max_sale_price?: number;
+    min_rent_price?: number;
+    max_rent_price?: number;
     updated_date_from?: string;
     updated_date_to?: string;
     search_address?: string;
@@ -213,7 +217,12 @@ export async function fetchProperties(
 
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
-        params.append(key, value.toString());
+        // Manejar arrays (como property_type) de forma especial
+        if (Array.isArray(value)) {
+          value.forEach(item => params.append(key, item));
+        } else {
+          params.append(key, value.toString());
+        }
       }
     });
 

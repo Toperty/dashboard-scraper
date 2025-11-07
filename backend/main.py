@@ -3,8 +3,9 @@ Backend que FUNCIONA - Sin problemas de tablas
 """
 
 from datetime import datetime, timedelta
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Optional
 import os
 import pytz
 
@@ -576,10 +577,13 @@ async def get_properties(
     baths: str = None,
     garages: str = None,
     stratum: str = None,
-    min_antiquity: int = None,
-    max_antiquity: int = None,
+    antiquity_category: int = None,
     antiquity_filter: str = None,
-    property_type: str = None,
+    property_type: Optional[List[str]] = Query(None),
+    min_sale_price: float = None,
+    max_sale_price: float = None,
+    min_rent_price: float = None,
+    max_rent_price: float = None,
     updated_date_from: str = None,
     updated_date_to: str = None,
     # Parámetros de ubicación para filtrar por distancia
@@ -594,6 +598,14 @@ async def get_properties(
     from models.property import Property
     from models.city import City
     from sqlalchemy import and_, or_
+    
+    # Debug: log de coordenadas recibidas
+    print(f"🔍 BACKEND - Coordenadas recibidas: lat={latitude}, lng={longitude}, radius={radius}")
+    if search_address:
+        print(f"🔍 BACKEND - Dirección: {search_address}")
+    
+    # Debug: log de filtros de antigüedad
+    print(f"🔍 BACKEND - Antigüedad: category={antiquity_category}, filter={antiquity_filter}")
     
     try:
         with Session(engine) as session:
@@ -614,6 +626,36 @@ async def get_properties(
                 
             if max_price is not None:
                 filters.append(Property.price <= max_price)
+                
+            # Filtros de precio específicos por tipo de oferta - funcionan independientemente
+            sale_price_conditions = []
+            rent_price_conditions = []
+            
+            if min_sale_price is not None:
+                sale_price_conditions.append(Property.price >= min_sale_price)
+            if max_sale_price is not None:
+                sale_price_conditions.append(Property.price <= max_sale_price)
+                
+            if min_rent_price is not None:
+                rent_price_conditions.append(Property.price >= min_rent_price)
+            if max_rent_price is not None:
+                rent_price_conditions.append(Property.price <= max_rent_price)
+            
+            # Aplicar filtros independientes por tipo de oferta
+            price_type_conditions = []
+            if sale_price_conditions:
+                price_type_conditions.append(and_(
+                    Property.offer == 'sell',
+                    *sale_price_conditions
+                ))
+            if rent_price_conditions:
+                price_type_conditions.append(and_(
+                    Property.offer == 'rent', 
+                    *rent_price_conditions
+                ))
+            
+            if price_type_conditions:
+                filters.append(or_(*price_type_conditions))
                 
             if min_area is not None:
                 filters.append(Property.area >= min_area)
@@ -688,68 +730,46 @@ async def get_properties(
                     stratum_str = f"Estrato {stratum}"
                     filters.append(Property.stratum == stratum_str)
             
-            if min_antiquity is not None and max_antiquity is not None:
+            if antiquity_category is not None:
                 # Mapear rangos a todos los valores posibles en la BD
                 from sqlalchemy import or_, cast, Integer
                 antiquity_conditions = []
                 
-                if min_antiquity == 0 and max_antiquity == 0:
-                    # Menos de 1 año
+                if antiquity_category == 1:
+                    # Menos de 1 año - solo valores categóricos
                     antiquity_conditions.extend([
                         Property.antiquity == 'LESS_THAN_1_YEAR',
-                        Property.antiquity == 'NEW',
-                        Property.antiquity == '0',
-                        Property.antiquity == 0
+                        Property.antiquity == 'Menos de 1 año',
+                        Property.antiquity == '1'
                     ])
-                elif min_antiquity == 1 and max_antiquity == 8:
+                elif antiquity_category == 2:
                     # 1 a 8 años
                     antiquity_conditions.extend([
                         Property.antiquity == 'FROM_1_TO_8_YEARS',
                         Property.antiquity == '1 a 8 años',
-                        Property.antiquity == '1',
-                        Property.antiquity == '2',
-                        Property.antiquity == '3',
-                        Property.antiquity == '4',
-                        Property.antiquity == '5',
-                        Property.antiquity == '6',
-                        Property.antiquity == '7',
-                        Property.antiquity == '8',
-                        Property.antiquity == 1,
-                        Property.antiquity == 2,
-                        Property.antiquity == 3,
-                        Property.antiquity == 4,
-                        Property.antiquity == 5,
-                        Property.antiquity == 6,
-                        Property.antiquity == 7,
-                        Property.antiquity == 8
+                        Property.antiquity == '2'
                     ])
-                elif min_antiquity == 9 and max_antiquity == 15:
-                    # 9 a 15 años
+                elif antiquity_category == 3:
+                    # 9 a 15 años - solo valores categóricos
                     antiquity_conditions.extend([
                         Property.antiquity == 'FROM_9_TO_15_YEARS',
-                        Property.antiquity == '9 a 15 años'
+                        Property.antiquity == '9 a 15 años',
+                        Property.antiquity == '3'
                     ])
-                    # Agregar valores numéricos del 9 al 15
-                    for i in range(9, 16):
-                        antiquity_conditions.append(Property.antiquity == str(i))
-                        antiquity_conditions.append(Property.antiquity == i)
-                elif min_antiquity == 16 and max_antiquity == 30:
-                    # 16 a 30 años
+                elif antiquity_category == 4:
+                    # 16 a 30 años - solo valores categóricos
                     antiquity_conditions.extend([
                         Property.antiquity == 'FROM_16_TO_30_YEARS',
-                        Property.antiquity == '16 a 30 años'
+                        Property.antiquity == '16 a 30 años',
+                        Property.antiquity == '4'
                     ])
-                    # Agregar valores numéricos del 16 al 30
-                    for i in range(16, 31):
-                        antiquity_conditions.append(Property.antiquity == str(i))
-                        antiquity_conditions.append(Property.antiquity == i)
-                elif min_antiquity == 31:
-                    # Más de 30 años
-                    antiquity_conditions.append(Property.antiquity == 'MORE_THAN_30_YEARS')
-                    # Agregar valores numéricos mayores a 30
-                    for i in range(31, 100):
-                        antiquity_conditions.append(Property.antiquity == str(i))
-                        antiquity_conditions.append(Property.antiquity == i)
+                elif antiquity_category == 5:
+                    # Más de 30 años - solo valores categóricos
+                    antiquity_conditions.extend([
+                        Property.antiquity == 'MORE_THAN_30_YEARS',
+                        Property.antiquity == 'Más de 30 años',
+                        Property.antiquity == '5'
+                    ])
                 
                 if antiquity_conditions:
                     filters.append(or_(*antiquity_conditions))
@@ -759,32 +779,102 @@ async def get_properties(
                 filters.append(or_(
                     Property.antiquity == 'UNDEFINED',
                     Property.antiquity == 'Sin especificar',
-                    Property.antiquity == None
+                    Property.antiquity == None,
+                    Property.antiquity == ''
                 ))
             
-            if property_type:
-                # Mejorar la búsqueda de tipo de inmueble para ser más precisa
-                property_type_lower = property_type.lower()
-                if property_type_lower == "apartamento":
-                    filters.append(or_(
-                        Property.title.ilike("%apartamento%"),
-                        Property.title.ilike("%apto%")
-                    ))
-                elif property_type_lower == "casa":
-                    filters.append(and_(
-                        Property.title.ilike("%casa%"),
-                        ~Property.title.ilike("%apartamento%"),
-                        ~Property.title.ilike("%apto%")
-                    ))
-                elif property_type_lower == "oficina":
-                    filters.append(Property.title.ilike("%oficina%"))
-                elif property_type_lower == "local":
-                    filters.append(Property.title.ilike("%local%"))
-                elif property_type_lower == "bodega":
-                    filters.append(Property.title.ilike("%bodega%"))
-                else:
-                    # Para otros tipos, usar búsqueda simple sin espacios extra
-                    filters.append(Property.title.ilike(f"%{property_type}%"))
+            if property_type and len(property_type) > 0:
+                # Debug logging
+                print(f"BACKEND DEBUG - property_type received: {property_type}")
+                print(f"BACKEND DEBUG - property_type type: {type(property_type)}")
+                print(f"BACKEND DEBUG - property_type length: {len(property_type)}")
+                
+                # Manejar múltiples tipos de propiedad con búsqueda más específica
+                type_conditions = []
+                
+                for prop_type in property_type:
+                    property_type_lower = prop_type.lower()
+                    if property_type_lower == "apartamento":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% apartamento %"),
+                                Property.title.ilike("apartamento %"),
+                                Property.title.ilike("% apartamento"),
+                                Property.title.ilike("% apto %"),
+                                Property.title.ilike("apto %"),
+                                Property.title.ilike("% apto"),
+                                Property.title.ilike("apartamento"),
+                                Property.title.ilike("apto")
+                            ),
+                            ~Property.title.ilike("%bodega%"),
+                            ~Property.title.ilike("%local%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "casa":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% casa %"),
+                                Property.title.ilike("casa %"),
+                                Property.title.ilike("% casa"),
+                                Property.title.ilike("casa")
+                            ),
+                            ~Property.title.ilike("%apartamento%"),
+                            ~Property.title.ilike("%apto%"),
+                            ~Property.title.ilike("%bodega%"),
+                            ~Property.title.ilike("%local%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "oficina":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% oficina %"),
+                                Property.title.ilike("oficina %"),
+                                Property.title.ilike("% oficina"),
+                                Property.title.ilike("oficina")
+                            ),
+                            ~Property.title.ilike("%apartamento%"),
+                            ~Property.title.ilike("%casa%"),
+                            ~Property.title.ilike("%bodega%")
+                        ))
+                    elif property_type_lower == "local":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% local %"),
+                                Property.title.ilike("local %"),
+                                Property.title.ilike("% local"),
+                                Property.title.ilike("local")
+                            ),
+                            ~Property.title.ilike("%apartamento%"),
+                            ~Property.title.ilike("%casa%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "bodega":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% bodega %"),
+                            Property.title.ilike("bodega %"),
+                            Property.title.ilike("% bodega"),
+                            Property.title.ilike("bodega")
+                        ))
+                    elif property_type_lower == "lote":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% lote %"),
+                            Property.title.ilike("lote %"),
+                            Property.title.ilike("% lote"),
+                            Property.title.ilike("lote")
+                        ))
+                    elif property_type_lower == "finca":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% finca %"),
+                            Property.title.ilike("finca %"),
+                            Property.title.ilike("% finca"),
+                            Property.title.ilike("finca")
+                        ))
+                    else:
+                        # Para otros tipos, usar búsqueda simple
+                        type_conditions.append(Property.title.ilike(f"%{prop_type}%"))
+                
+                if type_conditions:
+                    filters.append(or_(*type_conditions))
             
             if updated_date_from:
                 from datetime import datetime
@@ -1161,57 +1251,46 @@ async def send_properties_excel(request: dict):
                     filter_conditions.append(Property.stratum == stratum_str)
             
             # Filtro de antigüedad
-            min_antiquity = filters.get('min_antiquity')
-            max_antiquity = filters.get('max_antiquity')
+            antiquity_category = filters.get('antiquity_category')
             antiquity_filter = filters.get('antiquity_filter')
             
-            if min_antiquity is not None and max_antiquity is not None:
+            if antiquity_category is not None:
                 antiquity_conditions = []
                 
-                if min_antiquity == 0 and max_antiquity == 0:
+                if antiquity_category == 1:
                     # Menos de 1 año
                     antiquity_conditions.extend([
                         Property.antiquity == 'LESS_THAN_1_YEAR',
                         Property.antiquity == 'Menos de 1 año',
                         Property.antiquity == '0'
                     ])
-                elif min_antiquity == 1 and max_antiquity == 8:
-                    # 1 a 8 años
+                elif antiquity_category == 2:
+                    # 1 a 8 años - solo valores categóricos
                     antiquity_conditions.extend([
                         Property.antiquity == 'FROM_1_TO_8_YEARS',
                         Property.antiquity == '1 a 8 años'
                     ])
-                    # Agregar valores numéricos del 1 al 8
-                    for i in range(1, 9):
-                        antiquity_conditions.append(Property.antiquity == str(i))
-                        antiquity_conditions.append(Property.antiquity == i)
-                elif min_antiquity == 9 and max_antiquity == 15:
-                    # 9 a 15 años
+                elif antiquity_category == 3:
+                    # 9 a 15 años - solo valores categóricos
                     antiquity_conditions.extend([
                         Property.antiquity == 'FROM_9_TO_15_YEARS',
-                        Property.antiquity == '9 a 15 años'
+                        Property.antiquity == '9 a 15 años',
+                        Property.antiquity == '3'
                     ])
-                    # Agregar valores numéricos del 9 al 15
-                    for i in range(9, 16):
-                        antiquity_conditions.append(Property.antiquity == str(i))
-                        antiquity_conditions.append(Property.antiquity == i)
-                elif min_antiquity == 16 and max_antiquity == 30:
-                    # 16 a 30 años
+                elif antiquity_category == 4:
+                    # 16 a 30 años - solo valores categóricos
                     antiquity_conditions.extend([
                         Property.antiquity == 'FROM_16_TO_30_YEARS',
-                        Property.antiquity == '16 a 30 años'
+                        Property.antiquity == '16 a 30 años',
+                        Property.antiquity == '4'
                     ])
-                    # Agregar valores numéricos del 16 al 30
-                    for i in range(16, 31):
-                        antiquity_conditions.append(Property.antiquity == str(i))
-                        antiquity_conditions.append(Property.antiquity == i)
-                elif min_antiquity == 31:
-                    # Más de 30 años
-                    antiquity_conditions.append(Property.antiquity == 'MORE_THAN_30_YEARS')
-                    # Agregar valores numéricos mayores a 30
-                    for i in range(31, 100):
-                        antiquity_conditions.append(Property.antiquity == str(i))
-                        antiquity_conditions.append(Property.antiquity == i)
+                elif antiquity_category == 5:
+                    # Más de 30 años - solo valores categóricos
+                    antiquity_conditions.extend([
+                        Property.antiquity == 'MORE_THAN_30_YEARS',
+                        Property.antiquity == 'Más de 30 años',
+                        Property.antiquity == '5'
+                    ])
                 
                 if antiquity_conditions:
                     filter_conditions.append(or_(*antiquity_conditions))
@@ -1223,30 +1302,95 @@ async def send_properties_excel(request: dict):
                     Property.antiquity == None
                 ))
             
-            # Filtro de tipo de propiedad
-            if filters.get('property_type'):
-                property_type = filters.get('property_type')
-                property_type_lower = property_type.lower()
-                if property_type_lower == "apartamento":
-                    filter_conditions.append(or_(
-                        Property.title.ilike("%apartamento%"),
-                        Property.title.ilike("%apto%")
-                    ))
-                elif property_type_lower == "casa":
-                    filter_conditions.append(and_(
-                        Property.title.ilike("%casa%"),
-                        ~Property.title.ilike("%apartamento%"),
-                        ~Property.title.ilike("%apto%")
-                    ))
-                elif property_type_lower == "oficina":
-                    filter_conditions.append(Property.title.ilike("%oficina%"))
-                elif property_type_lower == "local":
-                    filter_conditions.append(Property.title.ilike("%local%"))
-                elif property_type_lower == "lote":
-                    filter_conditions.append(or_(
-                        Property.title.ilike("%lote%"),
-                        Property.title.ilike("%terreno%")
-                    ))
+            # Filtro de tipo de propiedad con búsqueda más específica
+            property_type = filters.get('property_type')
+            if property_type and len(property_type) > 0:
+                # Manejar múltiples tipos de propiedad
+                type_conditions = []
+                
+                for prop_type in property_type:
+                    property_type_lower = prop_type.lower()
+                    if property_type_lower == "apartamento":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% apartamento %"),
+                                Property.title.ilike("apartamento %"),
+                                Property.title.ilike("% apartamento"),
+                                Property.title.ilike("% apto %"),
+                                Property.title.ilike("apto %"),
+                                Property.title.ilike("% apto"),
+                                Property.title.ilike("apartamento"),
+                                Property.title.ilike("apto")
+                            ),
+                            ~Property.title.ilike("%bodega%"),
+                            ~Property.title.ilike("%local%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "casa":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% casa %"),
+                                Property.title.ilike("casa %"),
+                                Property.title.ilike("% casa"),
+                                Property.title.ilike("casa")
+                            ),
+                            ~Property.title.ilike("%apartamento%"),
+                            ~Property.title.ilike("%apto%"),
+                            ~Property.title.ilike("%bodega%"),
+                            ~Property.title.ilike("%local%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "oficina":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% oficina %"),
+                                Property.title.ilike("oficina %"),
+                                Property.title.ilike("% oficina"),
+                                Property.title.ilike("oficina")
+                            ),
+                            ~Property.title.ilike("%apartamento%"),
+                            ~Property.title.ilike("%casa%"),
+                            ~Property.title.ilike("%bodega%")
+                        ))
+                    elif property_type_lower == "local":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% local %"),
+                                Property.title.ilike("local %"),
+                                Property.title.ilike("% local"),
+                                Property.title.ilike("local")
+                            ),
+                            ~Property.title.ilike("%apartamento%"),
+                            ~Property.title.ilike("%casa%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "bodega":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% bodega %"),
+                            Property.title.ilike("bodega %"),
+                            Property.title.ilike("% bodega"),
+                            Property.title.ilike("bodega")
+                        ))
+                    elif property_type_lower == "lote":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% lote %"),
+                            Property.title.ilike("lote %"),
+                            Property.title.ilike("% lote"),
+                            Property.title.ilike("lote")
+                        ))
+                    elif property_type_lower == "finca":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% finca %"),
+                            Property.title.ilike("finca %"),
+                            Property.title.ilike("% finca"),
+                            Property.title.ilike("finca")
+                        ))
+                    else:
+                        # Para otros tipos, usar búsqueda simple
+                        type_conditions.append(Property.title.ilike(f"%{prop_type}%"))
+                
+                if type_conditions:
+                    filter_conditions.append(or_(*type_conditions))
             
             # Filtro de fechas de actualización
             if filters.get('updated_date_from'):
