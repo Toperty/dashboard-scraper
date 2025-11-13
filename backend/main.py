@@ -477,7 +477,7 @@ async def get_dashboard():
                         "active_cities": len([c for c in cities if not c.updated]),
                         "completed_cities": len([c for c in cities if c.updated]),
                         "properties_today": today_properties_global,
-                        "properties_updated_today": properties_updated_today,
+                        "properties_updated_today": (properties_updated_today - today_properties_global),
                         "properties_total": total_properties_global,
                         "avg_speed_ms": avg_speed,
                         "last_execution_time": get_last_execution_time(session),
@@ -567,17 +567,17 @@ async def get_summary_with_changes():
 async def get_properties(
     page: int = 1,
     limit: int = 50,
-    city_id: int = None,
+    city_ids: Optional[List[int]] = Query(None),
     offer_type: str = None,
     min_price: float = None,
     max_price: float = None,
     min_area: float = None,
     max_area: float = None,
-    rooms: str = None,
-    baths: str = None,
-    garages: str = None,
-    stratum: str = None,
-    antiquity_category: int = None,
+    rooms: Optional[List[str]] = Query(None),
+    baths: Optional[List[str]] = Query(None),
+    garages: Optional[List[str]] = Query(None),
+    stratums: Optional[List[str]] = Query(None),
+    antiquity_categories: Optional[List[int]] = Query(None),
     antiquity_filter: str = None,
     property_type: Optional[List[str]] = Query(None),
     min_sale_price: float = None,
@@ -599,13 +599,6 @@ async def get_properties(
     from models.city import City
     from sqlalchemy import and_, or_
     
-    # Debug: log de coordenadas recibidas
-    print(f"🔍 BACKEND - Coordenadas recibidas: lat={latitude}, lng={longitude}, radius={radius}")
-    if search_address:
-        print(f"🔍 BACKEND - Dirección: {search_address}")
-    
-    # Debug: log de filtros de antigüedad
-    print(f"🔍 BACKEND - Antigüedad: category={antiquity_category}, filter={antiquity_filter}")
     
     try:
         with Session(engine) as session:
@@ -615,8 +608,8 @@ async def get_properties(
             # Aplicar filtros
             filters = []
             
-            if city_id:
-                filters.append(Property.city_id == city_id)
+            if city_ids:
+                filters.append(Property.city_id.in_(city_ids))
             
             if offer_type:
                 filters.append(Property.offer == offer_type)
@@ -663,132 +656,150 @@ async def get_properties(
             if max_area is not None:
                 filters.append(Property.area <= max_area)
                 
-            if rooms is not None:
-                if rooms == "unspecified":  # "Sin especificar" case
-                    filters.append(or_(
-                        Property.rooms == None,
-                        Property.rooms == '',
-                        Property.rooms == 'N/A'
-                    ))
-                elif rooms.endswith('+'):  # Casos como "5+"
-                    min_value = int(rooms[:-1])  # Extraer el número antes del "+"
-                    print(f'EL VALOR MINIMO ES ESTE {min_value}')
-                    # Filtrar solo valores numéricos y luego comparar
-                    from sqlalchemy import cast, Integer, and_
-                    filters.append(and_(
-                        Property.rooms.regexp_match('^[0-9]+$'),  # Solo valores numéricos
-                        cast(Property.rooms, Integer) >= min_value
-                    ))
-                else:
-                    filters.append(Property.rooms == rooms)
+            if rooms is not None and len(rooms) > 0:
+                rooms_conditions = []
+                for room in rooms:
+                    if room == "unspecified":  # "Sin especificar" case
+                        rooms_conditions.append(or_(
+                            Property.rooms == None,
+                            Property.rooms == '',
+                            Property.rooms == 'N/A',
+                            Property.rooms == 'Sin especificar'
+                        ))
+                    elif room.endswith('+'):  # Casos como "5+"
+                        min_value = int(room[:-1])  # Extraer el número antes del "+"
+                        # Filtrar solo valores numéricos y luego comparar
+                        from sqlalchemy import cast, Integer, and_
+                        rooms_conditions.append(and_(
+                            Property.rooms.regexp_match('^[0-9]+$'),  # Solo valores numéricos
+                            cast(Property.rooms, Integer) >= min_value
+                        ))
+                    else:
+                        rooms_conditions.append(Property.rooms == room)
+                if rooms_conditions:
+                    filters.append(or_(*rooms_conditions))
             
-            if baths is not None:
-                if baths == "unspecified":  # "Sin especificar" case
-                    filters.append(or_(
-                        Property.baths == None,
-                        Property.baths == '',
-                        Property.baths == 'N/A'
-                    ))
-                elif baths.endswith('+'):  # Casos como "4+"
-                    min_value = int(baths[:-1])  # Extraer el número antes del "+"
-                    # Filtrar solo valores numéricos y luego comparar
-                    from sqlalchemy import cast, Integer, and_
-                    filters.append(and_(
-                        Property.baths.regexp_match('^[0-9]+$'),  # Solo valores numéricos
-                        cast(Property.baths, Integer) >= min_value
-                    ))
-                else:
-                    filters.append(Property.baths == baths)
+            if baths is not None and len(baths) > 0:
+                baths_conditions = []
+                for bath in baths:
+                    if bath == "unspecified":  # "Sin especificar" case
+                        baths_conditions.append(or_(
+                            Property.baths == None,
+                            Property.baths == '',
+                            Property.baths == 'N/A',
+                            Property.baths == 'Sin especificar'
+                        ))
+                    elif bath.endswith('+'):  # Casos como "4+"
+                        min_value = int(bath[:-1])  # Extraer el número antes del "+"
+                        # Filtrar solo valores numéricos y luego comparar
+                        from sqlalchemy import cast, Integer, and_
+                        baths_conditions.append(and_(
+                            Property.baths.regexp_match('^[0-9]+$'),  # Solo valores numéricos
+                            cast(Property.baths, Integer) >= min_value
+                        ))
+                    else:
+                        baths_conditions.append(Property.baths == bath)
+                if baths_conditions:
+                    filters.append(or_(*baths_conditions))
             
-            if garages is not None:
-                if garages == "unspecified":  # "Sin especificar" case
-                    filters.append(or_(
-                        Property.garages == None,
-                        Property.garages == '',
-                        Property.garages == 'N/A'
-                    ))
-                elif garages.endswith('+'):  # Casos como "3+"
-                    min_value = int(garages[:-1])  # Extraer el número antes del "+"
-                    # Filtrar solo valores numéricos y luego comparar
-                    from sqlalchemy import cast, Integer, and_
-                    filters.append(and_(
-                        Property.garages.regexp_match('^[0-9]+$'),  # Solo valores numéricos
-                        cast(Property.garages, Integer) >= min_value
-                    ))
-                else:
-                    filters.append(Property.garages == garages)
+            if garages is not None and len(garages) > 0:
+                garages_conditions = []
+                for garage in garages:
+                    if garage == "unspecified":  # "Sin especificar" case
+                        garages_conditions.append(or_(
+                            Property.garages == None,
+                            Property.garages == '',
+                            Property.garages == 'N/A',
+                            Property.garages == 'Sin especificar'
+                        ))
+                    elif garage.endswith('+'):  # Casos como "3+"
+                        min_value = int(garage[:-1])  # Extraer el número antes del "+"
+                        # Filtrar solo valores numéricos y luego comparar
+                        from sqlalchemy import cast, Integer, and_
+                        garages_conditions.append(and_(
+                            Property.garages.regexp_match('^[0-9]+$'),  # Solo valores numéricos
+                            cast(Property.garages, Integer) >= min_value
+                        ))
+                    else:
+                        garages_conditions.append(Property.garages == garage)
+                if garages_conditions:
+                    filters.append(or_(*garages_conditions))
             
-            if stratum is not None:
-                if stratum == "unspecified":  # "Sin especificar" case
-                    filters.append(or_(
-                        Property.stratum == None,
-                        Property.stratum == '',
-                        Property.stratum == 'Sin especificar'
-                    ))
-                else:
-                    # Convertir número a formato "Estrato X"
-                    stratum_str = f"Estrato {stratum}"
-                    filters.append(Property.stratum == stratum_str)
+            if stratums is not None and len(stratums) > 0:
+                stratum_conditions = []
+                for stratum in stratums:
+                    if stratum == "unspecified":  # "Sin especificar" case
+                        stratum_conditions.append(or_(
+                            Property.stratum == None,
+                            Property.stratum == '',
+                            Property.stratum == 'Sin especificar'
+                        ))
+                    else:
+                        # Convertir número a formato "Estrato X"
+                        stratum_str = f"Estrato {stratum}"
+                        stratum_conditions.append(Property.stratum == stratum_str)
+                if stratum_conditions:
+                    filters.append(or_(*stratum_conditions))
             
-            if antiquity_category is not None:
+            # Combinar filtros de antigüedad (categories y unspecified)
+            if (antiquity_categories is not None and len(antiquity_categories) > 0) or antiquity_filter == 'unspecified':
                 # Mapear rangos a todos los valores posibles en la BD
                 from sqlalchemy import or_, cast, Integer
                 antiquity_conditions = []
                 
-                if antiquity_category == 1:
-                    # Menos de 1 año - solo valores categóricos
+                # Procesar categories si existen
+                if antiquity_categories is not None and len(antiquity_categories) > 0:
+                    for antiquity_category in antiquity_categories:
+                        if antiquity_category == 1:
+                            # Menos de 1 año - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'LESS_THAN_1_YEAR',
+                                Property.antiquity == 'Menos de 1 año',
+                                Property.antiquity == '1'
+                            ])
+                        elif antiquity_category == 2:
+                            # 1 a 8 años
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'FROM_1_TO_8_YEARS',
+                                Property.antiquity == '1 a 8 años',
+                                Property.antiquity == '2'
+                            ])
+                        elif antiquity_category == 3:
+                            # 9 a 15 años - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'FROM_9_TO_15_YEARS',
+                                Property.antiquity == '9 a 15 años',
+                                Property.antiquity == '3'
+                            ])
+                        elif antiquity_category == 4:
+                            # 16 a 30 años - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'FROM_16_TO_30_YEARS',
+                                Property.antiquity == '16 a 30 años',
+                                Property.antiquity == '4'
+                            ])
+                        elif antiquity_category == 5:
+                            # Más de 30 años - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'MORE_THAN_30_YEARS',
+                                Property.antiquity == 'Más de 30 años',
+                                Property.antiquity == '5'
+                            ])
+                
+                # Agregar condición unspecified si está presente
+                if antiquity_filter == 'unspecified':
                     antiquity_conditions.extend([
-                        Property.antiquity == 'LESS_THAN_1_YEAR',
-                        Property.antiquity == 'Menos de 1 año',
-                        Property.antiquity == '1'
-                    ])
-                elif antiquity_category == 2:
-                    # 1 a 8 años
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'FROM_1_TO_8_YEARS',
-                        Property.antiquity == '1 a 8 años',
-                        Property.antiquity == '2'
-                    ])
-                elif antiquity_category == 3:
-                    # 9 a 15 años - solo valores categóricos
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'FROM_9_TO_15_YEARS',
-                        Property.antiquity == '9 a 15 años',
-                        Property.antiquity == '3'
-                    ])
-                elif antiquity_category == 4:
-                    # 16 a 30 años - solo valores categóricos
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'FROM_16_TO_30_YEARS',
-                        Property.antiquity == '16 a 30 años',
-                        Property.antiquity == '4'
-                    ])
-                elif antiquity_category == 5:
-                    # Más de 30 años - solo valores categóricos
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'MORE_THAN_30_YEARS',
-                        Property.antiquity == 'Más de 30 años',
-                        Property.antiquity == '5'
+                        Property.antiquity == 'UNDEFINED',
+                        Property.antiquity == 'Sin especificar',
+                        Property.antiquity == None,
+                        Property.antiquity == ''
                     ])
                 
+                # Aplicar filtro combinado si hay condiciones
                 if antiquity_conditions:
                     filters.append(or_(*antiquity_conditions))
-            elif antiquity_filter == 'unspecified':
-                # Filtrar solo propiedades sin especificar antigüedad
-                from sqlalchemy import or_
-                filters.append(or_(
-                    Property.antiquity == 'UNDEFINED',
-                    Property.antiquity == 'Sin especificar',
-                    Property.antiquity == None,
-                    Property.antiquity == ''
-                ))
             
             if property_type and len(property_type) > 0:
-                # Debug logging
-                print(f"BACKEND DEBUG - property_type received: {property_type}")
-                print(f"BACKEND DEBUG - property_type type: {type(property_type)}")
-                print(f"BACKEND DEBUG - property_type length: {len(property_type)}")
-                
                 # Manejar múltiples tipos de propiedad con búsqueda más específica
                 type_conditions = []
                 
@@ -893,12 +904,8 @@ async def get_properties(
                 except:
                     pass
             
-            if filters:
-                query = query.where(and_(*filters))
-            
             # SI HAY FILTRO POR DISTANCIA, primero geocodificar la dirección
             if search_address and radius is not None:
-                print(f"🏠 Geocodificando dirección: {search_address}")
                 
                 # Geocodificar la dirección usando Google Maps API directamente
                 import requests
@@ -1162,8 +1169,8 @@ async def send_properties_excel(request: dict):
             # Aplicar filtros (mismo código que en get_properties)
             filter_conditions = []
             
-            if filters.get('city_id'):
-                filter_conditions.append(Property.city_id == filters['city_id'])
+            if filters.get('city_ids'):
+                filter_conditions.append(Property.city_id.in_(filters['city_ids']))
             
             if filters.get('offer_type'):
                 filter_conditions.append(Property.offer == filters['offer_type'])
@@ -1181,126 +1188,148 @@ async def send_properties_excel(request: dict):
                 filter_conditions.append(Property.area <= filters['max_area'])
             
             # Filtro de habitaciones
-            if filters.get('rooms') is not None:
-                rooms = filters.get('rooms')
-                if rooms == "unspecified":
-                    filter_conditions.append(or_(
-                        Property.rooms == None,
-                        Property.rooms == '',
-                        Property.rooms == 'N/A'
-                    ))
-                elif rooms.endswith('+'):
-                    min_value = int(rooms[:-1])
-                    from sqlalchemy import cast, Integer
-                    filter_conditions.append(and_(
-                        Property.rooms.regexp_match('^[0-9]+$'),
-                        cast(Property.rooms, Integer) >= min_value
-                    ))
-                else:
-                    filter_conditions.append(Property.rooms == rooms)
+            if filters.get('rooms') is not None and len(filters['rooms']) > 0:
+                rooms_conditions = []
+                for room in filters['rooms']:
+                    if room == "unspecified":
+                        rooms_conditions.append(or_(
+                            Property.rooms == None,
+                            Property.rooms == '',
+                            Property.rooms == 'N/A',
+                            Property.rooms == 'Sin especificar'
+                        ))
+                    elif room.endswith('+'):
+                        min_value = int(room[:-1])
+                        from sqlalchemy import cast, Integer
+                        rooms_conditions.append(and_(
+                            Property.rooms.regexp_match('^[0-9]+$'),
+                            cast(Property.rooms, Integer) >= min_value
+                        ))
+                    else:
+                        rooms_conditions.append(Property.rooms == room)
+                if rooms_conditions:
+                    filter_conditions.append(or_(*rooms_conditions))
             
             # Filtro de baños
-            if filters.get('baths') is not None:
-                baths = filters.get('baths')
-                if baths == "unspecified":
-                    filter_conditions.append(or_(
-                        Property.baths == None,
-                        Property.baths == '',
-                        Property.baths == 'N/A'
-                    ))
-                elif baths.endswith('+'):
-                    min_value = int(baths[:-1])
-                    from sqlalchemy import cast, Integer
-                    filter_conditions.append(and_(
-                        Property.baths.regexp_match('^[0-9]+$'),
-                        cast(Property.baths, Integer) >= min_value
-                    ))
-                else:
-                    filter_conditions.append(Property.baths == baths)
+            if filters.get('baths') is not None and len(filters['baths']) > 0:
+                baths_conditions = []
+                for bath in filters['baths']:
+                    if bath == "unspecified":
+                        baths_conditions.append(or_(
+                            Property.baths == None,
+                            Property.baths == '',
+                            Property.baths == 'N/A',
+                            Property.baths == 'Sin especificar'
+                        ))
+                    elif bath.endswith('+'):
+                        min_value = int(bath[:-1])
+                        from sqlalchemy import cast, Integer
+                        baths_conditions.append(and_(
+                            Property.baths.regexp_match('^[0-9]+$'),
+                            cast(Property.baths, Integer) >= min_value
+                        ))
+                    else:
+                        baths_conditions.append(Property.baths == bath)
+                if baths_conditions:
+                    filter_conditions.append(or_(*baths_conditions))
             
             # Filtro de garajes
-            if filters.get('garages') is not None:
-                garages = filters.get('garages')
-                if garages == "unspecified":
-                    filter_conditions.append(or_(
-                        Property.garages == None,
-                        Property.garages == '',
-                        Property.garages == 'N/A'
-                    ))
-                elif garages.endswith('+'):
-                    min_value = int(garages[:-1])
-                    from sqlalchemy import cast, Integer
-                    filter_conditions.append(and_(
-                        Property.garages.regexp_match('^[0-9]+$'),
-                        cast(Property.garages, Integer) >= min_value
-                    ))
-                else:
-                    filter_conditions.append(Property.garages == garages)
+            if filters.get('garages') is not None and len(filters['garages']) > 0:
+                garages_conditions = []
+                for garage in filters['garages']:
+                    if garage == "unspecified":
+                        garages_conditions.append(or_(
+                            Property.garages == None,
+                            Property.garages == '',
+                            Property.garages == 'N/A',
+                            Property.garages == 'Sin especificar'
+                        ))
+                    elif garage.endswith('+'):
+                        min_value = int(garage[:-1])
+                        from sqlalchemy import cast, Integer
+                        garages_conditions.append(and_(
+                            Property.garages.regexp_match('^[0-9]+$'),
+                            cast(Property.garages, Integer) >= min_value
+                        ))
+                    else:
+                        garages_conditions.append(Property.garages == garage)
+                if garages_conditions:
+                    filter_conditions.append(or_(*garages_conditions))
             
             # Filtro de estrato
-            if filters.get('stratum') is not None:
-                stratum = filters.get('stratum')
-                if stratum == "unspecified":
-                    filter_conditions.append(or_(
-                        Property.stratum == None,
-                        Property.stratum == '',
-                        Property.stratum == 'Sin especificar'
-                    ))
-                else:
-                    stratum_str = f"Estrato {stratum}"
-                    filter_conditions.append(Property.stratum == stratum_str)
+            if filters.get('stratums') is not None and len(filters['stratums']) > 0:
+                stratum_conditions = []
+                for stratum in filters['stratums']:
+                    if stratum == "unspecified":
+                        stratum_conditions.append(or_(
+                            Property.stratum == None,
+                            Property.stratum == '',
+                            Property.stratum == 'Sin especificar'
+                        ))
+                    else:
+                        stratum_str = f"Estrato {stratum}"
+                        stratum_conditions.append(Property.stratum == stratum_str)
+                if stratum_conditions:
+                    filter_conditions.append(or_(*stratum_conditions))
             
             # Filtro de antigüedad
-            antiquity_category = filters.get('antiquity_category')
+            antiquity_categories = filters.get('antiquity_categories')
             antiquity_filter = filters.get('antiquity_filter')
             
-            if antiquity_category is not None:
+            # Combinar filtros de antigüedad (categories y unspecified)
+            if (antiquity_categories is not None and len(antiquity_categories) > 0) or antiquity_filter == 'unspecified':
                 antiquity_conditions = []
                 
-                if antiquity_category == 1:
-                    # Menos de 1 año
+                # Procesar categories si existen
+                if antiquity_categories is not None and len(antiquity_categories) > 0:
+                    for antiquity_category in antiquity_categories:
+                        if antiquity_category == 1:
+                            # Menos de 1 año
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'LESS_THAN_1_YEAR',
+                                Property.antiquity == 'Menos de 1 año',
+                                Property.antiquity == '0'
+                            ])
+                        elif antiquity_category == 2:
+                            # 1 a 8 años - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'FROM_1_TO_8_YEARS',
+                                Property.antiquity == '1 a 8 años'
+                            ])
+                        elif antiquity_category == 3:
+                            # 9 a 15 años - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'FROM_9_TO_15_YEARS',
+                                Property.antiquity == '9 a 15 años',
+                                Property.antiquity == '3'
+                            ])
+                        elif antiquity_category == 4:
+                            # 16 a 30 años - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'FROM_16_TO_30_YEARS',
+                                Property.antiquity == '16 a 30 años',
+                                Property.antiquity == '4'
+                            ])
+                        elif antiquity_category == 5:
+                            # Más de 30 años - solo valores categóricos
+                            antiquity_conditions.extend([
+                                Property.antiquity == 'MORE_THAN_30_YEARS',
+                                Property.antiquity == 'Más de 30 años',
+                                Property.antiquity == '5'
+                            ])
+                
+                # Agregar condición unspecified si está presente
+                if antiquity_filter == 'unspecified':
                     antiquity_conditions.extend([
-                        Property.antiquity == 'LESS_THAN_1_YEAR',
-                        Property.antiquity == 'Menos de 1 año',
-                        Property.antiquity == '0'
-                    ])
-                elif antiquity_category == 2:
-                    # 1 a 8 años - solo valores categóricos
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'FROM_1_TO_8_YEARS',
-                        Property.antiquity == '1 a 8 años'
-                    ])
-                elif antiquity_category == 3:
-                    # 9 a 15 años - solo valores categóricos
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'FROM_9_TO_15_YEARS',
-                        Property.antiquity == '9 a 15 años',
-                        Property.antiquity == '3'
-                    ])
-                elif antiquity_category == 4:
-                    # 16 a 30 años - solo valores categóricos
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'FROM_16_TO_30_YEARS',
-                        Property.antiquity == '16 a 30 años',
-                        Property.antiquity == '4'
-                    ])
-                elif antiquity_category == 5:
-                    # Más de 30 años - solo valores categóricos
-                    antiquity_conditions.extend([
-                        Property.antiquity == 'MORE_THAN_30_YEARS',
-                        Property.antiquity == 'Más de 30 años',
-                        Property.antiquity == '5'
+                        Property.antiquity == 'UNDEFINED',
+                        Property.antiquity == 'Sin especificar',
+                        Property.antiquity == None,
+                        Property.antiquity == ''
                     ])
                 
+                # Aplicar filtro combinado si hay condiciones
                 if antiquity_conditions:
                     filter_conditions.append(or_(*antiquity_conditions))
-            elif antiquity_filter == 'unspecified':
-                # Filtrar solo propiedades sin especificar antigüedad
-                filter_conditions.append(or_(
-                    Property.antiquity == 'UNDEFINED',
-                    Property.antiquity == 'Sin especificar',
-                    Property.antiquity == None
-                ))
             
             # Filtro de tipo de propiedad con búsqueda más específica
             property_type = filters.get('property_type')

@@ -26,10 +26,16 @@ export function PropertyDatabaseView() {
   const [lastGeocodedAddress, setLastGeocodedAddress] = useState<string>('')
   const [currentCoordinates, setCurrentCoordinates] = useState<{lat: number, lng: number} | null>(null)
   const [propertyTypeDropdownOpen, setPropertyTypeDropdownOpen] = useState(false)
+  const [cityDropdownOpen, setCityDropdownOpen] = useState(false)
+  const [roomsDropdownOpen, setRoomsDropdownOpen] = useState(false)
+  const [bathsDropdownOpen, setBathsDropdownOpen] = useState(false)
+  const [garagesDropdownOpen, setGaragesDropdownOpen] = useState(false)
+  const [stratumDropdownOpen, setStratumDropdownOpen] = useState(false)
+  const [antiquityDropdownOpen, setAntiquityDropdownOpen] = useState(false)
   
   // Filtros
   const [filters, setFilters] = useState({
-    city_id: 'all',
+    city_id: [] as string[],
     offer_type: 'all',
     min_price: '',
     max_price: '',
@@ -39,11 +45,11 @@ export function PropertyDatabaseView() {
     max_rent_price: '',
     min_area: '',
     max_area: '',
-    rooms: 'any',
-    baths: 'any',
-    garages: 'any',
-    stratum: 'any',
-    antiquity: 'any',
+    rooms: [] as string[],
+    baths: [] as string[],
+    garages: [] as string[],
+    stratum: [] as string[],
+    antiquity: [] as string[],
     property_type: [] as string[],
     updated_date_from: '',
     updated_date_to: '',
@@ -81,32 +87,27 @@ export function PropertyDatabaseView() {
       // Si coords es explícitamente null, no usar coordenadas
       const coordsToUse = coords === null ? null : (coords || currentCoordinates)
       
-      // Debug temprano para ver las coordenadas
-      console.log('🔍 COORDS DEBUG:')
-      console.log('- coords param:', coords)
-      console.log('- currentCoordinates:', currentCoordinates)
-      console.log('- coordsToUse:', coordsToUse)
       
       // Convertir strings vacíos a undefined y parsear números
       
-      // Procesar rangos de antigüedad usando IDs categóricos
+      // Procesar rangos de antigüedad usando IDs categóricos para múltiples selecciones
+      let antiquity_categories = [];
       let antiquity_filter = undefined;
-      let antiquity_category = undefined;
-      console.log('🔍 FRONTEND - newFilters.antiquity:', newFilters.antiquity)
-      if (newFilters.antiquity !== 'any') {
-        switch(newFilters.antiquity) {
-          case '0-1': antiquity_category = 1; break;  // Menos de 1 año
-          case '1-8': antiquity_category = 2; break;  // 1 a 8 años  
-          case '9-15': antiquity_category = 3; break; // 9 a 15 años
-          case '16-30': antiquity_category = 4; break; // 16 a 30 años
-          case '30+': antiquity_category = 5; break;  // Más de 30 años
-          case 'unspecified': antiquity_filter = 'unspecified'; break;
+      if (newFilters.antiquity.length > 0) {
+        for (const ant of newFilters.antiquity) {
+          switch(ant) {
+            case '0-1': antiquity_categories.push(1); break;  // Menos de 1 año
+            case '1-8': antiquity_categories.push(2); break;  // 1 a 8 años  
+            case '9-15': antiquity_categories.push(3); break; // 9 a 15 años
+            case '16-30': antiquity_categories.push(4); break; // 16 a 30 años
+            case '30+': antiquity_categories.push(5); break;  // Más de 30 años
+            case 'unspecified': antiquity_filter = 'unspecified'; break;
+          }
         }
       }
-      console.log('🔍 FRONTEND - Procesados: category=', antiquity_category, 'filter=', antiquity_filter)
       
       const cleanFilters = {
-        city_id: newFilters.city_id === 'all' ? undefined : parseInt(newFilters.city_id),
+        city_ids: newFilters.city_id.length === 0 ? undefined : newFilters.city_id.map(id => parseInt(id)),
         offer_type: newFilters.offer_type === 'all' ? undefined : newFilters.offer_type,
         min_price: newFilters.min_price ? parseFloat(cleanPrice(newFilters.min_price)) : undefined,
         max_price: newFilters.max_price ? parseFloat(cleanPrice(newFilters.max_price)) : undefined,
@@ -116,11 +117,11 @@ export function PropertyDatabaseView() {
         max_rent_price: newFilters.max_rent_price ? parseFloat(cleanPrice(newFilters.max_rent_price)) : undefined,
         min_area: newFilters.min_area ? parseFloat(newFilters.min_area) : undefined,
         max_area: newFilters.max_area ? parseFloat(newFilters.max_area) : undefined,
-        rooms: newFilters.rooms === 'any' ? undefined : newFilters.rooms,
-        baths: newFilters.baths === 'any' ? undefined : newFilters.baths,
-        garages: newFilters.garages === 'any' ? undefined : newFilters.garages,
-        stratum: newFilters.stratum === 'any' ? undefined : (newFilters.stratum === 'unspecified' ? 'unspecified' : parseInt(newFilters.stratum)),
-        antiquity_category: antiquity_category,
+        rooms: newFilters.rooms.length === 0 ? undefined : newFilters.rooms,
+        baths: newFilters.baths.length === 0 ? undefined : newFilters.baths,
+        garages: newFilters.garages.length === 0 ? undefined : newFilters.garages,
+        stratums: newFilters.stratum.length === 0 ? undefined : newFilters.stratum.map(s => s === 'unspecified' ? 'unspecified' : s),
+        antiquity_categories: antiquity_categories.length === 0 ? undefined : antiquity_categories,
         antiquity_filter: antiquity_filter,
         property_type: newFilters.property_type.length === 0 ? undefined : newFilters.property_type,
         updated_date_from: newFilters.updated_date_from || undefined,
@@ -132,28 +133,10 @@ export function PropertyDatabaseView() {
         radius: newFilters.radius ? parseInt(newFilters.radius) : undefined
       }
       
-      // Debug: log para ver qué filtros se están enviando
-      console.log('Sending filters to API:', cleanFilters)
-      console.log('PROPERTY_TYPE FILTER:', cleanFilters.property_type)
-      console.log('PROPERTY_TYPE TYPE:', typeof cleanFilters.property_type)
-      console.log('PROPERTY_TYPE LENGTH:', cleanFilters.property_type?.length)
-      
-      // Debug específico para ubicación
-      if (cleanFilters.search_address) {
-        console.log('LOCATION FILTERS:')
-        console.log('- Address:', cleanFilters.search_address)
-        console.log('- Coordinates:', cleanFilters.latitude, cleanFilters.longitude)
-        console.log('- Radius:', cleanFilters.radius)
-      }
       
       const result = await fetchProperties(page, pageSize, cleanFilters)
       setData(result)
       
-      // Debug: log para ver la respuesta
-      console.log('API response:', result)
-      if (result && result.properties) {
-        console.log('Properties data:', result.properties.map(p => ({id: p.id, rooms: p.rooms})))
-      }
     } catch (err) {
       setError('Error al cargar propiedades')
       console.error('Error loading properties:', err)
@@ -172,7 +155,7 @@ export function PropertyDatabaseView() {
         
         // Cargar propiedades con filtros limpios explícitos
         const emptyFilters = {
-          city_id: 'all',
+          city_id: [] as string[],
           offer_type: 'all',
           min_price: '',
           max_price: '',
@@ -182,11 +165,11 @@ export function PropertyDatabaseView() {
           max_rent_price: '',
           min_area: '',
           max_area: '',
-          rooms: 'any',
-          baths: 'any',
-          garages: 'any',
-          stratum: 'any',
-          antiquity: 'any',
+          rooms: [] as string[],
+          baths: [] as string[],
+          garages: [] as string[],
+          stratum: [] as string[],
+          antiquity: [] as string[],
           property_type: [] as string[],
           updated_date_from: '',
           updated_date_to: '',
@@ -211,13 +194,31 @@ export function PropertyDatabaseView() {
       if (!target.closest('.property-type-dropdown')) {
         setPropertyTypeDropdownOpen(false)
       }
+      if (!target.closest('.city-dropdown')) {
+        setCityDropdownOpen(false)
+      }
+      if (!target.closest('.rooms-dropdown')) {
+        setRoomsDropdownOpen(false)
+      }
+      if (!target.closest('.baths-dropdown')) {
+        setBathsDropdownOpen(false)
+      }
+      if (!target.closest('.garages-dropdown')) {
+        setGaragesDropdownOpen(false)
+      }
+      if (!target.closest('.stratum-dropdown')) {
+        setStratumDropdownOpen(false)
+      }
+      if (!target.closest('.antiquity-dropdown')) {
+        setAntiquityDropdownOpen(false)
+      }
     }
 
-    if (propertyTypeDropdownOpen) {
+    if (propertyTypeDropdownOpen || cityDropdownOpen || roomsDropdownOpen || bathsDropdownOpen || garagesDropdownOpen || stratumDropdownOpen || antiquityDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [propertyTypeDropdownOpen])
+  }, [propertyTypeDropdownOpen, cityDropdownOpen, roomsDropdownOpen, bathsDropdownOpen, garagesDropdownOpen, stratumDropdownOpen, antiquityDropdownOpen])
 
   const handleFilterChange = (key: string, value: string) => {
     // Formatear campos de precio
@@ -235,6 +236,60 @@ export function PropertyDatabaseView() {
       property_type: prev.property_type.includes(propertyType)
         ? prev.property_type.filter(type => type !== propertyType)
         : [...prev.property_type, propertyType]
+    }))
+  }
+
+  const handleCityToggle = (cityId: string) => {
+    setFilters(prev => ({
+      ...prev,
+      city_id: prev.city_id.includes(cityId)
+        ? prev.city_id.filter(id => id !== cityId)
+        : [...prev.city_id, cityId]
+    }))
+  }
+
+  const handleRoomsToggle = (rooms: string) => {
+    setFilters(prev => ({
+      ...prev,
+      rooms: prev.rooms.includes(rooms)
+        ? prev.rooms.filter(r => r !== rooms)
+        : [...prev.rooms, rooms]
+    }))
+  }
+
+  const handleBathsToggle = (baths: string) => {
+    setFilters(prev => ({
+      ...prev,
+      baths: prev.baths.includes(baths)
+        ? prev.baths.filter(b => b !== baths)
+        : [...prev.baths, baths]
+    }))
+  }
+
+  const handleGaragesToggle = (garages: string) => {
+    setFilters(prev => ({
+      ...prev,
+      garages: prev.garages.includes(garages)
+        ? prev.garages.filter(g => g !== garages)
+        : [...prev.garages, garages]
+    }))
+  }
+
+  const handleStratumToggle = (stratum: string) => {
+    setFilters(prev => ({
+      ...prev,
+      stratum: prev.stratum.includes(stratum)
+        ? prev.stratum.filter(s => s !== stratum)
+        : [...prev.stratum, stratum]
+    }))
+  }
+
+  const handleAntiquityToggle = (antiquity: string) => {
+    setFilters(prev => ({
+      ...prev,
+      antiquity: prev.antiquity.includes(antiquity)
+        ? prev.antiquity.filter(a => a !== antiquity)
+        : [...prev.antiquity, antiquity]
     }))
   }
 
@@ -259,11 +314,6 @@ export function PropertyDatabaseView() {
           }
           setCurrentCoordinates(coordsToUse)
           setLastGeocodedAddress(filters.search_address)
-          console.log('Coordenadas geocodificadas:', {
-            lat: geocodeResult.latitude,
-            lng: geocodeResult.longitude,
-            address: geocodeResult.formatted_address
-          })
           showSuccess(`Dirección encontrada: ${geocodeResult.formatted_address}`)
         } else {
           showError(`Error al geocodificar: ${geocodeResult.error}`)
@@ -292,7 +342,7 @@ export function PropertyDatabaseView() {
 
   const handleClearFilters = async () => {
     const emptyFilters = {
-      city_id: 'all',
+      city_id: [] as string[],
       offer_type: 'all',
       min_price: '',
       max_price: '',
@@ -302,11 +352,11 @@ export function PropertyDatabaseView() {
       max_rent_price: '',
       min_area: '',
       max_area: '',
-      rooms: 'any',
-      baths: 'any',
-      garages: 'any',
-      stratum: 'any',
-      antiquity: 'any',
+      rooms: [] as string[],
+      baths: [] as string[],
+      garages: [] as string[],
+      stratum: [] as string[],
+      antiquity: [] as string[],
       property_type: [] as string[],
       updated_date_from: '',
       updated_date_to: '',
@@ -320,6 +370,12 @@ export function PropertyDatabaseView() {
     setLastGeocodedAddress('')
     setCurrentPage(1)
     setPropertyTypeDropdownOpen(false)
+    setCityDropdownOpen(false)
+    setRoomsDropdownOpen(false)
+    setBathsDropdownOpen(false)
+    setGaragesDropdownOpen(false)
+    setStratumDropdownOpen(false)
+    setAntiquityDropdownOpen(false)
     setGeocoding(false)
     setError(null)
     
@@ -380,22 +436,24 @@ export function PropertyDatabaseView() {
       loadingToastId = showToast(`Enviando Excel a ${email}...`, 'loading')
       
       // Preparar filtros para el backend
+      let antiquity_categories = [];
       let antiquity_filter = undefined;
-      let antiquity_category = undefined;
       
-      if (filters.antiquity !== 'any') {
-        switch(filters.antiquity) {
-          case '0-1': antiquity_category = 1; break;  // Menos de 1 año
-          case '1-8': antiquity_category = 2; break;  // 1 a 8 años  
-          case '9-15': antiquity_category = 3; break; // 9 a 15 años
-          case '16-30': antiquity_category = 4; break; // 16 a 30 años
-          case '30+': antiquity_category = 5; break;  // Más de 30 años
-          case 'unspecified': antiquity_filter = 'unspecified'; break;
+      if (filters.antiquity.length > 0) {
+        for (const ant of filters.antiquity) {
+          switch(ant) {
+            case '0-1': antiquity_categories.push(1); break;  // Menos de 1 año
+            case '1-8': antiquity_categories.push(2); break;  // 1 a 8 años  
+            case '9-15': antiquity_categories.push(3); break; // 9 a 15 años
+            case '16-30': antiquity_categories.push(4); break; // 16 a 30 años
+            case '30+': antiquity_categories.push(5); break;  // Más de 30 años
+            case 'unspecified': antiquity_filter = 'unspecified'; break;
+          }
         }
       }
       
       const cleanFilters = {
-        city_id: filters.city_id === 'all' ? undefined : parseInt(filters.city_id),
+        city_ids: filters.city_id.length === 0 ? undefined : filters.city_id.map(id => parseInt(id)),
         offer_type: filters.offer_type === 'all' ? undefined : filters.offer_type,
         min_price: filters.min_price ? parseFloat(cleanPrice(filters.min_price)) : undefined,
         max_price: filters.max_price ? parseFloat(cleanPrice(filters.max_price)) : undefined,
@@ -405,11 +463,11 @@ export function PropertyDatabaseView() {
         max_rent_price: filters.max_rent_price ? parseFloat(cleanPrice(filters.max_rent_price)) : undefined,
         min_area: filters.min_area ? parseFloat(filters.min_area) : undefined,
         max_area: filters.max_area ? parseFloat(filters.max_area) : undefined,
-        rooms: filters.rooms === 'any' ? undefined : filters.rooms,
-        baths: filters.baths === 'any' ? undefined : filters.baths,
-        garages: filters.garages === 'any' ? undefined : filters.garages,
-        stratum: filters.stratum === 'any' ? undefined : (filters.stratum === 'unspecified' ? 'unspecified' : parseInt(filters.stratum)),
-        antiquity_category: antiquity_category,
+        rooms: filters.rooms.length === 0 ? undefined : filters.rooms,
+        baths: filters.baths.length === 0 ? undefined : filters.baths,
+        garages: filters.garages.length === 0 ? undefined : filters.garages,
+        stratums: filters.stratum.length === 0 ? undefined : filters.stratum.map(s => s === 'unspecified' ? 'unspecified' : s),
+        antiquity_categories: antiquity_categories.length === 0 ? undefined : antiquity_categories,
         antiquity_filter: antiquity_filter,
         property_type: filters.property_type.length === 0 ? undefined : filters.property_type,
         updated_date_from: filters.updated_date_from || undefined,
@@ -470,19 +528,44 @@ export function PropertyDatabaseView() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           <div className="space-y-2">
             <label className="text-sm font-medium">Ciudad</label>
-            <Select value={filters.city_id} onValueChange={(value) => handleFilterChange('city_id', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar ciudad..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las ciudades</SelectItem>
-                {cities.map((city) => (
-                  <SelectItem key={city.id} value={city.id.toString()}>
-                    {city.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="relative city-dropdown">
+              <Button
+                variant="outline"
+                onClick={() => setCityDropdownOpen(!cityDropdownOpen)}
+                className="w-full justify-between text-left font-normal h-10"
+              >
+                <span className="truncate">
+                  {filters.city_id.length === 0
+                    ? "Cualquiera..."
+                    : filters.city_id.length === 1
+                    ? cities.find(c => c.id.toString() === filters.city_id[0])?.name || "Seleccionada"
+                    : `${filters.city_id.length} ciudades seleccionadas`
+                  }
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </Button>
+              
+              {cityDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div className="p-2 space-y-1">
+                    {cities.map((city) => (
+                      <div
+                        key={city.id}
+                        className="flex items-center space-x-2 p-2 hover:bg-accent rounded cursor-pointer"
+                        onClick={() => handleCityToggle(city.id.toString())}
+                      >
+                        <div className="w-4 h-4 border border-input rounded flex items-center justify-center">
+                          {filters.city_id.includes(city.id.toString()) && (
+                            <div className="w-2 h-2 bg-primary rounded" />
+                          )}
+                        </div>
+                        <span className="text-sm">{city.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="space-y-2">
@@ -587,93 +670,253 @@ export function PropertyDatabaseView() {
           
           <div className="space-y-2">
             <label className="text-sm font-medium">Habitaciones</label>
-            <Select value={filters.rooms} onValueChange={(value) => handleFilterChange('rooms', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Cualquiera..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Cualquiera</SelectItem>
-                <SelectItem value="unspecified">Sin especificar</SelectItem>
-                <SelectItem value="0">0</SelectItem>
-                <SelectItem value="1">1</SelectItem>
-                <SelectItem value="2">2</SelectItem>
-                <SelectItem value="3">3</SelectItem>
-                <SelectItem value="4">4</SelectItem>
-                <SelectItem value="5+">5+</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative rooms-dropdown">
+              <Button
+                variant="outline"
+                onClick={() => setRoomsDropdownOpen(!roomsDropdownOpen)}
+                className="w-full justify-between text-left font-normal h-10"
+              >
+                <span className="truncate">
+                  {filters.rooms.length === 0
+                    ? "Cualquiera..."
+                    : filters.rooms.length === 1
+                    ? filters.rooms[0] === 'unspecified' ? 'Sin especificar' : filters.rooms[0]
+                    : `${filters.rooms.length} seleccionadas`
+                  }
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </Button>
+              
+              {roomsDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="p-2 space-y-1">
+                    {[
+                      { value: 'unspecified', label: 'Sin especificar' },
+                      { value: '0', label: '0' },
+                      { value: '1', label: '1' },
+                      { value: '2', label: '2' },
+                      { value: '3', label: '3' },
+                      { value: '4', label: '4' },
+                      { value: '5+', label: '5+' }
+                    ].map((room) => (
+                      <div
+                        key={room.value}
+                        className="flex items-center space-x-2 p-2 hover:bg-accent rounded cursor-pointer"
+                        onClick={() => handleRoomsToggle(room.value)}
+                      >
+                        <div className="w-4 h-4 border border-input rounded flex items-center justify-center">
+                          {filters.rooms.includes(room.value) && (
+                            <div className="w-2 h-2 bg-primary rounded" />
+                          )}
+                        </div>
+                        <span className="text-sm">{room.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Baños</label>
-            <Select value={filters.baths} onValueChange={(value) => handleFilterChange('baths', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Cualquiera..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Cualquiera</SelectItem>
-                <SelectItem value="unspecified">Sin especificar</SelectItem>
-                <SelectItem value="0">0</SelectItem>
-                <SelectItem value="1">1</SelectItem>
-                <SelectItem value="2">2</SelectItem>
-                <SelectItem value="3">3</SelectItem>
-                <SelectItem value="4+">4+</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative baths-dropdown">
+              <Button
+                variant="outline"
+                onClick={() => setBathsDropdownOpen(!bathsDropdownOpen)}
+                className="w-full justify-between text-left font-normal h-10"
+              >
+                <span className="truncate">
+                  {filters.baths.length === 0
+                    ? "Cualquiera..."
+                    : filters.baths.length === 1
+                    ? filters.baths[0] === 'unspecified' ? 'Sin especificar' : filters.baths[0]
+                    : `${filters.baths.length} seleccionados`
+                  }
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </Button>
+              
+              {bathsDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="p-2 space-y-1">
+                    {[
+                      { value: 'unspecified', label: 'Sin especificar' },
+                      { value: '0', label: '0' },
+                      { value: '1', label: '1' },
+                      { value: '2', label: '2' },
+                      { value: '3', label: '3' },
+                      { value: '4+', label: '4+' }
+                    ].map((bath) => (
+                      <div
+                        key={bath.value}
+                        className="flex items-center space-x-2 p-2 hover:bg-accent rounded cursor-pointer"
+                        onClick={() => handleBathsToggle(bath.value)}
+                      >
+                        <div className="w-4 h-4 border border-input rounded flex items-center justify-center">
+                          {filters.baths.includes(bath.value) && (
+                            <div className="w-2 h-2 bg-primary rounded" />
+                          )}
+                        </div>
+                        <span className="text-sm">{bath.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Garajes</label>
-            <Select value={filters.garages} onValueChange={(value) => handleFilterChange('garages', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Cualquiera..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Cualquiera</SelectItem>
-                <SelectItem value="unspecified">Sin especificar</SelectItem>
-                <SelectItem value="0">0</SelectItem>
-                <SelectItem value="1">1</SelectItem>
-                <SelectItem value="2">2</SelectItem>
-                <SelectItem value="3+">3+</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative garages-dropdown">
+              <Button
+                variant="outline"
+                onClick={() => setGaragesDropdownOpen(!garagesDropdownOpen)}
+                className="w-full justify-between text-left font-normal h-10"
+              >
+                <span className="truncate">
+                  {filters.garages.length === 0
+                    ? "Cualquiera..."
+                    : filters.garages.length === 1
+                    ? filters.garages[0] === 'unspecified' ? 'Sin especificar' : filters.garages[0]
+                    : `${filters.garages.length} seleccionados`
+                  }
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </Button>
+              
+              {garagesDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="p-2 space-y-1">
+                    {[
+                      { value: 'unspecified', label: 'Sin especificar' },
+                      { value: '0', label: '0' },
+                      { value: '1', label: '1' },
+                      { value: '2', label: '2' },
+                      { value: '3+', label: '3+' }
+                    ].map((garage) => (
+                      <div
+                        key={garage.value}
+                        className="flex items-center space-x-2 p-2 hover:bg-accent rounded cursor-pointer"
+                        onClick={() => handleGaragesToggle(garage.value)}
+                      >
+                        <div className="w-4 h-4 border border-input rounded flex items-center justify-center">
+                          {filters.garages.includes(garage.value) && (
+                            <div className="w-2 h-2 bg-primary rounded" />
+                          )}
+                        </div>
+                        <span className="text-sm">{garage.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Estrato</label>
-            <Select value={filters.stratum} onValueChange={(value) => handleFilterChange('stratum', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Cualquiera..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Cualquiera</SelectItem>
-                <SelectItem value="unspecified">Sin especificar</SelectItem>
-                <SelectItem value="1">1</SelectItem>
-                <SelectItem value="2">2</SelectItem>
-                <SelectItem value="3">3</SelectItem>
-                <SelectItem value="4">4</SelectItem>
-                <SelectItem value="5">5</SelectItem>
-                <SelectItem value="6">6</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative stratum-dropdown">
+              <Button
+                variant="outline"
+                onClick={() => setStratumDropdownOpen(!stratumDropdownOpen)}
+                className="w-full justify-between text-left font-normal h-10"
+              >
+                <span className="truncate">
+                  {filters.stratum.length === 0
+                    ? "Cualquiera..."
+                    : filters.stratum.length === 1
+                    ? filters.stratum[0] === 'unspecified' ? 'Sin especificar' : `Estrato ${filters.stratum[0]}`
+                    : `${filters.stratum.length} estratos seleccionados`
+                  }
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </Button>
+              
+              {stratumDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="p-2 space-y-1">
+                    {[
+                      { value: 'unspecified', label: 'Sin especificar' },
+                      { value: '1', label: 'Estrato 1' },
+                      { value: '2', label: 'Estrato 2' },
+                      { value: '3', label: 'Estrato 3' },
+                      { value: '4', label: 'Estrato 4' },
+                      { value: '5', label: 'Estrato 5' },
+                      { value: '6', label: 'Estrato 6' }
+                    ].map((stratum) => (
+                      <div
+                        key={stratum.value}
+                        className="flex items-center space-x-2 p-2 hover:bg-accent rounded cursor-pointer"
+                        onClick={() => handleStratumToggle(stratum.value)}
+                      >
+                        <div className="w-4 h-4 border border-input rounded flex items-center justify-center">
+                          {filters.stratum.includes(stratum.value) && (
+                            <div className="w-2 h-2 bg-primary rounded" />
+                          )}
+                        </div>
+                        <span className="text-sm">{stratum.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Antigüedad</label>
-            <Select value={filters.antiquity} onValueChange={(value) => handleFilterChange('antiquity', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Cualquiera..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Cualquiera</SelectItem>
-                <SelectItem value="0-1">Menos de 1 año</SelectItem>
-                <SelectItem value="1-8">1 a 8 años</SelectItem>
-                <SelectItem value="9-15">9 a 15 años</SelectItem>
-                <SelectItem value="16-30">16 a 30 años</SelectItem>
-                <SelectItem value="30+">Más de 30 años</SelectItem>
-                <SelectItem value="unspecified">Sin especificar</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative antiquity-dropdown">
+              <Button
+                variant="outline"
+                onClick={() => setAntiquityDropdownOpen(!antiquityDropdownOpen)}
+                className="w-full justify-between text-left font-normal h-10"
+              >
+                <span className="truncate">
+                  {filters.antiquity.length === 0
+                    ? "Cualquiera..."
+                    : filters.antiquity.length === 1
+                    ? filters.antiquity[0] === 'unspecified' ? 'Sin especificar' :
+                      filters.antiquity[0] === '0-1' ? 'Menos de 1 año' :
+                      filters.antiquity[0] === '1-8' ? '1 a 8 años' :
+                      filters.antiquity[0] === '9-15' ? '9 a 15 años' :
+                      filters.antiquity[0] === '16-30' ? '16 a 30 años' :
+                      filters.antiquity[0] === '30+' ? 'Más de 30 años' : filters.antiquity[0]
+                    : `${filters.antiquity.length} rangos seleccionados`
+                  }
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </Button>
+              
+              {antiquityDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="p-2 space-y-1">
+                    {[
+                      { value: 'unspecified', label: 'Sin especificar' },
+                      { value: '0-1', label: 'Menos de 1 año' },
+                      { value: '1-8', label: '1 a 8 años' },
+                      { value: '9-15', label: '9 a 15 años' },
+                      { value: '16-30', label: '16 a 30 años' },
+                      { value: '30+', label: 'Más de 30 años' }
+                    ].map((ant) => (
+                      <div
+                        key={ant.value}
+                        className="flex items-center space-x-2 p-2 hover:bg-accent rounded cursor-pointer"
+                        onClick={() => handleAntiquityToggle(ant.value)}
+                      >
+                        <div className="w-4 h-4 border border-input rounded flex items-center justify-center">
+                          {filters.antiquity.includes(ant.value) && (
+                            <div className="w-2 h-2 bg-primary rounded" />
+                          )}
+                        </div>
+                        <span className="text-sm">{ant.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">

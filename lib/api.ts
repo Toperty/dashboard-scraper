@@ -183,18 +183,17 @@ export async function fetchProperties(
   page: number = 1,
   limit: number = 50,
   filters: {
-    city_id?: number;
+    city_ids?: number[];
     offer_type?: string;
     min_price?: number;
     max_price?: number;
     min_area?: number;
     max_area?: number;
-    rooms?: string;
-    baths?: string;
-    garages?: string;
-    stratum?: string | number;
-    min_antiquity?: number;
-    max_antiquity?: number;
+    rooms?: string[];
+    baths?: string[];
+    garages?: string[];
+    stratums?: (string | number)[];
+    antiquity_categories?: number[];
     antiquity_filter?: string;
     property_type?: string[];
     min_sale_price?: number;
@@ -219,7 +218,7 @@ export async function fetchProperties(
       if (value !== undefined && value !== null && value !== '') {
         // Manejar arrays (como property_type) de forma especial
         if (Array.isArray(value)) {
-          value.forEach(item => params.append(key, item));
+          value.forEach(item => params.append(key, item.toString()));
         } else {
           params.append(key, value.toString());
         }
