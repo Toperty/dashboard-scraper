@@ -4,10 +4,37 @@ import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardView } from "@/components/dashboard-view"
 import { PropertyDatabaseView } from "@/components/property-database-view"
-import { Activity, Database } from "lucide-react"
+import { SimpleGoogleMap } from "@/components/simple-google-map"
+import { Activity, Database, MapPin } from "lucide-react"
 
 export function MonitoringDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
+  
+  // Shared filter state
+  const [sharedFilters, setSharedFilters] = useState({
+    city_id: 'all',
+    offer_type: 'all',
+    min_price: '',
+    max_price: '',
+    min_sale_price: '',
+    max_sale_price: '',
+    min_rent_price: '',
+    max_rent_price: '',
+    min_area: '',
+    max_area: '',
+    rooms: 'any',
+    baths: 'any',
+    garages: 'any',
+    stratum: 'any',
+    antiquity: 'any',
+    property_type: [] as string[],
+    updated_date_from: '',
+    updated_date_to: '',
+    address: '',
+    distance: '',
+    latitude: null as number | null,
+    longitude: null as number | null
+  })
 
   return (
     <div className="min-h-screen bg-background">
@@ -37,6 +64,10 @@ export function MonitoringDashboard() {
               <Database className="h-4 w-4" />
               Base de Datos
             </TabsTrigger>
+            <TabsTrigger value="market" className="gap-2">
+              <MapPin className="h-4 w-4" />
+              Análisis de Mercado
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
@@ -45,6 +76,10 @@ export function MonitoringDashboard() {
 
           <TabsContent value="properties">
             <PropertyDatabaseView />
+          </TabsContent>
+
+          <TabsContent value="market">
+            <SimpleGoogleMap />
           </TabsContent>
         </Tabs>
       </div>

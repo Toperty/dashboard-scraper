@@ -19,6 +19,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize database tables on startup
+from config.db_connection import init_db
+init_db()
+print("✅ Database tables initialized")
+
 # Timezone de Colombia
 COLOMBIA_TZ = pytz.timezone('America/Bogota')
 
@@ -1705,6 +1710,540 @@ Equipo de Avalúos"""
         print(f"❌ Error enviando email: {e}")
         return {"status": "error", "detail": str(e)}
 
+@app.get("/api/zone-statistics")
+async def get_zone_statistics_v2(
+    city_id: int = None,
+    updated_date_from: str = None,
+    updated_date_to: str = None
+):
+    """Obtener estadísticas de precio por zona para el mapa con valorización"""
+    from sqlmodel import Session, select, func
+    from config.db_connection import engine  
+    from models.property import Property
+    from datetime import datetime
+    from sqlalchemy import text
+    
+    try:
+        with Session(engine) as session:
+            # Query optimizada para obtener solo coordenadas de zonas
+            query_sql = """
+            SELECT 
+                p.location_main,
+                COUNT(DISTINCT p.fr_property_id) as property_count,
+                MIN(p.latitude) as min_lat,
+                MAX(p.latitude) as max_lat,
+                MIN(p.longitude) as min_lng,
+                MAX(p.longitude) as max_lng,
+                AVG(p.latitude) as center_lat,
+                AVG(p.longitude) as center_lng
+            FROM property p
+            WHERE p.location_main IS NOT NULL 
+                AND p.area > 0 
+                AND p.price > 0
+                AND p.latitude IS NOT NULL 
+                AND p.longitude IS NOT NULL
+                {city_filter}
+            GROUP BY p.location_main
+            HAVING COUNT(DISTINCT p.fr_property_id) > 3
+            ORDER BY property_count DESC;
+            """
+            
+            # Aplicar filtros dinámicos
+            city_filter = ""
+            if city_id:
+                city_filter = f"AND p.city_id = {city_id}"
+            
+            final_query = query_sql.format(city_filter=city_filter)
+            
+            results = session.exec(text(final_query)).all()
+            
+            zone_stats = []
+            for row in results:
+                # Solo devolver información básica de zonas con sus límites
+                zone_stats.append({
+                    'id': row[0].lower().replace(' ', '_').replace('/', '_') if row[0] else 'unknown',
+                    'name': row[0] if row[0] else 'Zona desconocida',
+                    'property_count': int(row[1]) if row[1] else 0,
+                    'bounds': {
+                        'min_lat': float(row[2]) if row[2] else 0,
+                        'max_lat': float(row[3]) if row[3] else 0,
+                        'min_lng': float(row[4]) if row[4] else 0,
+                        'max_lng': float(row[5]) if row[5] else 0
+                    },
+                    'center_lat': float(row[6]) if row[6] else 0,
+                    'center_lng': float(row[7]) if row[7] else 0,
+                    # Los valores se calcularán al hacer clic
+                    'sale_avg_price_m2': 0,
+                    'sale_valorization': 0,
+                    'rent_avg_price_m2': 0,
+                    'rent_valorization': 0,
+                    'cap_rate': 0,
+                    'cap_rate_valorization': 0
+                })
+            
+            return {
+                'status': 'success',
+                'data': zone_stats
+            }
+            
+    except Exception as e:
+        print(f"Error getting zone statistics: {e}")
+        return {
+            'status': 'error',
+            'message': str(e),
+            'data': []
+        }
+
+@app.get("/api/all-postal-codes")
+async def get_all_postal_codes_for_city(city_id: int = None):
+    """
+    Obtener códigos postales de una ciudad.
+    Por ahora solo devuelve los que tienen propiedades en la BD.
+    """
+    from sqlmodel import Session
+    from config.db_connection import engine
+    from sqlalchemy import text
+    
+    try:
+        # La tabla no tiene postal_code, vamos a usar location_main como zona
+        with Session(engine) as session:
+            query = """
+                SELECT DISTINCT 
+                    p.location_main,
+                    COUNT(*) as property_count,
+                    AVG(p.latitude) as center_lat,
+                    AVG(p.longitude) as center_lng,
+                    AVG(CASE WHEN p.offer = 'sell' THEN p.price / NULLIF(p.area, 0) END) as avg_sale_price_m2,
+                    AVG(CASE WHEN p.offer = 'rent' THEN p.price / NULLIF(p.area, 0) END) as avg_rent_price_m2,
+                    AVG(p.price / NULLIF(p.area, 0)) as avg_price_m2
+                FROM property p
+                WHERE p.location_main IS NOT NULL
+                    AND p.location_main != ''
+                    AND p.latitude IS NOT NULL
+                    AND p.longitude IS NOT NULL
+                    {}
+                GROUP BY p.location_main
+                ORDER BY property_count DESC
+            """
+            
+            city_filter = f"AND p.city_id = {city_id}" if city_id else ""
+            result = session.exec(text(query.format(city_filter))).all()
+            
+            all_postal_codes = []
+            for row in result:
+                all_postal_codes.append({
+                    'postal_code': row[0],  # Usando location_main como "código postal"
+                    'has_properties': True,
+                    'property_count': row[1],
+                    'center_lat': float(row[2]) if row[2] else None,
+                    'center_lng': float(row[3]) if row[3] else None,
+                    'avg_sale_price_m2': float(row[4]) if row[4] else 0,
+                    'avg_rent_price_m2': float(row[5]) if row[5] else 0,
+                    'avg_price_m2': float(row[6]) if row[6] else 0
+                })
+        
+        return {
+            'status': 'success',
+            'data': all_postal_codes,
+            'stats': {
+                'total_codes': len(all_postal_codes),
+                'codes_with_properties': len(all_postal_codes),
+                'codes_without_properties': 0  # Por ahora solo mostramos los que tienen propiedades
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error getting all postal codes: {e}")
+        return {
+            'status': 'error',
+            'message': str(e),
+            'data': []
+        }
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok", "message": "Backend is running"}
+
+# All postal-cache endpoints removed - using Google Maps Data-Driven Styling only
+# OSM/Overture/Geoapify endpoints removed - using Google Maps only
+
+@app.get("/api/zone-statistics-full")
+async def get_zone_statistics_full(
+    city_id: int = None,
+    updated_date_from: str = None,
+    updated_date_to: str = None
+):
+    """Obtener estadísticas completas de zonas para el mapa con colores"""
+    from sqlmodel import Session
+    from config.db_connection import engine  
+    from sqlalchemy import text
+    
+    try:
+        with Session(engine) as session:
+            query_sql = """
+            WITH zone_stats AS (
+                SELECT 
+                    p.location_main,
+                    c.name as city_name,
+                    COUNT(DISTINCT p.fr_property_id) as property_count,
+                    -- Usar percentiles para obtener un área más representativa (excluir outliers)
+                    PERCENTILE_CONT(0.2) WITHIN GROUP (ORDER BY p.latitude) as min_lat,
+                    PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY p.latitude) as max_lat,
+                    PERCENTILE_CONT(0.2) WITHIN GROUP (ORDER BY p.longitude) as min_lng,
+                    PERCENTILE_CONT(0.8) WITHIN GROUP (ORDER BY p.longitude) as max_lng,
+                    AVG(p.latitude) as center_lat,
+                    AVG(p.longitude) as center_lng,
+                    -- Precios actuales
+                    AVG(CASE WHEN p.offer = 'sell' THEN p.price / NULLIF(p.area, 0) END) as sale_price_m2,
+                    AVG(CASE WHEN p.offer = 'rent' THEN p.price / NULLIF(p.area, 0) END) as rent_price_m2,
+                    -- Precios previos para valorización
+                    AVG(CASE WHEN p.offer = 'sell' AND up.previous_value > 0 THEN up.previous_value / NULLIF(p.area, 0) END) as prev_sale_m2,
+                    AVG(CASE WHEN p.offer = 'rent' AND up.previous_value > 0 THEN up.previous_value / NULLIF(p.area, 0) END) as prev_rent_m2
+                FROM property p
+                LEFT JOIN updated_property up ON p.fr_property_id = up.property_id
+                LEFT JOIN city c ON p.city_id = c.id
+                WHERE p.location_main IS NOT NULL 
+                    AND p.area > 0 
+                    AND p.price > 0
+                    AND p.latitude IS NOT NULL 
+                    AND p.longitude IS NOT NULL
+                    {city_filter}
+                    {date_filter}
+                GROUP BY p.location_main, c.name
+                HAVING COUNT(DISTINCT p.fr_property_id) > 3
+            )
+            SELECT 
+                location_main as name,
+                city_name,
+                property_count,
+                min_lat, max_lat, min_lng, max_lng, center_lat, center_lng,
+                COALESCE(sale_price_m2, 0) as sale_price_m2,
+                COALESCE(rent_price_m2, 0) as rent_price_m2,
+                CASE 
+                    WHEN prev_sale_m2 > 0 AND sale_price_m2 > 0 THEN 
+                        ((sale_price_m2 - prev_sale_m2) / prev_sale_m2 * 100)
+                    ELSE 0 
+                END as sale_valorization,
+                CASE 
+                    WHEN prev_rent_m2 > 0 AND rent_price_m2 > 0 THEN 
+                        ((rent_price_m2 - prev_rent_m2) / prev_rent_m2 * 100)
+                    ELSE 0 
+                END as rent_valorization,
+                CASE 
+                    WHEN sale_price_m2 > 0 AND rent_price_m2 > 0 THEN 
+                        (rent_price_m2 / sale_price_m2 / 12)
+                    ELSE 0 
+                END as cap_rate
+            FROM zone_stats
+            ORDER BY property_count DESC;
+            """
+            
+            city_filter = f"AND p.city_id = {city_id}" if city_id else ""
+            
+            date_filter = ""
+            if updated_date_from:
+                date_filter += f" AND (up.updated_date IS NULL OR up.updated_date >= '{updated_date_from}')"
+            if updated_date_to:
+                date_filter += f" AND (up.updated_date IS NULL OR up.updated_date <= '{updated_date_to}')"
+                
+            final_query = query_sql.format(city_filter=city_filter, date_filter=date_filter)
+            
+            results = session.exec(text(final_query)).all()
+            
+            zones_data = []
+            for result in results:
+                import math
+                
+                # Asegurar que no hay NaN - ajustando índices por city_name
+                sale_price_m2 = float(result[9]) if result[9] and not math.isnan(float(result[9])) else 0
+                rent_price_m2 = float(result[10]) if result[10] and not math.isnan(float(result[10])) else 0
+                sale_valorization = float(result[11]) if result[11] and not math.isnan(float(result[11])) else 0
+                rent_valorization = float(result[12]) if result[12] and not math.isnan(float(result[12])) else 0
+                cap_rate = float(result[13]) if result[13] and not math.isnan(float(result[13])) else 0
+                
+                zones_data.append({
+                    'id': str(result[0]),
+                    'name': str(result[0]),
+                    'city_name': str(result[1]) if result[1] else '',
+                    'property_count': int(result[2]) if result[2] else 0,
+                    'min_lat': float(result[3]) if result[3] else 0,
+                    'max_lat': float(result[4]) if result[4] else 0,
+                    'min_lng': float(result[5]) if result[5] else 0,
+                    'max_lng': float(result[6]) if result[6] else 0,
+                    'center_lat': float(result[7]) if result[7] else 0,
+                    'center_lng': float(result[8]) if result[8] else 0,
+                    'sale_price_m2': sale_price_m2,
+                    'rent_price_m2': rent_price_m2,
+                    'sale_valorization': sale_valorization,
+                    'rent_valorization': rent_valorization,
+                    'cap_rate': cap_rate
+                })
+            
+            return {
+                'status': 'success',
+                'data': zones_data
+            }
+                
+    except Exception as e:
+        print(f"Error getting zone statistics full: {e}")
+        return {'status': 'error', 'message': str(e)}
+
+@app.get("/api/zone-details")
+async def get_zone_details(
+    zone_name: str,
+    city_id: int = None,
+    updated_date_from: str = None,
+    updated_date_to: str = None,
+    property_type: str = None,
+    # Coordenadas del bounding box de la zona
+    north: float = None,
+    south: float = None,
+    east: float = None,
+    west: float = None
+):
+    """Obtener detalles y estadísticas de una zona específica con comparación de períodos"""
+    from sqlmodel import Session
+    from config.db_connection import engine  
+    from sqlalchemy import text
+    from datetime import datetime, timedelta
+    
+    try:
+        with Session(engine) as session:
+            # Verificar si tenemos coordenadas
+            if not all([north, south, east, west]):
+                # Fallback a búsqueda por nombre
+                location_filter = "p.location_main = :zone_name"
+                location_params = {"zone_name": zone_name}
+            else:
+                # Usar coordenadas para filtrar
+                location_filter = """
+                    p.latitude IS NOT NULL 
+                    AND p.longitude IS NOT NULL
+                    AND p.latitude <= :north 
+                    AND p.latitude >= :south
+                    AND p.longitude <= :east 
+                    AND p.longitude >= :west
+                """
+                location_params = {
+                    "north": north,
+                    "south": south,
+                    "east": east,
+                    "west": west
+                }
+            
+            # Determinar si hay filtro de fecha para hacer comparación
+            has_date_filter = updated_date_from or updated_date_to
+            
+            # PERÍODO FILTRADO (o actual si no hay filtro)
+            # Usar previous_value de updated_property si existe, sino precio de property
+            query_filtered = f"""
+            WITH zone_data AS (
+                SELECT 
+                    p.fr_property_id,
+                    p.offer,
+                    COALESCE(up.previous_value, p.price) as price,
+                    p.area,
+                    p.creation_date
+                FROM property p
+                LEFT JOIN updated_property up ON p.fr_property_id = up.property_id
+                WHERE {location_filter}
+                    AND p.area > 0 
+                    AND (COALESCE(up.previous_value, p.price) > 0)
+                    {{city_filter}}
+                    {{date_filter}}
+                    {{type_filter}}
+            )
+            SELECT 
+                COUNT(DISTINCT fr_property_id) as total_properties,
+                COUNT(DISTINCT CASE WHEN offer = 'sell' THEN fr_property_id END) as sale_count,
+                COUNT(DISTINCT CASE WHEN offer = 'rent' THEN fr_property_id END) as rent_count,
+                AVG(CASE WHEN offer = 'sell' THEN price / NULLIF(area, 0) END) as sale_price_m2,
+                AVG(CASE WHEN offer = 'rent' THEN price END) as rent_avg_price,
+                AVG(CASE WHEN offer = 'sell' THEN price END) as avg_sale_price,
+                AVG(CASE WHEN offer = 'rent' THEN price END) as avg_rent_price
+            FROM zone_data;
+            """
+            
+            city_filter = f"AND p.city_id = {city_id}" if city_id else ""
+            
+            # Filtro por tipo de propiedad
+            type_filter = ""
+            if property_type:
+                property_types = [pt.strip().lower() for pt in property_type.split(',')]
+                type_conditions = []
+                for prop_type in property_types:
+                    if prop_type == "apartamento":
+                        type_conditions.append("(p.title ILIKE '%apartamento%' OR p.title ILIKE '%apto%')")
+                    elif prop_type == "casa":
+                        type_conditions.append("p.title ILIKE '%casa%'")
+                    elif prop_type == "oficina":
+                        type_conditions.append("p.title ILIKE '%oficina%'")
+                    elif prop_type == "local":
+                        type_conditions.append("p.title ILIKE '%local%'")
+                    elif prop_type == "bodega":
+                        type_conditions.append("p.title ILIKE '%bodega%'")
+                    elif prop_type == "lote":
+                        type_conditions.append("p.title ILIKE '%lote%'")
+                    elif prop_type == "finca":
+                        type_conditions.append("p.title ILIKE '%finca%'")
+                if type_conditions:
+                    type_filter = f"AND ({' OR '.join(type_conditions)})"
+            
+            # Filtro por CREATION_DATE (no last_update)
+            date_filter = ""
+            if updated_date_from:
+                date_filter += f" AND p.creation_date >= '{updated_date_from}'"
+            if updated_date_to:
+                date_filter += f" AND p.creation_date <= '{updated_date_to}'"
+                
+            final_query_filtered = query_filtered.format(city_filter=city_filter, date_filter=date_filter, type_filter=type_filter)
+            result_filtered = session.execute(text(final_query_filtered), location_params).first()
+            
+            # PERÍODO ACTUAL (último mes) - solo si hay filtro de fecha
+            result_current = None
+            if has_date_filter:
+                # Calcular fecha de hace 30 días
+                date_30_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                
+                query_current = f"""
+                WITH zone_data AS (
+                    SELECT 
+                        p.fr_property_id,
+                        p.offer,
+                        p.price,
+                        p.area,
+                        p.last_update
+                    FROM property p
+                    WHERE {location_filter}
+                        AND p.area > 0 
+                        AND p.price > 0
+                        {{city_filter}}
+                        {{type_filter}}
+                        AND p.last_update >= :date_30_days_ago
+                )
+                SELECT 
+                    COUNT(DISTINCT fr_property_id) as total_properties,
+                    COUNT(DISTINCT CASE WHEN offer = 'sell' THEN fr_property_id END) as sale_count,
+                    COUNT(DISTINCT CASE WHEN offer = 'rent' THEN fr_property_id END) as rent_count,
+                    AVG(CASE WHEN offer = 'sell' THEN price / NULLIF(area, 0) END) as sale_price_m2,
+                    AVG(CASE WHEN offer = 'rent' THEN price END) as rent_avg_price,
+                    AVG(CASE WHEN offer = 'sell' THEN price END) as avg_sale_price,
+                    AVG(CASE WHEN offer = 'rent' THEN price END) as avg_rent_price
+                FROM zone_data;
+                """
+                
+                final_query_current = query_current.format(city_filter=city_filter, type_filter=type_filter)
+                current_params = {**location_params, "date_30_days_ago": date_30_days_ago}
+                result_current = session.execute(text(final_query_current), current_params).first()
+            
+            # Procesar resultado del período filtrado
+            filtered_data = {}
+            if result_filtered:
+                sale_count = int(result_filtered[1]) if result_filtered[1] else 0
+                rent_count = int(result_filtered[2]) if result_filtered[2] else 0
+                sale_price_m2 = float(result_filtered[3]) if result_filtered[3] else 0
+                rent_avg_price = float(result_filtered[4]) if result_filtered[4] else 0
+                avg_sale_price = float(result_filtered[5]) if result_filtered[5] else 0
+                avg_rent_price = float(result_filtered[6]) if result_filtered[6] else 0
+                
+                # Cap rate
+                cap_rate = ((avg_rent_price * 12) / avg_sale_price) if avg_sale_price > 0 and avg_rent_price > 0 else 0
+                
+                # Asegurar que no hay NaN
+                import math
+                cap_rate = 0 if math.isnan(cap_rate) or math.isinf(cap_rate) else cap_rate
+                
+                filtered_data = {
+                    'property_count': int(result_filtered[0]) if result_filtered[0] else 0,
+                    'sale_count': sale_count,
+                    'rent_count': rent_count,
+                    'sale_avg_price_m2': sale_price_m2,
+                    'rent_avg_price_m2': rent_avg_price,
+                    'cap_rate': cap_rate
+                }
+            
+            # Procesar resultado del período actual (último mes)
+            current_data = None
+            if result_current and has_date_filter:
+                sale_count_current = int(result_current[1]) if result_current[1] else 0
+                rent_count_current = int(result_current[2]) if result_current[2] else 0
+                sale_price_m2_current = float(result_current[3]) if result_current[3] else 0
+                rent_avg_price_current = float(result_current[4]) if result_current[4] else 0
+                avg_sale_price_current = float(result_current[5]) if result_current[5] else 0
+                avg_rent_price_current = float(result_current[6]) if result_current[6] else 0
+                
+                # Cap rate actual
+                cap_rate_current = ((avg_rent_price_current * 12) / avg_sale_price_current) if avg_sale_price_current > 0 and avg_rent_price_current > 0 else 0
+                
+                import math
+                cap_rate_current = 0 if math.isnan(cap_rate_current) or math.isinf(cap_rate_current) else cap_rate_current
+                
+                property_count_current = int(result_current[0]) if result_current[0] else 0
+                
+                # Solo crear current_data si tiene propiedades
+                if property_count_current > 0:
+                    current_data = {
+                        'property_count': property_count_current,
+                        'sale_count': sale_count_current,
+                        'rent_count': rent_count_current,
+                        'sale_avg_price_m2': sale_price_m2_current,
+                        'rent_avg_price_m2': rent_avg_price_current,
+                        'cap_rate': cap_rate_current
+                    }
+                    print(f"✅ Período actual (último mes): {property_count_current} propiedades en {zone_name}")
+                else:
+                    print(f"⚠️ Sin propiedades en último mes para {zone_name}")
+            
+            # has_comparison solo True si tenemos AMBOS períodos con datos
+            has_comparison = has_date_filter and current_data is not None and filtered_data.get('property_count', 0) > 0
+            
+            print(f"📊 Zone: {zone_name}, has_date_filter: {has_date_filter}, has_comparison: {has_comparison}")
+            print(f"   Filtered period: {filtered_data.get('property_count', 0)} props")
+            print(f"   Current period: {current_data.get('property_count', 0) if current_data else 0} props")
+            
+            return {
+                'status': 'success',
+                'data': {
+                    'filtered_period': filtered_data if filtered_data else {
+                        'property_count': 0,
+                        'sale_avg_price_m2': 0,
+                        'rent_avg_price_m2': 0,
+                        'cap_rate': 0
+                    },
+                    'current_period': current_data,  # None si no hay datos
+                    'has_comparison': has_comparison
+                }
+            }
+    except Exception as e:
+        print(f"Error getting zone details: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'status': 'error', 'message': str(e)}
+    except Exception as e:
+        print(f"Error getting zone details: {e}")
+        return {'status': 'error', 'message': str(e)}
+
+@app.get("/api/test-zones")
+async def test_zone_stats():
+    """Test endpoint para zona statistics"""
+    try:
+        from sqlmodel import Session, select, func
+        from config.db_connection import engine
+        from models.property import Property
+        
+        with Session(engine) as session:
+            query = select(func.count(Property.location_main))
+            result = session.exec(query).first()
+            
+            return {
+                'status': 'success',
+                'test': 'working',
+                'count': result
+            }
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+
 @app.get("/api/cities/list")
 async def get_cities_list():
     """Obtener lista de ciudades para filtros"""
@@ -1727,6 +2266,151 @@ async def get_cities_list():
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
+@app.get("/api/postal-zone-statistics")
+async def get_postal_zone_statistics(
+    city_id: int = None,
+    updated_date_from: str = None,
+    updated_date_to: str = None
+):
+    """Obtener estadísticas de zonas agrupadas por código postal"""
+    from sqlmodel import Session
+    from config.db_connection import engine
+    from services.google_postal_service import GooglePostalService
+    from sqlalchemy import text
+    import json
+    
+    try:
+        with Session(engine) as session:
+            # First, get properties with coordinates
+            properties_query = """
+            SELECT 
+                p.fr_property_id,
+                p.latitude,
+                p.longitude,
+                p.location_main,
+                c.name as city_name,
+                p.city_id
+            FROM property p
+            LEFT JOIN city c ON p.city_id = c.id
+            WHERE p.latitude IS NOT NULL 
+                AND p.longitude IS NOT NULL
+                AND p.area > 0 
+                AND p.price > 0
+                {city_filter}
+            """
+            
+            # Apply city filter
+            city_filter = ""
+            if city_id:
+                city_filter = f"AND p.city_id = {city_id}"
+            
+            final_query = properties_query.format(city_filter=city_filter)
+            properties = session.exec(text(final_query)).all()
+            
+            print(f"🔍 Found {len(properties)} properties for postal code lookup")
+            
+            # Use Google Maps smart batch processing for postal codes
+            coordinates = [
+                {
+                    'id': str(prop[0]), 
+                    'lat': prop[1], 
+                    'lng': prop[2]
+                } for prop in properties
+            ]
+            
+            postal_codes_map = GooglePostalService.batch_get_postal_codes_smart(coordinates)
+            
+            # Group properties by postal code
+            postal_zones = {}
+            
+            for prop in properties:
+                property_id = str(prop[0])
+                postal_result = postal_codes_map.get(property_id)
+                
+                if postal_result and postal_result.postal_code:
+                    postal_code = postal_result.postal_code
+                    
+                    if postal_code not in postal_zones:
+                        postal_zones[postal_code] = {
+                            'postal_code': postal_code,
+                            'department': postal_result.department or GooglePostalService.get_department_name(postal_code[:2]),
+                            'properties': [],
+                            'cities': set(),
+                            'neighborhoods': set()
+                        }
+                    
+                    postal_zones[postal_code]['properties'].append({
+                        'lat': prop[1],
+                        'lng': prop[2],
+                        'location_main': prop[3]
+                    })
+                    
+                    if prop[4]:  # city_name
+                        postal_zones[postal_code]['cities'].add(prop[4])
+                    if prop[3]:  # location_main 
+                        postal_zones[postal_code]['neighborhoods'].add(prop[3])
+            
+            # Create zone statistics for each postal code
+            zone_stats = []
+            
+            for postal_code, data in postal_zones.items():
+                properties = data['properties']
+                
+                # Incluir TODAS las zonas, incluso con 1 sola propiedad
+                if len(properties) >= 1:  # Cambio: de 3 a 1 para incluir todas las zonas
+                    lats = [p['lat'] for p in properties]
+                    lngs = [p['lng'] for p in properties]
+                    
+                    zone_stats.append({
+                        'id': f'postal_{postal_code}',
+                        'name': f'{postal_code} - {data["department"]}',
+                        'postal_code': postal_code,
+                        'department': data['department'],
+                        'cities': list(data['cities']),
+                        'neighborhoods': list(data['neighborhoods']),
+                        'property_count': len(properties),
+                        'min_lat': min(lats),
+                        'max_lat': max(lats),
+                        'min_lng': min(lngs),
+                        'max_lng': max(lngs),
+                        'center_lat': sum(lats) / len(lats),
+                        'center_lng': sum(lngs) / len(lngs)
+                    })
+            
+            # Sort by property count
+            zone_stats.sort(key=lambda x: x['property_count'], reverse=True)
+            
+            # Log estadísticas detalladas
+            zones_by_count = {}
+            for zone in zone_stats:
+                count = zone['property_count']
+                if count not in zones_by_count:
+                    zones_by_count[count] = 0
+                zones_by_count[count] += 1
+            
+            print(f"✅ Created {len(zone_stats)} postal code zones")
+            print("📊 Zones by property count:")
+            for count in sorted(zones_by_count.keys(), reverse=True)[:10]:  # Top 10
+                print(f"   {count} properties: {zones_by_count[count]} zones")
+            if len(zones_by_count) > 10:
+                single_prop_zones = sum(zones_by_count.get(i, 0) for i in range(1, 4))
+                print(f"   1-3 properties: {single_prop_zones} zones (now included!)")
+            
+            return {
+                'status': 'success',
+                'data': zone_stats,
+                'total_zones': len(zone_stats),
+                'total_properties': sum(z['property_count'] for z in zone_stats)
+            }
+            
+    except Exception as e:
+        print(f"Error getting postal zone statistics: {e}")
+        return {
+            'status': 'error',
+            'message': str(e),
+            'data': []
+        }
+
 @app.get("/health")
 async def health():
     """Endpoint simple para healthcheck de Docker"""
@@ -1736,6 +2420,207 @@ async def health():
 async def api_health():
     """Endpoint de health con más detalles para la API"""
     return {"status": "healthy", "timestamp": get_local_now()}
+
+# Overture Maps endpoints removed - using Google Maps Data-Driven Styling only
+
+# Real boundaries endpoints removed - using Google Maps only
+
+@app.get("/api/properties/by-zone")
+async def get_properties_by_zone(
+    boundary_type: str = Query(..., description="Tipo de límite: country, admin_level_1, admin_level_2, postal_code"),
+    city_id: Optional[int] = Query(None, description="Filtrar por ciudad específica"),
+    # Parámetros de bounding box para filtrar por área geográfica
+    north: Optional[float] = Query(None, description="Límite norte del área"),
+    south: Optional[float] = Query(None, description="Límite sur del área"),
+    east: Optional[float] = Query(None, description="Límite este del área"),
+    west: Optional[float] = Query(None, description="Límite oeste del área"),
+    # Filtros adicionales
+    property_type: Optional[str] = Query(None, description="Tipos de inmueble separados por coma (apartamento,casa)"),
+    updated_date_from: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    updated_date_to: Optional[str] = Query(None, description="Fecha hasta (YYYY-MM-DD)")
+):
+    """
+    Obtener propiedades agrupadas por zona administrativa con estadísticas
+    Retorna: lista de zonas con sus propiedades, precios promedio de venta/arriendo y cap rate
+    """
+    from sqlmodel import Session, select
+    from config.db_connection import engine
+    from models.property import Property
+    from models.city import City
+    from sqlalchemy import and_, or_
+    
+    print(f"\n🏘️ === PROPERTIES BY ZONE REQUEST ===")
+    print(f"   Boundary Type: {boundary_type}")
+    print(f"   City ID: {city_id}")
+    print(f"   Property Type: '{property_type}'")
+    print(f"   Property Type is None: {property_type is None}")
+    print(f"   Property Type is empty string: {property_type == ''}")
+    print(f"   Date From: {updated_date_from}")
+    print(f"   Date To: {updated_date_to}")
+    print(f"   Bounding Box: N={north}, S={south}, E={east}, W={west}")
+    
+    try:
+        with Session(engine) as session:
+            # Query base: obtener propiedades con coordenadas
+            filters = [
+                Property.latitude.isnot(None),
+                Property.longitude.isnot(None)
+            ]
+            
+            # Filtrar por ciudad si se especifica
+            if city_id:
+                filters.append(Property.city_id == city_id)
+            
+            # Filtrar por bounding box si se especifica (para optimizar la consulta)
+            if north is not None and south is not None and east is not None and west is not None:
+                filters.extend([
+                    Property.latitude <= north,
+                    Property.latitude >= south,
+                    Property.longitude <= east,
+                    Property.longitude >= west
+                ])
+            
+            # Filtrar por tipos de inmueble (usando búsqueda en title)
+            if property_type:
+                print(f"   🏠 Aplicando filtro de tipo de propiedad: {property_type}")
+                property_types = [pt.strip() for pt in property_type.split(',')]
+                print(f"   🏠 Tipos parseados: {property_types}")
+                type_conditions = []
+                
+                for prop_type in property_types:
+                    property_type_lower = prop_type.lower()
+                    if property_type_lower == "apartamento":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% apartamento %"),
+                                Property.title.ilike("apartamento %"),
+                                Property.title.ilike("% apartamento"),
+                                Property.title.ilike("% apto %"),
+                                Property.title.ilike("apto %"),
+                                Property.title.ilike("% apto"),
+                                Property.title.ilike("apartamento"),
+                                Property.title.ilike("apto")
+                            ),
+                            ~Property.title.ilike("%bodega%"),
+                            ~Property.title.ilike("%local%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "casa":
+                        type_conditions.append(and_(
+                            or_(
+                                Property.title.ilike("% casa %"),
+                                Property.title.ilike("casa %"),
+                                Property.title.ilike("% casa"),
+                                Property.title.ilike("casa")
+                            ),
+                            ~Property.title.ilike("%apartamento%"),
+                            ~Property.title.ilike("%apto%"),
+                            ~Property.title.ilike("%bodega%"),
+                            ~Property.title.ilike("%local%"),
+                            ~Property.title.ilike("%oficina%")
+                        ))
+                    elif property_type_lower == "oficina":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% oficina %"),
+                            Property.title.ilike("oficina %"),
+                            Property.title.ilike("% oficina"),
+                            Property.title.ilike("oficina")
+                        ))
+                    elif property_type_lower == "local":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% local %"),
+                            Property.title.ilike("local %"),
+                            Property.title.ilike("% local"),
+                            Property.title.ilike("local")
+                        ))
+                    elif property_type_lower == "bodega":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% bodega %"),
+                            Property.title.ilike("bodega %"),
+                            Property.title.ilike("% bodega"),
+                            Property.title.ilike("bodega")
+                        ))
+                    elif property_type_lower == "lote":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% lote %"),
+                            Property.title.ilike("lote %"),
+                            Property.title.ilike("% lote"),
+                            Property.title.ilike("lote")
+                        ))
+                    elif property_type_lower == "finca":
+                        type_conditions.append(or_(
+                            Property.title.ilike("% finca %"),
+                            Property.title.ilike("finca %"),
+                            Property.title.ilike("% finca"),
+                            Property.title.ilike("finca")
+                        ))
+                
+                if type_conditions:
+                    print(f"   ✅ Agregando {len(type_conditions)} condiciones de tipo al filtro")
+                    filters.append(or_(*type_conditions))
+                else:
+                    print(f"   ⚠️ No se generaron condiciones de tipo (lista vacía)")
+            else:
+                print(f"   ℹ️ No se aplicó filtro de tipo de propiedad (property_type is None or empty)")
+            
+            # Filtrar por fechas de actualización
+            if updated_date_from:
+                from datetime import datetime
+                date_from = datetime.strptime(updated_date_from, '%Y-%m-%d').date()
+                filters.append(Property.last_update >= date_from)
+            
+            if updated_date_to:
+                from datetime import datetime
+                date_to = datetime.strptime(updated_date_to, '%Y-%m-%d').date()
+                filters.append(Property.last_update <= date_to)
+            
+            query = select(Property).where(and_(*filters))
+            properties = session.exec(query).all()
+            
+            # Agrupar propiedades por coordenadas para retornarlas al frontend
+            # El frontend usará Google Maps DDS para identificar a qué zona pertenece cada propiedad
+            properties_data = []
+            for prop in properties:
+                properties_data.append({
+                    'id': prop.fr_property_id,
+                    'latitude': prop.latitude,
+                    'longitude': prop.longitude,
+                    'price': prop.price,
+                    'offer': prop.offer,
+                    'area': prop.area,
+                    'rooms': prop.rooms,
+                    'city_id': prop.city_id,
+                    'location_main': prop.location_main,
+                    'stratum': prop.stratum,
+                    'title': prop.title,
+                    'last_update': prop.last_update.isoformat() if prop.last_update else None
+                })
+            
+            # Estadísticas generales
+            total_properties = len(properties_data)
+            properties_for_sale = [p for p in properties_data if p['offer'] == 'sell']
+            properties_for_rent = [p for p in properties_data if p['offer'] == 'rent']
+            
+            return {
+                'status': 'success',
+                'boundary_type': boundary_type,
+                'data': {
+                    'properties': properties_data,
+                    'summary': {
+                        'total': total_properties,
+                        'for_sale': len(properties_for_sale),
+                        'for_rent': len(properties_for_rent)
+                    }
+                }
+            }
+            
+    except Exception as e:
+        print(f"Error getting properties by zone: {e}")
+        return {
+            'status': 'error',
+            'message': str(e),
+            'data': None
+        }
 
 @app.get("/")
 async def root():

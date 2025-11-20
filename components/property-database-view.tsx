@@ -53,9 +53,8 @@ export function PropertyDatabaseView() {
     property_type: [] as string[],
     updated_date_from: '',
     updated_date_to: '',
-    // Nuevos filtros de ubicación
-    search_address: '',
-    radius: '1000' // Radio en metros por defecto
+    address: '',
+    distance: ''
   })
   
   // Paginación
@@ -127,10 +126,10 @@ export function PropertyDatabaseView() {
         updated_date_from: newFilters.updated_date_from || undefined,
         updated_date_to: newFilters.updated_date_to || undefined,
         // Filtros de ubicación
-        search_address: newFilters.search_address || undefined,
+        search_address: newFilters.address || undefined,
         latitude: coordsToUse?.lat,
         longitude: coordsToUse?.lng,
-        radius: newFilters.radius ? parseInt(newFilters.radius) : undefined
+        radius: newFilters.distance ? parseInt(newFilters.distance) : undefined
       }
       
       
@@ -174,8 +173,8 @@ export function PropertyDatabaseView() {
           updated_date_from: '',
           updated_date_to: '',
           // Nuevos filtros de ubicación
-          search_address: '',
-          radius: '1000'
+          address: '',
+          distance: '1000'
         }
         loadPropertiesWithCoords(1, emptyFilters)
       } catch (error) {
@@ -301,11 +300,11 @@ export function PropertyDatabaseView() {
     let coordsToUse = currentCoordinates
     
     // Si hay una dirección y no hemos geocodificado esta dirección antes
-    if (filters.search_address && filters.search_address !== lastGeocodedAddress) {
+    if (filters.address && filters.address !== lastGeocodedAddress) {
       setGeocoding(true)
       
       try {
-        const geocodeResult = await GeocodingService.geocodeAddress(filters.search_address)
+        const geocodeResult = await GeocodingService.geocodeAddress(filters.address)
         
         if (geocodeResult.success) {
           coordsToUse = {
@@ -313,7 +312,7 @@ export function PropertyDatabaseView() {
             lng: geocodeResult.longitude
           }
           setCurrentCoordinates(coordsToUse)
-          setLastGeocodedAddress(filters.search_address)
+          setLastGeocodedAddress(filters.address)
           showSuccess(`Dirección encontrada: ${geocodeResult.formatted_address}`)
         } else {
           showError(`Error al geocodificar: ${geocodeResult.error}`)
@@ -330,7 +329,7 @@ export function PropertyDatabaseView() {
     }
     
     // Si no hay dirección, limpiar coordenadas
-    if (!filters.search_address) {
+    if (!filters.address) {
       coordsToUse = null
       setCurrentCoordinates(null)
       setLastGeocodedAddress('')
@@ -361,8 +360,8 @@ export function PropertyDatabaseView() {
       updated_date_from: '',
       updated_date_to: '',
       // Nuevos filtros de ubicación
-      search_address: '',
-      radius: '1000'
+      address: '',
+      distance: '1000'
     }
     
     // Limpiar TODOS los estados relacionados de inmediato
@@ -472,10 +471,10 @@ export function PropertyDatabaseView() {
         property_type: filters.property_type.length === 0 ? undefined : filters.property_type,
         updated_date_from: filters.updated_date_from || undefined,
         updated_date_to: filters.updated_date_to || undefined,
-        search_address: filters.search_address || undefined,
+        search_address: filters.address || undefined,
         latitude: currentCoordinates?.lat,
         longitude: currentCoordinates?.lng,
-        radius: filters.radius ? parseInt(filters.radius) : undefined
+        radius: filters.distance ? parseInt(filters.distance) : undefined
       }
       
       // Llamar al endpoint del backend para enviar el Excel por email
@@ -995,8 +994,8 @@ export function PropertyDatabaseView() {
               <Input
                 type="text"
                 placeholder="Ej: Carrera 15 #45-67, Bogotá"
-                value={filters.search_address}
-                onChange={(e) => handleFilterChange('search_address', e.target.value)}
+                value={filters.address}
+                onChange={(e) => handleFilterChange('address', e.target.value)}
                 disabled={geocoding}
               />
               {geocoding && (
@@ -1022,16 +1021,16 @@ export function PropertyDatabaseView() {
             <label className="text-sm font-medium">Radio de Búsqueda (metros)</label>
             <Input
               type="number"
-              value={filters.radius || ''}
-              onChange={(e) => handleFilterChange('radius', e.target.value)}
+              value={filters.distance || ''}
+              onChange={(e) => handleFilterChange('distance', e.target.value)}
               placeholder="Ej: 1000, 2500, 5000..."
-              disabled={!filters.search_address}
+              disabled={!filters.address}
               min="100"
               max="50000"
               step="100"
             />
             <p className="text-xs text-muted-foreground">
-              {!filters.search_address 
+              {!filters.address 
                 ? 'Requiere dirección para activar búsqueda por proximidad'
                 : 'Distancia máxima desde la dirección ingresada'
               }
