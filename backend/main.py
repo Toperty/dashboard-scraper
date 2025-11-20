@@ -2053,6 +2053,21 @@ async def get_zone_details(
                     {{city_filter}}
                     {{date_filter}}
                     {{type_filter}}
+            ),
+            price_stats AS (
+                SELECT
+                    offer,
+                    AVG(price) as mean_price,
+                    STDDEV(price) as stddev_price
+                FROM zone_data
+                GROUP BY offer
+            ),
+            filtered_data AS (
+                SELECT zd.*
+                FROM zone_data zd
+                LEFT JOIN price_stats ps ON zd.offer = ps.offer
+                WHERE zd.price BETWEEN (ps.mean_price - 3 * COALESCE(ps.stddev_price, 0)) 
+                                   AND (ps.mean_price + 3 * COALESCE(ps.stddev_price, 0))
             )
             SELECT 
                 COUNT(DISTINCT fr_property_id) as total_properties,
@@ -2062,7 +2077,7 @@ async def get_zone_details(
                 AVG(CASE WHEN offer = 'rent' THEN price END) as rent_avg_price,
                 AVG(CASE WHEN offer = 'sell' THEN price END) as avg_sale_price,
                 AVG(CASE WHEN offer = 'rent' THEN price END) as avg_rent_price
-            FROM zone_data;
+            FROM filtered_data;
             """
             
             city_filter = f"AND p.city_id = {city_id}" if city_id else ""

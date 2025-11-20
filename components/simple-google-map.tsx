@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RotateCcw, ChevronDown } from 'lucide-react'
 import { fetchCitiesList, type CityOption } from '@/lib/api'
+import { useAlert } from '@/hooks/use-alert'
 
 // Variable global para controlar si Google Maps ya está cargado
 let isGoogleMapsLoaded = false
@@ -14,6 +15,7 @@ let isGoogleMapsLoading = false
 declare const google: any;
 
 export function SimpleGoogleMap() {
+  const { warning } = useAlert()
   const [map, setMap] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [cities, setCities] = useState<CityOption[]>([])
@@ -319,6 +321,36 @@ export function SimpleGoogleMap() {
   }
 
   const handleDateChange = (type: 'from' | 'to', value: string) => {
+    // Validaciones de fecha
+    const MIN_DATE = '2024-02-15' // Fecha inicial de datos
+    const today = new Date().toISOString().split('T')[0]
+    
+    if (value) {
+      // No puede ser menor a la fecha mínima
+      if (value < MIN_DATE) {
+        warning(`La fecha no puede ser anterior a ${MIN_DATE}`, 'Fecha inválida')
+        return
+      }
+      
+      // No puede ser mayor a hoy
+      if (value > today) {
+        warning('La fecha no puede ser posterior al día de hoy', 'Fecha inválida')
+        return
+      }
+      
+      // Si es "desde", no puede ser mayor a "hasta"
+      if (type === 'from' && dateTo && value > dateTo) {
+        warning('La fecha "desde" no puede ser mayor que la fecha "hasta"', 'Rango de fechas inválido')
+        return
+      }
+      
+      // Si es "hasta", no puede ser menor a "desde"
+      if (type === 'to' && dateFrom && value < dateFrom) {
+        warning('La fecha "hasta" no puede ser menor que la fecha "desde"', 'Rango de fechas inválido')
+        return
+      }
+    }
+    
     if (type === 'from') {
       setDateFrom(value)
     } else {
@@ -849,6 +881,8 @@ export function SimpleGoogleMap() {
                 value={dateFrom}
                 onChange={(e) => handleDateChange('from', e.target.value)}
                 placeholder="Fecha desde"
+                min="2024-02-15"
+                max={new Date().toISOString().split('T')[0]}
               />
             </div>
 
@@ -859,6 +893,8 @@ export function SimpleGoogleMap() {
                 value={dateTo}
                 onChange={(e) => handleDateChange('to', e.target.value)}
                 placeholder="Fecha hasta"
+                min="2024-02-15"
+                max={new Date().toISOString().split('T')[0]}
               />
             </div>
           </div>
