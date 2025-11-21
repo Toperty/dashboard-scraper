@@ -556,7 +556,7 @@ export function SimpleGoogleMap() {
               ` : ''}
               ${filtered.rent_avg_price_m2 > 0 ? `
                 <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Arriendo Promedio</div>
+                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
                   <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(filtered.rent_avg_price_m2).toLocaleString()}</div>
                 </div>
               ` : ''}
@@ -590,7 +590,7 @@ export function SimpleGoogleMap() {
               ` : ''}
               ${current.rent_avg_price_m2 > 0 ? `
                 <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Arriendo Promedio</div>
+                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
                   <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(current.rent_avg_price_m2).toLocaleString()}</div>
                 </div>
               ` : ''}
@@ -640,7 +640,7 @@ export function SimpleGoogleMap() {
         ` : ''}
         ${rentPrice > 0 ? `
           <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Arriendo Promedio</div>
+            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
             <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(rentPrice).toLocaleString()}</div>
           </div>
         ` : ''}

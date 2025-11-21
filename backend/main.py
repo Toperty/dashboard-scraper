@@ -2054,6 +2054,12 @@ async def get_zone_details(
                     {{date_filter}}
                     {{type_filter}}
             ),
+            area_stats AS (
+                SELECT
+                    AVG(area) as mean_area,
+                    STDDEV(area) as stddev_area
+                FROM zone_data
+            ),
             price_stats AS (
                 SELECT
                     offer,
@@ -2065,16 +2071,19 @@ async def get_zone_details(
             filtered_data AS (
                 SELECT zd.*
                 FROM zone_data zd
+                CROSS JOIN area_stats ast
                 LEFT JOIN price_stats ps ON zd.offer = ps.offer
                 WHERE zd.price BETWEEN (ps.mean_price - 3 * COALESCE(ps.stddev_price, 0)) 
                                    AND (ps.mean_price + 3 * COALESCE(ps.stddev_price, 0))
+                  AND zd.area BETWEEN (ast.mean_area - 3 * COALESCE(ast.stddev_area, 0))
+                                  AND (ast.mean_area + 3 * COALESCE(ast.stddev_area, 0))
             )
             SELECT 
                 COUNT(DISTINCT fr_property_id) as total_properties,
                 COUNT(DISTINCT CASE WHEN offer = 'sell' THEN fr_property_id END) as sale_count,
                 COUNT(DISTINCT CASE WHEN offer = 'rent' THEN fr_property_id END) as rent_count,
                 AVG(CASE WHEN offer = 'sell' THEN price / NULLIF(area, 0) END) as sale_price_m2,
-                AVG(CASE WHEN offer = 'rent' THEN price END) as rent_avg_price,
+                AVG(CASE WHEN offer = 'rent' THEN price / NULLIF(area, 0) END) as rent_price_m2,
                 AVG(CASE WHEN offer = 'sell' THEN price END) as avg_sale_price,
                 AVG(CASE WHEN offer = 'rent' THEN price END) as avg_rent_price
             FROM filtered_data;
@@ -2136,16 +2145,40 @@ async def get_zone_details(
                         {{city_filter}}
                         {{type_filter}}
                         AND p.last_update >= :date_30_days_ago
+                ),
+                area_stats AS (
+                    SELECT
+                        AVG(area) as mean_area,
+                        STDDEV(area) as stddev_area
+                    FROM zone_data
+                ),
+                price_stats AS (
+                    SELECT
+                        offer,
+                        AVG(price) as mean_price,
+                        STDDEV(price) as stddev_price
+                    FROM zone_data
+                    GROUP BY offer
+                ),
+                filtered_data AS (
+                    SELECT zd.*
+                    FROM zone_data zd
+                    CROSS JOIN area_stats ast
+                    LEFT JOIN price_stats ps ON zd.offer = ps.offer
+                    WHERE zd.price BETWEEN (ps.mean_price - 3 * COALESCE(ps.stddev_price, 0)) 
+                                       AND (ps.mean_price + 3 * COALESCE(ps.stddev_price, 0))
+                      AND zd.area BETWEEN (ast.mean_area - 3 * COALESCE(ast.stddev_area, 0))
+                                      AND (ast.mean_area + 3 * COALESCE(ast.stddev_area, 0))
                 )
                 SELECT 
                     COUNT(DISTINCT fr_property_id) as total_properties,
                     COUNT(DISTINCT CASE WHEN offer = 'sell' THEN fr_property_id END) as sale_count,
                     COUNT(DISTINCT CASE WHEN offer = 'rent' THEN fr_property_id END) as rent_count,
                     AVG(CASE WHEN offer = 'sell' THEN price / NULLIF(area, 0) END) as sale_price_m2,
-                    AVG(CASE WHEN offer = 'rent' THEN price END) as rent_avg_price,
+                    AVG(CASE WHEN offer = 'rent' THEN price / NULLIF(area, 0) END) as rent_price_m2,
                     AVG(CASE WHEN offer = 'sell' THEN price END) as avg_sale_price,
                     AVG(CASE WHEN offer = 'rent' THEN price END) as avg_rent_price
-                FROM zone_data;
+                FROM filtered_data;
                 """
                 
                 final_query_current = query_current.format(city_filter=city_filter, type_filter=type_filter)
