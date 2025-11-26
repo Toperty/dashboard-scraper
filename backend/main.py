@@ -967,6 +967,10 @@ async def get_properties(
                     return round(R * c)
                 
                 # 1. Obtener TODAS las propiedades (sin paginación)
+                # Aplicar filtros a la consulta principal solo si hay filtros
+                if filters:
+                    query = query.where(and_(*filters))
+                
                 all_results = session.exec(query.order_by(Property.creation_date.desc())).all()
                 print(f"📊 Total propiedades antes del filtro: {len(all_results)}")
                 
@@ -1317,6 +1321,12 @@ async def send_properties_excel(request: dict):
                 
                 # Procesar categories si existen
                 if antiquity_categories is not None and len(antiquity_categories) > 0:
+                    # Asegurar que sean enteros
+                    try:
+                        antiquity_categories = [int(x) for x in antiquity_categories]
+                    except:
+                        pass
+                        
                     for antiquity_category in antiquity_categories:
                         if antiquity_category == 1:
                             # Menos de 1 año
@@ -1473,6 +1483,7 @@ async def send_properties_excel(request: dict):
             
             # Obtener propiedades
             results = session.exec(query.order_by(Property.creation_date.desc())).all()
+            print(f"📊 Propiedades encontradas antes de filtrar por distancia: {len(results)}")
             
             # Procesar filtro de distancia si está presente
             distance_map = {}
@@ -1481,28 +1492,48 @@ async def send_properties_excel(request: dict):
             radius = filters.get('radius')
             
             if search_lat is not None and search_lng is not None and radius is not None:
+                # Asegurar tipos numéricos
+                try:
+                    search_lat = float(search_lat)
+                    search_lng = float(search_lng)
+                    radius = float(radius) # Permitir float para radius también
+                except (ValueError, TypeError) as e:
+                    print(f"❌ Error convirtiendo coordenadas o radio a números: {e}")
+                
                 print(f"🔍 Procesando filtro de distancia para Excel: lat={search_lat}, lng={search_lng}, radius={radius}m")
                 from math import radians, cos, sin, asin, sqrt
                 
                 def calculate_distance(lat1, lng1, lat2, lng2):
                     """Calcula distancia entre dos puntos en metros usando Haversine"""
-                    R = 6371000  # Radio de la Tierra en metros
-                    lat1, lng1, lat2, lng2 = map(radians, [lat1, lng1, lat2, lng2])
-                    dlat = lat2 - lat1
-                    dlng = lng2 - lng1
-                    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlng/2)**2
-                    c = 2 * asin(sqrt(a))
-                    return round(R * c)
+                    try:
+                        R = 6371000  # Radio de la Tierra en metros
+                        lat1, lng1, lat2, lng2 = map(radians, [float(lat1), float(lng1), float(lat2), float(lng2)])
+                        dlat = lat2 - lat1
+                        dlng = lng2 - lng1
+                        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlng/2)**2
+                        c = 2 * asin(sqrt(a))
+                        return round(R * c)
+                    except Exception as e:
+                        print(f"Error calculando distancia: {e}")
+                        return float('inf')
                 
                 # Filtrar y calcular distancias - SOLO incluir propiedades dentro del radio
                 filtered_results = []
+                debug_count = 0
+                
                 for prop, city in results:
                     if prop.latitude and prop.longitude:
                         distance = calculate_distance(search_lat, search_lng, prop.latitude, prop.longitude)
                         if distance <= radius:
                             distance_map[prop.fr_property_id] = distance
                             filtered_results.append((prop, city))
-                    # NO incluir propiedades sin coordenadas cuando hay filtro de distancia
+                        elif debug_count < 5:
+                            print(f"⚠️ Propiedad {prop.fr_property_id} fuera de rango: {distance}m > {radius}m (Lat: {prop.latitude}, Lng: {prop.longitude})")
+                            debug_count += 1
+                    elif debug_count < 5:
+                         # Solo loguear si esperábamos coordenadas
+                         # print(f"⚠️ Propiedad {prop.fr_property_id} sin coordenadas")
+                         debug_count += 1
                 
                 # Ordenar por distancia (más cercanas primero)
                 filtered_results.sort(key=lambda x: distance_map.get(x[0].fr_property_id, float('inf')))
@@ -1683,7 +1714,7 @@ async def send_properties_excel(request: dict):
             msg = MIMEMultipart()
             msg['From'] = from_email
             msg['To'] = email_destinatario
-            msg['Cc'] = from_email
+            #msg['Cc'] = from_email
             msg['Subject'] = f"Dashboard Scraper - Propiedades Exportadas"
             
             # Cuerpo del correo
