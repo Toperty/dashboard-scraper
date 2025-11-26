@@ -1157,12 +1157,15 @@ async def send_properties_excel(request: dict):
     from config.db_connection import engine
     from models.property import Property
     from models.city import City
-    from sqlalchemy import and_, or_
+    from sqlalchemy import and_, or_, cast, Integer
     
     try:
         # Obtener parámetros del request
         email_destinatario = request.get('email')
         filters = request.get('filters', {})
+        
+        print(f"📧 Solicitud de Excel para: {email_destinatario}")
+        print(f"🔍 Filtros recibidos: {filters}")
         
         if not email_destinatario:
             return {"status": "error", "detail": "Email es requerido"}
@@ -1185,6 +1188,36 @@ async def send_properties_excel(request: dict):
                 
             if filters.get('max_price') is not None:
                 filter_conditions.append(Property.price <= filters['max_price'])
+
+            # Filtros de precio específicos por tipo de oferta
+            sale_price_conditions = []
+            rent_price_conditions = []
+            
+            if filters.get('min_sale_price') is not None:
+                sale_price_conditions.append(Property.price >= filters['min_sale_price'])
+            if filters.get('max_sale_price') is not None:
+                sale_price_conditions.append(Property.price <= filters['max_sale_price'])
+                
+            if filters.get('min_rent_price') is not None:
+                rent_price_conditions.append(Property.price >= filters['min_rent_price'])
+            if filters.get('max_rent_price') is not None:
+                rent_price_conditions.append(Property.price <= filters['max_rent_price'])
+            
+            # Aplicar filtros independientes por tipo de oferta
+            price_type_conditions = []
+            if sale_price_conditions:
+                price_type_conditions.append(and_(
+                    Property.offer == 'sell',
+                    *sale_price_conditions
+                ))
+            if rent_price_conditions:
+                price_type_conditions.append(and_(
+                    Property.offer == 'rent', 
+                    *rent_price_conditions
+                ))
+            
+            if price_type_conditions:
+                filter_conditions.append(or_(*price_type_conditions))
                 
             if filters.get('min_area') is not None:
                 filter_conditions.append(Property.area >= filters['min_area'])
@@ -1205,7 +1238,6 @@ async def send_properties_excel(request: dict):
                         ))
                     elif room.endswith('+'):
                         min_value = int(room[:-1])
-                        from sqlalchemy import cast, Integer
                         rooms_conditions.append(and_(
                             Property.rooms.regexp_match('^[0-9]+$'),
                             cast(Property.rooms, Integer) >= min_value
@@ -1228,7 +1260,6 @@ async def send_properties_excel(request: dict):
                         ))
                     elif bath.endswith('+'):
                         min_value = int(bath[:-1])
-                        from sqlalchemy import cast, Integer
                         baths_conditions.append(and_(
                             Property.baths.regexp_match('^[0-9]+$'),
                             cast(Property.baths, Integer) >= min_value
@@ -1251,7 +1282,6 @@ async def send_properties_excel(request: dict):
                         ))
                     elif garage.endswith('+'):
                         min_value = int(garage[:-1])
-                        from sqlalchemy import cast, Integer
                         garages_conditions.append(and_(
                             Property.garages.regexp_match('^[0-9]+$'),
                             cast(Property.garages, Integer) >= min_value
@@ -1293,30 +1323,31 @@ async def send_properties_excel(request: dict):
                             antiquity_conditions.extend([
                                 Property.antiquity == 'LESS_THAN_1_YEAR',
                                 Property.antiquity == 'Menos de 1 año',
-                                Property.antiquity == '0'
+                                Property.antiquity == '1'
                             ])
                         elif antiquity_category == 2:
-                            # 1 a 8 años - solo valores categóricos
+                            # 1 a 8 años
                             antiquity_conditions.extend([
                                 Property.antiquity == 'FROM_1_TO_8_YEARS',
-                                Property.antiquity == '1 a 8 años'
+                                Property.antiquity == '1 a 8 años',
+                                Property.antiquity == '2'
                             ])
                         elif antiquity_category == 3:
-                            # 9 a 15 años - solo valores categóricos
+                            # 9 a 15 años
                             antiquity_conditions.extend([
                                 Property.antiquity == 'FROM_9_TO_15_YEARS',
                                 Property.antiquity == '9 a 15 años',
                                 Property.antiquity == '3'
                             ])
                         elif antiquity_category == 4:
-                            # 16 a 30 años - solo valores categóricos
+                            # 16 a 30 años
                             antiquity_conditions.extend([
                                 Property.antiquity == 'FROM_16_TO_30_YEARS',
                                 Property.antiquity == '16 a 30 años',
                                 Property.antiquity == '4'
                             ])
                         elif antiquity_category == 5:
-                            # Más de 30 años - solo valores categóricos
+                            # Más de 30 años
                             antiquity_conditions.extend([
                                 Property.antiquity == 'MORE_THAN_30_YEARS',
                                 Property.antiquity == 'Más de 30 años',
