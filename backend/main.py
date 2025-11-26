@@ -1714,7 +1714,7 @@ async def send_properties_excel(request: dict):
             msg = MIMEMultipart()
             msg['From'] = from_email
             msg['To'] = email_destinatario
-            #msg['Cc'] = from_email
+            msg['Cc'] = from_email
             msg['Subject'] = f"Dashboard Scraper - Propiedades Exportadas"
             
             # Cuerpo del correo
