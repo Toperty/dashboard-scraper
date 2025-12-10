@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import os
 import pytz
+from pydantic import BaseModel
 
 app = FastAPI(title="Dashboard API")
 
@@ -18,6 +19,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Import models to register with SQLModel
+from models.valuation import Valuation
 
 # Initialize database tables on startup
 from config.db_connection import init_db
@@ -40,6 +44,42 @@ def get_city_status(city):
     else:
         return "programado"
 
+
+# Modelo Pydantic para el request de avalúo
+class PropertyValuationRequest(BaseModel):
+    area: float
+    rooms: int
+    baths: int
+    garages: int
+    stratum: int
+    latitude: float
+    longitude: float
+    antiquity: int
+    is_new: str
+    area_per_room: float
+    age_bucket: str
+    has_garage: int
+    city_id: str
+    property_type: int
+
+# Modelo Pydantic para guardar avalúo
+class SaveValuationRequest(BaseModel):
+    valuation_name: str
+    area: float
+    property_type: int
+    rooms: int
+    baths: int
+    garages: int
+    stratum: int
+    antiquity: int
+    latitude: float
+    longitude: float
+    capitalization_rate: Optional[float] = None
+    sell_price_per_sqm: Optional[float] = None
+    rent_price_per_sqm: Optional[float] = None
+    total_sell_price: Optional[float] = None
+    total_rent_price: Optional[float] = None
+    final_price: Optional[float] = None
 
 def get_recent_logs(session):
     """Obtener logs recientes de la tabla scraper_logs"""
@@ -2730,6 +2770,165 @@ async def get_properties_by_zone(
             'status': 'error',
             'message': str(e),
             'data': None
+        }
+
+@app.post("/api/property-valuation")
+async def property_valuation(request: PropertyValuationRequest):
+    """Endpoint para realizar avalúos de propiedades usando modelos ML"""
+    try:
+        # Importar dependencias ML solo cuando se necesiten
+        import pandas as pd
+        import numpy as np
+        import joblib
+        import lightgbm as lgb
+        from catboost import CatBoostRegressor
+        
+        # Convertir request a diccionario
+        property_data = request.dict()
+        
+        # Preprocesar datos para los modelos ML
+        processed_data = property_data.copy()
+        
+        # Mantener valores categóricos como strings para LightGBM
+        processed_data['is_new'] = property_data['is_new']  # "yes" o "no"
+        processed_data['city_id'] = property_data['city_id']  # string
+        
+        # El modelo LightGBM fue entrenado con el formato original del frontend
+        # Usar age_bucket tal como viene del frontend: "1-8", "9-15", etc.
+        processed_data['age_bucket'] = property_data['age_bucket']
+        
+        # Rutas de archivos
+        metadata_path = "/app/ml_models/metadata.json"
+        rent_model_path = "/app/ml_models/model_rent_lightgbm.txt"
+        sell_model_path = "/app/ml_models/model_sell_catboost.cbm"
+        
+        # Leer metadata para obtener el orden correcto de features
+        import json
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        
+        # Obtener el orden de features desde metadata
+        rent_features = metadata['rent']['lightgbm']['features']
+        sell_features = metadata['sell']['catboost']['features']
+        
+        results = {}
+        
+        # Cargar y predecir con modelo de renta (LightGBM original)
+        try:
+            if os.path.exists(rent_model_path):
+                import lightgbm as lgb
+                # Cargar modelo usando model_str para compatibilidad
+                with open(rent_model_path, 'r') as f:
+                    model_str = f.read()
+                rent_model = lgb.Booster(model_str=model_str)
+                
+                # Crear DataFrame con las variables categóricas correctas
+                df_rent = pd.DataFrame([processed_data])[rent_features]
+                
+                # Convertir variables categóricas a pandas categorical dtype
+                categorical_features = ["is_new", "age_bucket", "city_id"]
+                for cat_feat in categorical_features:
+                    if cat_feat in df_rent.columns:
+                        df_rent[cat_feat] = pd.Categorical(df_rent[cat_feat].astype(str))
+                
+                # Predecir con el modelo LightGBM
+                rent_prediction = rent_model.predict(df_rent)[0]
+                rent_price = float(np.expm1(rent_prediction))
+                results['rent_price_per_sqm'] = round(rent_price, 2)
+            else:
+                results['rent_price_per_sqm'] = None
+                results['rent_error'] = "Modelo de renta no encontrado"
+        except Exception as e:
+            results['rent_price_per_sqm'] = None
+            results['rent_error'] = f"Error cargando modelo de renta: {str(e)}"
+        
+        # Cargar y predecir con modelo de venta (CatBoost)
+        try:
+            if os.path.exists(sell_model_path):
+                sell_model = CatBoostRegressor()
+                sell_model.load_model(sell_model_path)
+                df_sell = pd.DataFrame([processed_data])[sell_features]
+                sell_prediction = sell_model.predict(df_sell)[0]
+                sell_price = float(np.expm1(sell_prediction))
+                results['sell_price_per_sqm'] = round(sell_price, 2)
+            else:
+                results['sell_price_per_sqm'] = None
+                results['sell_error'] = "Modelo de venta no encontrado"
+        except Exception as e:
+            results['sell_price_per_sqm'] = None
+            results['sell_error'] = f"Error cargando modelo de venta: {str(e)}"
+        
+        # Calcular precios totales si hay predicciones exitosas
+        if results.get('rent_price_per_sqm'):
+            results['total_rent_price'] = round(results['rent_price_per_sqm'] * property_data['area'], 2)
+        
+        if results.get('sell_price_per_sqm'):
+            results['total_sell_price'] = round(results['sell_price_per_sqm'] * property_data['area'], 2)
+        
+        return {
+            'status': 'success',
+            'message': 'Avalúo realizado exitosamente',
+            'data': {
+                'property_info': property_data,
+                'valuation_results': results
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error en avalúo: {e}")
+        return {
+            'status': 'error',
+            'message': f'Error realizando avalúo: {str(e)}',
+            'data': None
+        }
+
+@app.post("/api/save-valuation")
+async def save_valuation(request: SaveValuationRequest):
+    """Endpoint para guardar avalúos en la base de datos"""
+    try:
+        from sqlmodel import Session
+        from config.db_connection import engine
+        from models.valuation import Valuation
+        from datetime import datetime
+        
+        with Session(engine) as session:
+            # Crear nueva instancia de Valuation
+            new_valuation = Valuation(
+                valuation_name=request.valuation_name,
+                area=request.area,
+                property_type=request.property_type,
+                rooms=request.rooms,
+                baths=request.baths,
+                garages=request.garages,
+                stratum=request.stratum,
+                antiquity=request.antiquity,
+                latitude=request.latitude,
+                longitude=request.longitude,
+                capitalization_rate=request.capitalization_rate,
+                sell_price_per_sqm=request.sell_price_per_sqm,
+                rent_price_per_sqm=request.rent_price_per_sqm,
+                total_sell_price=request.total_sell_price,
+                total_rent_price=request.total_rent_price,
+                final_price=request.final_price,
+                created_at=datetime.utcnow()
+            )
+            
+            # Agregar y commitear a la base de datos
+            session.add(new_valuation)
+            session.commit()
+            session.refresh(new_valuation)
+            
+            return {
+                'status': 'success',
+                'message': 'Avalúo guardado exitosamente',
+                'valuation_id': new_valuation.id
+            }
+            
+    except Exception as e:
+        print(f"Error guardando avalúo: {e}")
+        return {
+            'status': 'error',
+            'message': f'Error guardando avalúo: {str(e)}'
         }
 
 @app.get("/")

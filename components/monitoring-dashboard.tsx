@@ -5,7 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardView } from "@/components/dashboard-view"
 import { PropertyDatabaseView } from "@/components/property-database-view"
 import { SimpleGoogleMap } from "@/components/simple-google-map"
-import { Activity, Database, MapPin } from "lucide-react"
+import { PropertyValuation } from "@/components/property-valuation"
+import { Activity, Database, MapPin, Calculator } from "lucide-react"
 
 export function MonitoringDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -68,6 +69,10 @@ export function MonitoringDashboard() {
               <MapPin className="h-4 w-4" />
               Análisis de Mercado
             </TabsTrigger>
+            <TabsTrigger value="valuation" className="gap-2">
+              <Calculator className="h-4 w-4" />
+              Avalúo
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
@@ -80,6 +85,10 @@ export function MonitoringDashboard() {
 
           <TabsContent value="market">
             <SimpleGoogleMap />
+          </TabsContent>
+          
+          <TabsContent value="valuation">
+            <PropertyValuation />
           </TabsContent>
         </Tabs>
       </div>

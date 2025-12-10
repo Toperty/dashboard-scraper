@@ -12,7 +12,7 @@ import { fetchProperties, fetchCitiesList, type PropertiesResponse, type CityOpt
 import { useAlert } from "@/hooks/use-alert"
 import { useConfirm } from "@/hooks/use-confirm"
 import { useToast } from "@/hooks/use-toast"
-import { GeocodingService } from "@/lib/geocoding"
+import { useGeocoding } from "@/hooks/use-geocoding"
 
 export function PropertyDatabaseView() {
   const [data, setData] = useState<PropertiesResponse | null>(null)
@@ -22,9 +22,7 @@ export function PropertyDatabaseView() {
   const { showToast, hideToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [geocoding, setGeocoding] = useState(false)
-  const [lastGeocodedAddress, setLastGeocodedAddress] = useState<string>('')
-  const [currentCoordinates, setCurrentCoordinates] = useState<{lat: number, lng: number} | null>(null)
+  const { geocoding, lastGeocodedAddress, currentCoordinates, geocodeAddress, clearCoordinates } = useGeocoding()
   const [propertyTypeDropdownOpen, setPropertyTypeDropdownOpen] = useState(false)
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false)
   const [roomsDropdownOpen, setRoomsDropdownOpen] = useState(false)
@@ -301,38 +299,29 @@ export function PropertyDatabaseView() {
     
     // Si hay una dirección y no hemos geocodificado esta dirección antes
     if (filters.address && filters.address !== lastGeocodedAddress) {
-      setGeocoding(true)
-      
       try {
-        const geocodeResult = await GeocodingService.geocodeAddress(filters.address)
+        const geocodeResult = await geocodeAddress(filters.address)
         
         if (geocodeResult.success) {
           coordsToUse = {
             lat: geocodeResult.latitude,
             lng: geocodeResult.longitude
           }
-          setCurrentCoordinates(coordsToUse)
-          setLastGeocodedAddress(filters.address)
           showSuccess(`Dirección encontrada: ${geocodeResult.formatted_address}`)
         } else {
           showError(`Error al geocodificar: ${geocodeResult.error}`)
           coordsToUse = null
-          setCurrentCoordinates(null)
         }
       } catch (error) {
         showError('Error al obtener coordenadas de la dirección')
         coordsToUse = null
-        setCurrentCoordinates(null)
-      } finally {
-        setGeocoding(false)
       }
     }
     
     // Si no hay dirección, limpiar coordenadas
     if (!filters.address) {
       coordsToUse = null
-      setCurrentCoordinates(null)
-      setLastGeocodedAddress('')
+      clearCoordinates()
     }
     
     // Llamar loadProperties con las coordenadas correctas
@@ -365,8 +354,7 @@ export function PropertyDatabaseView() {
     }
     
     // Limpiar TODOS los estados relacionados de inmediato
-    setCurrentCoordinates(null)
-    setLastGeocodedAddress('')
+    clearCoordinates()
     setCurrentPage(1)
     setPropertyTypeDropdownOpen(false)
     setCityDropdownOpen(false)
@@ -375,7 +363,6 @@ export function PropertyDatabaseView() {
     setGaragesDropdownOpen(false)
     setStratumDropdownOpen(false)
     setAntiquityDropdownOpen(false)
-    setGeocoding(false)
     setError(null)
     
     // Limpiar datos actuales antes de cargar nuevos

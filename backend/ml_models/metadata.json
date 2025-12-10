@@ -1,0 +1,46 @@
+{
+  "rent": {
+    "lightgbm": {
+      "model_path": "models\\model_rent_lightgbm.txt",
+      "features": [
+        "area",
+        "rooms",
+        "baths",
+        "garages",
+        "stratum",
+        "latitude",
+        "longitude",
+        "antiquity",
+        "is_new",
+        "area_per_room",
+        "age_bucket",
+        "has_garage",
+        "city_id",
+        "property_type"
+      ],
+      "trained_at": "2025-12-09T23:42:34.055223"
+    }
+  },
+  "sell": {
+    "catboost": {
+      "model_path": "models\\model_sell_catboost.cbm",
+      "features": [
+        "area",
+        "rooms",
+        "baths",
+        "garages",
+        "stratum",
+        "latitude",
+        "longitude",
+        "antiquity",
+        "is_new",
+        "area_per_room",
+        "age_bucket",
+        "has_garage",
+        "city_id",
+        "property_type"
+      ],
+      "trained_at": "2025-12-09T23:42:34.068906"
+    }
+  }
+}
