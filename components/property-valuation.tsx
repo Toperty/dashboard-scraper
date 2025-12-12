@@ -1,24 +1,28 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calculator, DollarSign, Home, MapPin, Search, Save } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useGeocoding } from "@/hooks/use-geocoding"
+import { useConfirm } from "@/hooks/use-confirm"
+import { fetchValuations, deleteValuation, type Valuation, type ValuationsResponse } from "@/lib/api"
 
 interface PropertyData {
-  area: number;
+  area: number | undefined;
   rooms: number;
   baths: number;
   garages: number;
-  stratum: number;
+  stratum: number | undefined;
   latitude: number;
   longitude: number;
-  antiquity: number;
+  antiquity: number | undefined;
   is_new: string;
   area_per_room: number;
   age_bucket: string;
@@ -37,6 +41,7 @@ interface ValuationResult {
   sell_price_per_sqm?: number;
   total_rent_price?: number;
   total_sell_price?: number;
+  rent_monthly_total?: number;
   rent_error?: string;
   sell_error?: string;
   // Nuevos campos para cálculos detallados
@@ -72,10 +77,196 @@ export function PropertyValuation() {
   const [saveMessage, setSaveMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
   const [address, setAddress] = useState("")
   const { geocoding, lastGeocodedAddress, currentCoordinates, geocodeAddress, clearCoordinates } = useGeocoding()
+  const { confirm } = useConfirm()
   const [capitalizationRate, setCapitalizationRate] = useState('') // Sin valor por defecto
+  const [editableFinalPrice, setEditableFinalPrice] = useState<string>('')
+  const [lastSavedValuation, setLastSavedValuation] = useState<string | null>(null)
+  
+  // Estado para la tabla de avalúos
+  const [valuationsData, setValuationsData] = useState<ValuationsResponse | null>(null)
+  const [valuationsLoading, setValuationsLoading] = useState(true)
+  const [currentValuationsPage, setCurrentValuationsPage] = useState(1)
+
+  const loadValuations = useCallback(async () => {
+    try {
+      setValuationsLoading(true)
+      const data = await fetchValuations(currentValuationsPage, 10)
+      setValuationsData(data)
+    } catch (error) {
+      console.error('Error loading valuations:', error)
+      setValuationsData({
+        valuations: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total_count: 0,
+          total_pages: 0,
+          has_next: false,
+          has_prev: false
+        }
+      })
+    } finally {
+      setValuationsLoading(false)
+    }
+  }, [currentValuationsPage])
+
+  // Cargar avalúos al montar el componente
+  useEffect(() => {
+    loadValuations()
+  }, [loadValuations])
+
+  const handleValuationsPageChange = (newPage: number) => {
+    setCurrentValuationsPage(newPage)
+  }
+
+  const handleEditValuation = (valuation: Valuation) => {
+    // Cargar los datos del avalúo en el formulario
+    setFormData({
+      area: valuation.area,
+      property_type: valuation.property_type,
+      rooms: valuation.rooms,
+      baths: valuation.baths,
+      garages: valuation.garages,
+      stratum: valuation.stratum,
+      antiquity: (() => {
+        // Convertir años guardados a valor de rango (1-5)
+        const years = valuation.antiquity
+        if (years < 1) return 1  // "0-1 años"
+        else if (years <= 8) return 2  // "1-8 años"
+        else if (years <= 15) return 3  // "9-15 años"
+        else if (years <= 30) return 4  // "16-30 años"
+        else return 5  // "Más de 30 años"
+      })(),
+      latitude: valuation.latitude,
+      longitude: valuation.longitude,
+      area_per_room: valuation.rooms > 0 ? Number((valuation.area / valuation.rooms).toFixed(2)) : 0,
+      has_garage: valuation.garages > 0 ? 1 : 0,
+      age_bucket: (() => {
+        const years = valuation.antiquity
+        if (years < 1) return "0-1"
+        else if (years <= 8) return "1-8"
+        else if (years <= 15) return "9-15"
+        else if (years <= 30) return "16-30"
+        else return "30+"
+      })(),
+      is_new: "no",  // Valor por defecto
+      city_id: "1"   // Valor por defecto
+    })
+    
+    setValuationName(valuation.valuation_name)
+    setCapitalizationRate(valuation.capitalization_rate?.toString() || '')
+    setEditableFinalPrice(valuation.final_price?.toString() || '')
+    
+    // Crear resultados replicando exactamente los cálculos originales
+    const calculatedResults: any = {
+      sell_price_per_sqm: valuation.sell_price_per_sqm || 0,
+      rent_price_per_sqm: valuation.rent_price_per_sqm || 0,
+      total_sell_price: valuation.total_sell_price || 0,
+      total_rent_price: valuation.total_rent_price || 0,
+      average_valuation: valuation.final_price || 0
+    }
+    
+    // Calcular valores correctos desde los datos guardados
+    if (valuation.rent_price_per_sqm) {
+      // Renta mensual total = precio por m² × área (esta es la renta mensual real)
+      const monthlyRentTotal = valuation.rent_price_per_sqm * valuation.area
+      // Renta anual = renta mensual × 12
+      const annualRent = monthlyRentTotal * 12
+      
+      // Agregar el valor de renta mensual total que faltaba
+      calculatedResults.rent_monthly_total = monthlyRentTotal
+      calculatedResults.rent_annual_price = annualRent
+      
+      if (valuation.capitalization_rate) {
+        const capRate = valuation.capitalization_rate
+        // total_rent_price guardado es el valor capitalizado
+        const capitalizedValue = valuation.total_rent_price || (monthlyRentTotal / (capRate / 100))
+        
+        calculatedResults.capitalization_rate = capRate
+        calculatedResults.capitalized_value = capitalizedValue
+        // Mantener el total_rent_price como el valor capitalizado guardado
+        calculatedResults.total_rent_price = capitalizedValue
+        
+        // Si también hay precio de venta, calcular promedio
+        if (valuation.sell_price_per_sqm && valuation.total_sell_price) {
+          const averageValuation = (valuation.total_sell_price + capitalizedValue) / 2
+          calculatedResults.average_valuation = averageValuation
+        }
+      }
+    }
+    
+    setResults(calculatedResults)
+    setLastSavedValuation(null)
+    
+    // Scroll hacia arriba para ver el formulario
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Función para resetear el formulario
+  const resetForm = () => {
+    setFormData({
+      area: undefined,
+      rooms: 0,
+      baths: 0,
+      garages: 0,
+      stratum: undefined,
+      antiquity: undefined,
+      latitude: 0,
+      longitude: 0,
+      area_per_room: 0,
+      has_garage: 0,
+      age_bucket: "",
+      is_new: "no",
+      city_id: "1",
+      property_type: undefined as any
+    })
+    setValuationName("")
+    setResults(null)
+    setAddress("")
+    setCapitalizationRate("")
+    setEditableFinalPrice("")
+    setSaveMessage(null)
+  }
+
+  const handleDeleteValuation = async (valuation: Valuation) => {
+    const result = await confirm(
+      `Esta acción eliminará permanentemente el avalúo "${valuation.valuation_name}". Esta acción no se puede deshacer.`,
+      "¿Eliminar avalúo?"
+    )
+    
+    if (result.confirmed) {
+      try {
+        const deleteResult = await deleteValuation(valuation.id)
+        
+        if (deleteResult.status === 'success') {
+          setSaveMessage({
+            type: 'success',
+            text: `✅ ${deleteResult.message}`
+          })
+          loadValuations() // Recargar la tabla
+        } else {
+          setSaveMessage({
+            type: 'error',
+            text: `❌ ${deleteResult.message}`
+          })
+        }
+        
+        setTimeout(() => setSaveMessage(null), 5000)
+      } catch (error) {
+        setSaveMessage({
+          type: 'error',
+          text: '❌ Error eliminando avalúo'
+        })
+        setTimeout(() => setSaveMessage(null), 5000)
+      }
+    }
+  }
 
   const handleSaveValuation = async () => {
     if (!results || !valuationName.trim()) return
+    
+    // Prevenir múltiples ejecuciones
+    if (saving) return
     
     setSaving(true)
     
@@ -87,6 +278,11 @@ export function PropertyValuation() {
         const capRate = parseFloat(capitalizationRate)
         capitalizedRentValue = monthlyRent / (capRate / 100)
       }
+
+      // Usar el valor final editado si existe, sino usar el calculado
+      const finalPriceForSave = editableFinalPrice && parseFloat(editableFinalPrice) > 0 
+        ? parseFloat(editableFinalPrice) 
+        : (results.average_valuation || results.capitalized_value || results.total_sell_price)
 
       const valuationData = {
         valuation_name: valuationName.trim(),
@@ -104,7 +300,7 @@ export function PropertyValuation() {
         rent_price_per_sqm: results.rent_price_per_sqm,
         total_sell_price: results.total_sell_price,
         total_rent_price: capitalizedRentValue, // Ahora guarda el valor capitalizado
-        final_price: results.average_valuation || results.capitalized_value || results.total_sell_price
+        final_price: finalPriceForSave
       }
 
       // Usar variable de entorno para la URL del backend, con fallback para desarrollo
@@ -115,26 +311,36 @@ export function PropertyValuation() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(valuationData)
+        body: JSON.stringify({
+          ...valuationData,
+          // Enviar flag para verificar duplicados en el backend
+          check_duplicates: true
+        })
       })
 
-      if (response.ok) {
-        const result = await response.json()
+      const result = await response.json()
+      
+      if (result.status === 'success') {
         setSaveMessage({
           type: 'success',
-          text: `✅ ${result.message || 'Avalúo guardado exitosamente'}`
+          text: `✅ ${result.message}`
         })
-        // Limpiar mensaje después de 5 segundos
-        setTimeout(() => setSaveMessage(null), 5000)
+        // Recargar la tabla de avalúos
+        loadValuations()
+        
+        // Si fue creación, limpiar el formulario para el siguiente avalúo
+        if (result.action === 'created') {
+          resetForm()
+        }
       } else {
-        const errorData = await response.json()
         setSaveMessage({
           type: 'error',
-          text: `❌ ${errorData.message || 'Error al guardar avalúo'}`
+          text: `❌ ${result.message}`
         })
-        // Limpiar mensaje después de 5 segundos
-        setTimeout(() => setSaveMessage(null), 5000)
       }
+      
+      // Limpiar mensaje después de 5 segundos
+      setTimeout(() => setSaveMessage(null), 5000)
     } catch (error) {
       setSaveMessage({
         type: 'error',
@@ -159,15 +365,26 @@ export function PropertyValuation() {
     { value: 9, label: "Duplex" },
     { value: 0, label: "Otro" }
   ]
+
+  const antiquityRanges = [
+    { value: 1, label: "0-1 años", bucket: "0-1" },
+    { value: 2, label: "1-8 años", bucket: "1-8" },
+    { value: 3, label: "9-15 años", bucket: "9-15" },
+    { value: 4, label: "16-30 años", bucket: "16-30" },
+    { value: 5, label: "Más de 30 años", bucket: "30+" }
+  ]
   
   const stratums = [1, 2, 3, 4, 5, 6]
 
   const handleInputChange = (field: keyof PropertyData, value: any) => {
     const updatedData = { ...formData, [field]: value }
     
+    // Limpiar hash de avalúo guardado cuando cambien datos relevantes
+    setLastSavedValuation(null)
+    
     // Actualizar area_per_room cuando cambien area o rooms
     if (field === 'area' || field === 'rooms') {
-      if (updatedData.rooms > 0 && updatedData.area > 0) {
+      if (updatedData.rooms > 0 && updatedData.area && updatedData.area > 0) {
         updatedData.area_per_room = Number((updatedData.area / updatedData.rooms).toFixed(2))
       } else {
         updatedData.area_per_room = 0
@@ -179,14 +396,12 @@ export function PropertyValuation() {
       updatedData.has_garage = value > 0 ? 1 : 0
     }
     
-    // Actualizar age_bucket cuando cambie antiquity
+    // Actualizar age_bucket cuando cambie antiquity (ahora antiquity es el valor del rango)
     if (field === 'antiquity') {
-      const years = Number(value)
-      if (years < 1) updatedData.age_bucket = "0-1"
-      else if (years <= 8) updatedData.age_bucket = "1-8"
-      else if (years <= 15) updatedData.age_bucket = "9-15"
-      else if (years <= 30) updatedData.age_bucket = "16-30"
-      else updatedData.age_bucket = "30+"
+      const selectedRange = antiquityRanges.find(range => range.value === Number(value))
+      if (selectedRange) {
+        updatedData.age_bucket = selectedRange.bucket
+      }
     }
     
     setFormData(updatedData)
@@ -213,41 +428,103 @@ export function PropertyValuation() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleCalculateValuation = async () => {
+    // Limpiar resultados anteriores primero
+    setResults(null)
     
-    // Validar nombre del avalúo
-    if (!valuationName.trim()) {
-      const nameInput = document.getElementById('valuation_name') as HTMLInputElement
-      if (nameInput) {
-        nameInput.focus()
-        nameInput.reportValidity()
+    // Validar campos requeridos para el cálculo
+    
+    // Validar área
+    if (!formData.area || formData.area <= 0) {
+      const areaInput = document.getElementById('area') as HTMLInputElement
+      if (areaInput) {
+        areaInput.focus()
+        areaInput.reportValidity()
       }
       return
     }
     
-    // Validar campos de Select usando inputs ocultos para HTML5 validation
-    const propertyTypeInput = document.getElementById('property_type_hidden') as HTMLInputElement
-    const stratumInput = document.getElementById('stratum_hidden') as HTMLInputElement
+    // Validar habitaciones
+    if (formData.rooms === undefined || formData.rooms < 0) {
+      const roomsInput = document.getElementById('rooms') as HTMLInputElement
+      if (roomsInput) {
+        roomsInput.focus()
+        roomsInput.reportValidity()
+      }
+      return
+    }
     
+    // Validar baños
+    if (formData.baths === undefined || formData.baths < 0) {
+      const bathsInput = document.getElementById('baths') as HTMLInputElement
+      if (bathsInput) {
+        bathsInput.focus()
+        bathsInput.reportValidity()
+      }
+      return
+    }
+    
+    // Validar garajes
+    if (formData.garages === undefined || formData.garages < 0) {
+      const garagesInput = document.getElementById('garajes') as HTMLInputElement
+      if (garagesInput) {
+        garagesInput.focus()
+        garagesInput.reportValidity()
+      }
+      return
+    }
+    
+    // Validar coordenadas
+    if (!formData.latitude || formData.latitude === 0 || !formData.longitude || formData.longitude === 0) {
+      await confirm(
+        'Por favor, obtenga las coordenadas usando el botón "Buscar Coordenadas" antes de calcular el avalúo.',
+        "Coordenadas requeridas"
+      )
+      return
+    }
+    
+    // Validar tipo de propiedad
+    const propertyTypeInput = document.getElementById('property_type_hidden') as HTMLInputElement
     if (propertyTypeInput && (!formData.property_type || formData.property_type === 0)) {
       propertyTypeInput.focus()
       propertyTypeInput.reportValidity()
       return
     }
     
+    // Validar estrato
+    const stratumInput = document.getElementById('stratum_hidden') as HTMLInputElement
     if (stratumInput && (!formData.stratum || formData.stratum === 0)) {
       stratumInput.focus()
       stratumInput.reportValidity()
       return
     }
     
+    // Validar antigüedad
+    const antiquityInput = document.getElementById('antiquity_hidden') as HTMLInputElement
+    if (antiquityInput && (!formData.antiquity || formData.antiquity === 0)) {
+      antiquityInput.focus()
+      antiquityInput.reportValidity()
+      return
+    }
+    
+    // Validar tasa de capitalización si se requiere para cálculo de renta
+    if (!capitalizationRate || capitalizationRate.trim() === '' || parseFloat(capitalizationRate) <= 0) {
+      const capRateInput = document.getElementById('capitalization_rate') as HTMLInputElement
+      if (capRateInput) {
+        capRateInput.focus()
+      }
+      await confirm(
+        'Por favor, ingrese una tasa de capitalización válida (mayor a 0). Esta tasa es necesaria para calcular el valor por renta capitalizada.',
+        "Tasa de capitalización requerida"
+      )
+      return
+    }
+    
     setLoading(true)
     
     try {
-      // Preparar datos convirtiendo undefined a 0 donde sea necesario
+      // Preparar datos convirtiendo undefined a 0 y asegurando tipos correctos
       const dataToSend = {
-        ...formData,
         area: formData.area || 0,
         rooms: formData.rooms !== undefined ? formData.rooms : 0,
         baths: formData.baths !== undefined ? formData.baths : 0,
@@ -256,7 +533,13 @@ export function PropertyValuation() {
         latitude: formData.latitude || 0,
         longitude: formData.longitude || 0,
         antiquity: formData.antiquity !== undefined ? formData.antiquity : 0,
-        property_type: formData.property_type || 0
+        property_type: formData.property_type || 0,
+        // Asegurar que estos campos tengan el tipo correcto para el backend
+        is_new: typeof formData.is_new === 'string' ? formData.is_new : (formData.is_new ? "si" : "no"),
+        area_per_room: formData.area_per_room || 0,
+        age_bucket: formData.age_bucket || "0-1",
+        has_garage: formData.has_garage || 0,
+        city_id: formData.city_id || "1"
       }
       
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -285,6 +568,7 @@ export function PropertyValuation() {
           const annualRent = monthlyRent * 12
           
           enhancedResults.capitalization_rate = capRate
+          enhancedResults.rent_monthly_total = monthlyRent
           enhancedResults.rent_annual_price = annualRent
           enhancedResults.capitalized_value = capitalizedValue
           
@@ -296,6 +580,11 @@ export function PropertyValuation() {
         }
         
         setResults(enhancedResults)
+        // Actualizar el valor final editable con el valor calculado
+        const calculatedFinalPrice = enhancedResults.average_valuation || enhancedResults.capitalized_value || enhancedResults.total_sell_price
+        if (calculatedFinalPrice) {
+          setEditableFinalPrice(calculatedFinalPrice.toString())
+        }
       } else {
         console.error('Error:', data.message)
       }
@@ -304,6 +593,11 @@ export function PropertyValuation() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    // No hacer nada, el cálculo se maneja con botón separado
   }
 
   const formatCurrency = (value: number) => {
@@ -337,7 +631,14 @@ export function PropertyValuation() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="area">Área (m²)</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="area" className="cursor-help">Área (m²)</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Área total construida de la propiedad en metros cuadrados</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Input
                     id="area"
                     type="number"
@@ -350,7 +651,14 @@ export function PropertyValuation() {
                   />
                 </div>
                 <div style={{ position: 'relative' }}>
-                  <Label htmlFor="property_type">Tipo de Propiedad *</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="property_type" className="cursor-help">Tipo de Propiedad *</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Clasificación del inmueble según su uso y características</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Select
                     value={formData.property_type ? formData.property_type.toString() : ""}
                     onValueChange={(value) => handleInputChange('property_type', Number(value))}
@@ -390,7 +698,14 @@ export function PropertyValuation() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="rooms">Habitaciones</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="rooms" className="cursor-help">Habitaciones</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Número total de habitaciones o alcobas de la propiedad</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Input
                     id="rooms"
                     type="number"
@@ -403,7 +718,14 @@ export function PropertyValuation() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="baths">Baños</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="baths" className="cursor-help">Baños</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Número total de baños completos y medios baños</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Input
                     id="baths"
                     type="number"
@@ -416,7 +738,14 @@ export function PropertyValuation() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="garajes">Garajes</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="garajes" className="cursor-help">Garajes</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Número de espacios de parqueadero o garaje disponibles</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Input
                     id="garajes"
                     type="number"
@@ -432,7 +761,14 @@ export function PropertyValuation() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div style={{ position: 'relative' }}>
-                  <Label htmlFor="stratum">Estrato *</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="stratum" className="cursor-help">Estrato *</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Clasificación socioeconómica del sector donde se ubica la propiedad (1-6)</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Select
                     value={formData.stratum ? formData.stratum.toString() : ""}
                     onValueChange={(value) => handleInputChange('stratum', Number(value))}
@@ -468,40 +804,84 @@ export function PropertyValuation() {
                     onChange={() => {}}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="antiquity">Antigüedad (años)</Label>
-                  <Input
-                    id="antiquity"
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="Ej: 5"
-                    value={formData.antiquity !== undefined && formData.antiquity !== null ? formData.antiquity.toString() : ''}
-                    onChange={(e) => handleInputChange('antiquity', e.target.value === '' ? undefined : Number(e.target.value))}
-                    onFocus={(e) => { if (e.target.value === '0') e.target.select() }}
+                <div style={{ position: 'relative' }}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="antiquity" className="cursor-help">Antigüedad *</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Rango de antigüedad de construcción de la propiedad</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Select
+                    value={formData.antiquity ? formData.antiquity.toString() : ""}
+                    onValueChange={(value) => handleInputChange('antiquity', Number(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccione el rango de antigüedad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {antiquityRanges.map((range) => (
+                        <SelectItem key={range.value} value={range.value.toString()}>
+                          {range.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Input oculto para validación HTML5 */}
+                  <input
+                    id="antiquity_hidden"
+                    type="text"
+                    value={formData.antiquity || ''}
                     required
+                    style={{ 
+                      position: 'absolute', 
+                      top: 0, 
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0, 
+                      pointerEvents: 'none',
+                      zIndex: -1
+                    }}
+                    tabIndex={-1}
+                    onChange={() => {}}
                   />
-                  {formData.age_bucket && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Rango detectado: {formData.age_bucket}
-                    </p>
-                  )}
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="valuation_name">Nombre del Avalúo</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="valuation_name" className="cursor-help">
+                      Nombre del Avalúo
+                    </Label>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Este nombre se usa para guardar e identificar el avalúo en el historial</p>
+                  </TooltipContent>
+                </Tooltip>
                 <Input
                   id="valuation_name"
                   value={valuationName}
-                  onChange={(e) => setValuationName(e.target.value)}
+                  onChange={(e) => {
+                    setValuationName(e.target.value)
+                    setLastSavedValuation(null) // Limpiar hash cuando cambie el nombre
+                  }}
                   placeholder="Ej: Apartamento Chicó Norte - Cliente ABC"
                   required
                 />
               </div>
 
               <div>
-                <Label htmlFor="address">Buscar por Dirección</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="address" className="cursor-help">Buscar por Dirección</Label>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Ingrese la dirección para obtener automáticamente las coordenadas GPS</p>
+                  </TooltipContent>
+                </Tooltip>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Input
@@ -535,7 +915,14 @@ export function PropertyValuation() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="latitude">Latitud</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="latitude" className="cursor-help">Latitud</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Coordenada geográfica que indica la posición norte-sur (se obtiene automáticamente)</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Input
                     id="latitude"
                     type="number"
@@ -551,7 +938,14 @@ export function PropertyValuation() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="longitude">Longitud</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="longitude" className="cursor-help">Longitud</Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Coordenada geográfica que indica la posición este-oeste (se obtiene automáticamente)</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Input
                     id="longitude"
                     type="number"
@@ -569,17 +963,31 @@ export function PropertyValuation() {
               </div>
               
               {lastGeocodedAddress && currentCoordinates && (
-                <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
-                  ✓ Coordenadas obtenidas de: {lastGeocodedAddress}
-                  <br />
-                  <span className="text-xs text-gray-600">
-                    Lat: {currentCoordinates.lat.toFixed(4)}, Lng: {currentCoordinates.lng.toFixed(4)}
-                  </span>
+                <div className="text-xs text-green-600 bg-green-50 p-2 rounded flex items-center justify-between">
+                  <div>
+                    ✓ Coordenadas obtenidas de: {lastGeocodedAddress}
+                  </div>
+                  <a
+                    href={`https://www.google.com/maps?q=${currentCoordinates.lat},${currentCoordinates.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium"
+                  >
+                    <MapPin className="h-3 w-3" />
+                    Ver en Maps
+                  </a>
                 </div>
               )}
 
               <div>
-                <Label htmlFor="capitalization_rate">Tasa de Capitalización Mensual (%)</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="capitalization_rate" className="cursor-help">Tasa de Capitalización Mensual (%)</Label>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Porcentaje mensual usado para convertir arriendo en valor de propiedad. Refleja el rendimiento esperado del mercado inmobiliario</p>
+                  </TooltipContent>
+                </Tooltip>
                 <Input
                   id="capitalization_rate"
                   type="number"
@@ -588,7 +996,10 @@ export function PropertyValuation() {
                   max="2.0"
                   placeholder="Ej: 0.5"
                   value={capitalizationRate}
-                  onChange={(e) => setCapitalizationRate(e.target.value)}
+                  onChange={(e) => {
+                    setCapitalizationRate(e.target.value)
+                    setLastSavedValuation(null) // Limpiar hash cuando cambie la tasa
+                  }}
                   required
                 />
                 <p className="text-xs text-muted-foreground mt-1">
@@ -596,7 +1007,12 @@ export function PropertyValuation() {
                 </p>
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button 
+                type="button" 
+                className="w-full" 
+                disabled={loading}
+                onClick={handleCalculateValuation}
+              >
                 {loading ? "Calculando avalúo..." : "Calcular Avalúo"}
               </Button>
             </form>
@@ -618,18 +1034,45 @@ export function PropertyValuation() {
             {results ? (
               <div className="space-y-6">
                 {/* Resumen Final */}
-                {results.average_valuation && (
-                  <div className="p-6 border-2 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-                    <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2 text-lg">
-                      <Calculator className="h-5 w-5" />
-                      Avalúo Promedio Final
-                    </h3>
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-purple-900 mb-2">
-                        {formatCurrency(results.average_valuation)}
+                {(results.average_valuation || results.capitalized_value || results.total_sell_price) && (
+                  <div className="space-y-4">
+                    <div className="p-6 border-2 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+                      <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2 text-lg">
+                        <Calculator className="h-5 w-5" />
+                        Avalúo Final
+                      </h3>
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-purple-900 mb-2">
+                          {editableFinalPrice ? formatCurrency(parseFloat(editableFinalPrice)) : 
+                           formatCurrency(results.average_valuation || results.capitalized_value || results.total_sell_price!)}
+                        </div>
+                        <p className="text-sm text-purple-600">
+                          {results.average_valuation ? 
+                            'Promedio entre valoración por venta y por renta capitalizada' : 
+                            'Valoración calculada por metodología'}
+                        </p>
                       </div>
-                      <p className="text-sm text-purple-600">
-                        Promedio entre valoración por venta y por renta capitalizada
+                    </div>
+                    
+                    {/* Campo editable para valor final */}
+                    <div className="p-4 border rounded-lg bg-orange-50 border-orange-200">
+                      <Label htmlFor="editable_final_price" className="text-orange-800 font-semibold">
+                        Valor Final Ajustado (Opcional)
+                      </Label>
+                      <Input
+                        id="editable_final_price"
+                        type="number"
+                        min="1"
+                        placeholder="Ingrese valor ajustado si es necesario"
+                        value={editableFinalPrice}
+                        onChange={(e) => {
+                          setEditableFinalPrice(e.target.value)
+                          setLastSavedValuation(null) // Limpiar hash cuando cambie el precio final
+                        }}
+                        className="mt-2"
+                      />
+                      <p className="text-xs text-orange-700 mt-2">
+                        Modifique este valor si como avaluador considera que debe ajustarse el resultado final
                       </p>
                     </div>
                   </div>
@@ -684,7 +1127,7 @@ export function PropertyValuation() {
                       </div>
                       <div className="flex justify-between text-sm">
                         <span>Renta mensual total:</span>
-                        <Badge variant="outline">{formatCurrency(results.total_rent_price!)}</Badge>
+                        <Badge variant="outline">{formatCurrency(results.rent_monthly_total!)}</Badge>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span>Renta anual:</span>
@@ -726,19 +1169,35 @@ export function PropertyValuation() {
 
                 {/* Botón para guardar avalúo - más grande */}
                 <div className="flex justify-center pt-4">
-                  <Button
-                    type="button"
-                    onClick={handleSaveValuation}
-                    disabled={saving || !valuationName.trim()}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    {saving ? (
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                    ) : (
-                      <Save className="h-4 w-4" />
-                    )}
-                    {saving ? 'Guardando...' : 'Guardar Avalúo'}
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <Button
+                          type="button"
+                          onClick={handleSaveValuation}
+                          disabled={saving || !valuationName.trim()}
+                          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                        >
+                          {saving ? (
+                            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                          ) : (
+                            <Save className="h-4 w-4" />
+                          )}
+                          {saving ? 'Guardando...' : 'Guardar Avalúo'}
+                        </Button>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {saving 
+                          ? 'Guardando avalúo...' 
+                          : !valuationName.trim() 
+                            ? 'Ingrese un nombre para el avalúo antes de guardar'
+                            : 'Guardar este avalúo en el historial'
+                        }
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             ) : (
@@ -750,6 +1209,136 @@ export function PropertyValuation() {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Tabla de Historial de Avalúos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Historial de Avalúos
+          </CardTitle>
+          <CardDescription>
+            Lista de todos los avalúos realizados ordenados del más reciente al más antiguo
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-lg w-full">
+            <div className="overflow-x-auto w-full">
+              <Table className="w-full">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Área (m²)</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Habitaciones</TableHead>
+                    <TableHead>Baños</TableHead>
+                    <TableHead>Estrato</TableHead>
+                    <TableHead>Precio Final</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {valuationsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                          Cargando avalúos...
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : valuationsData?.valuations.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        No hay avalúos guardados aún
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    valuationsData?.valuations.map((valuation) => (
+                      <TableRow key={valuation.id}>
+                        <TableCell className="font-medium">{valuation.valuation_name}</TableCell>
+                        <TableCell>{valuation.area}</TableCell>
+                        <TableCell>
+                          {propertyTypes.find(t => t.value === valuation.property_type)?.label || 'Otro'}
+                        </TableCell>
+                        <TableCell>{valuation.rooms}</TableCell>
+                        <TableCell>{valuation.baths}</TableCell>
+                        <TableCell>Estrato {valuation.stratum}</TableCell>
+                        <TableCell className="font-bold text-green-600">
+                          {formatCurrency(valuation.final_price)}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(valuation.created_at).toLocaleDateString('es-CO')}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditValuation(valuation)}
+                              className="flex items-center gap-1"
+                            >
+                              <Edit className="h-3 w-3" />
+                              Editar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteValuation(valuation)}
+                              className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              Eliminar
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Paginación */}
+          {valuationsData?.pagination && valuationsData.pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-muted-foreground">
+                Mostrando {((valuationsData.pagination.page - 1) * valuationsData.pagination.limit) + 1} a {Math.min(valuationsData.pagination.page * valuationsData.pagination.limit, valuationsData.pagination.total_count)} de {valuationsData.pagination.total_count} avalúos
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleValuationsPageChange(currentValuationsPage - 1)}
+                  disabled={!valuationsData.pagination.has_prev || valuationsLoading}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </Button>
+                
+                <div className="flex items-center gap-1">
+                  <span className="text-sm">
+                    Página {valuationsData.pagination.page} de {valuationsData.pagination.total_pages}
+                  </span>
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleValuationsPageChange(currentValuationsPage + 1)}
+                  disabled={!valuationsData.pagination.has_next || valuationsLoading}
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

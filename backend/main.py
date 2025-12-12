@@ -2884,51 +2884,222 @@ async def property_valuation(request: PropertyValuationRequest):
 
 @app.post("/api/save-valuation")
 async def save_valuation(request: SaveValuationRequest):
-    """Endpoint para guardar avalúos en la base de datos"""
+    """Endpoint para guardar o actualizar avalúos en la base de datos"""
     try:
-        from sqlmodel import Session
+        from sqlmodel import Session, select
         from config.db_connection import engine
         from models.valuation import Valuation
         from datetime import datetime
+        from sqlalchemy.exc import IntegrityError
         
         with Session(engine) as session:
-            # Crear nueva instancia de Valuation
-            new_valuation = Valuation(
-                valuation_name=request.valuation_name,
-                area=request.area,
-                property_type=request.property_type,
-                rooms=request.rooms,
-                baths=request.baths,
-                garages=request.garages,
-                stratum=request.stratum,
-                antiquity=request.antiquity,
-                latitude=request.latitude,
-                longitude=request.longitude,
-                capitalization_rate=request.capitalization_rate,
-                sell_price_per_sqm=request.sell_price_per_sqm,
-                rent_price_per_sqm=request.rent_price_per_sqm,
-                total_sell_price=request.total_sell_price,
-                total_rent_price=request.total_rent_price,
-                final_price=request.final_price,
-                created_at=datetime.utcnow()
-            )
+            # Verificar si ya existe un avalúo con ese nombre
+            existing_valuation = session.exec(
+                select(Valuation).where(Valuation.valuation_name == request.valuation_name)
+            ).first()
             
-            # Agregar y commitear a la base de datos
-            session.add(new_valuation)
-            session.commit()
-            session.refresh(new_valuation)
+            if existing_valuation:
+                # Si existe, verificar si hay cambios en el precio final
+                if existing_valuation.final_price != request.final_price:
+                    # Actualizar el registro existente
+                    existing_valuation.area = request.area
+                    existing_valuation.property_type = request.property_type
+                    existing_valuation.rooms = request.rooms
+                    existing_valuation.baths = request.baths
+                    existing_valuation.garages = request.garages
+                    existing_valuation.stratum = request.stratum
+                    existing_valuation.antiquity = request.antiquity
+                    existing_valuation.latitude = request.latitude
+                    existing_valuation.longitude = request.longitude
+                    existing_valuation.capitalization_rate = request.capitalization_rate
+                    existing_valuation.sell_price_per_sqm = request.sell_price_per_sqm
+                    existing_valuation.rent_price_per_sqm = request.rent_price_per_sqm
+                    existing_valuation.total_sell_price = request.total_sell_price
+                    existing_valuation.total_rent_price = request.total_rent_price
+                    existing_valuation.final_price = request.final_price
+                    existing_valuation.updated_at = datetime.utcnow()
+                    
+                    session.commit()
+                    session.refresh(existing_valuation)
+                    
+                    return {
+                        'status': 'success',
+                        'message': 'Avalúo actualizado exitosamente',
+                        'valuation_id': existing_valuation.id,
+                        'action': 'updated'
+                    }
+                else:
+                    # El avalúo ya existe con el mismo precio final
+                    return {
+                        'status': 'error',
+                        'message': f'Ya existe un avalúo con el nombre "{request.valuation_name}" y el mismo precio final. Use un nombre diferente o modifique el precio.',
+                        'action': 'duplicate'
+                    }
             
-            return {
-                'status': 'success',
-                'message': 'Avalúo guardado exitosamente',
-                'valuation_id': new_valuation.id
-            }
+            # Si no existe, crear nuevo avalúo
+            try:
+                new_valuation = Valuation(
+                    valuation_name=request.valuation_name,
+                    area=request.area,
+                    property_type=request.property_type,
+                    rooms=request.rooms,
+                    baths=request.baths,
+                    garages=request.garages,
+                    stratum=request.stratum,
+                    antiquity=request.antiquity,
+                    latitude=request.latitude,
+                    longitude=request.longitude,
+                    capitalization_rate=request.capitalization_rate,
+                    sell_price_per_sqm=request.sell_price_per_sqm,
+                    rent_price_per_sqm=request.rent_price_per_sqm,
+                    total_sell_price=request.total_sell_price,
+                    total_rent_price=request.total_rent_price,
+                    final_price=request.final_price,
+                    created_at=datetime.utcnow()
+                )
+                
+                session.add(new_valuation)
+                session.commit()
+                session.refresh(new_valuation)
+                
+                return {
+                    'status': 'success',
+                    'message': 'Avalúo guardado exitosamente',
+                    'valuation_id': new_valuation.id,
+                    'action': 'created'
+                }
+                
+            except IntegrityError as ie:
+                session.rollback()
+                return {
+                    'status': 'error',
+                    'message': f'Ya existe un avalúo con el nombre "{request.valuation_name}". Use un nombre diferente.',
+                    'action': 'duplicate'
+                }
             
     except Exception as e:
         print(f"Error guardando avalúo: {e}")
         return {
             'status': 'error',
             'message': f'Error guardando avalúo: {str(e)}'
+        }
+
+@app.delete("/api/valuations/{valuation_id}")
+async def delete_valuation(valuation_id: int):
+    """Endpoint para eliminar un avalúo"""
+    try:
+        from sqlmodel import Session, select
+        from config.db_connection import engine
+        from models.valuation import Valuation
+        
+        with Session(engine) as session:
+            # Buscar el avalúo
+            valuation = session.exec(select(Valuation).where(Valuation.id == valuation_id)).first()
+            
+            if not valuation:
+                return {
+                    'status': 'error',
+                    'message': 'Avalúo no encontrado'
+                }
+            
+            # Eliminar el avalúo
+            session.delete(valuation)
+            session.commit()
+            
+            return {
+                'status': 'success',
+                'message': 'Avalúo eliminado exitosamente'
+            }
+            
+    except Exception as e:
+        print(f"Error eliminando avalúo: {e}")
+        return {
+            'status': 'error',
+            'message': f'Error eliminando avalúo: {str(e)}'
+        }
+
+@app.get("/api/valuations")
+async def get_valuations(
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page")
+):
+    """Endpoint para obtener avalúos con paginación"""
+    try:
+        from sqlmodel import Session, select, func
+        from config.db_connection import engine
+        from models.valuation import Valuation
+        
+        with Session(engine) as session:
+            # Contar total de avalúos
+            count_query = select(func.count(Valuation.id))
+            total_count = session.exec(count_query).first() or 0
+            
+            # Calcular offset
+            offset = (page - 1) * limit
+            
+            # Obtener avalúos ordenados del más reciente al más antiguo
+            valuations_query = (
+                select(Valuation)
+                .order_by(Valuation.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+            valuations = session.exec(valuations_query).all()
+            
+            # Calcular información de paginación
+            total_pages = (total_count + limit - 1) // limit
+            has_next = page < total_pages
+            has_prev = page > 1
+            
+            # Convertir a diccionarios para la respuesta
+            valuations_data = []
+            for valuation in valuations:
+                valuations_data.append({
+                    "id": valuation.id,
+                    "valuation_name": valuation.valuation_name,
+                    "area": valuation.area,
+                    "property_type": valuation.property_type,
+                    "rooms": valuation.rooms,
+                    "baths": valuation.baths,
+                    "garages": valuation.garages,
+                    "stratum": valuation.stratum,
+                    "antiquity": valuation.antiquity,
+                    "latitude": valuation.latitude,
+                    "longitude": valuation.longitude,
+                    "capitalization_rate": valuation.capitalization_rate,
+                    "sell_price_per_sqm": valuation.sell_price_per_sqm,
+                    "rent_price_per_sqm": valuation.rent_price_per_sqm,
+                    "total_sell_price": valuation.total_sell_price,
+                    "total_rent_price": valuation.total_rent_price,
+                    "final_price": valuation.final_price,
+                    "created_at": valuation.created_at.isoformat(),
+                    "updated_at": valuation.updated_at.isoformat() if valuation.updated_at else None
+                })
+            
+            return {
+                "valuations": valuations_data,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": has_next,
+                    "has_prev": has_prev
+                }
+            }
+            
+    except Exception as e:
+        print(f"Error obteniendo avalúos: {e}")
+        return {
+            "valuations": [],
+            "pagination": {
+                "page": 1,
+                "limit": 10,
+                "total_count": 0,
+                "total_pages": 0,
+                "has_next": False,
+                "has_prev": False
+            }
         }
 
 @app.get("/")

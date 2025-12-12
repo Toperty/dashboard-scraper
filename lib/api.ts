@@ -161,6 +161,40 @@ export interface CityOption {
   name: string;
 }
 
+export interface Valuation {
+  id: number;
+  valuation_name: string;
+  area: number;
+  property_type: number;
+  rooms: number;
+  baths: number;
+  garages: number;
+  stratum: number;
+  antiquity: number;
+  latitude: number;
+  longitude: number;
+  capitalization_rate?: number;
+  sell_price_per_sqm?: number;
+  rent_price_per_sqm?: number;
+  total_sell_price?: number;
+  total_rent_price?: number;
+  final_price: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ValuationsResponse {
+  valuations: Valuation[];
+  pagination: {
+    page: number;
+    limit: number;
+    total_count: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+}
+
 export async function fetchCitiesList(): Promise<CityOption[]> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/cities/list`, {
@@ -247,6 +281,64 @@ export async function fetchProperties(
         has_next: false,
         has_prev: false
       }
+    };
+  }
+}
+
+export async function fetchValuations(
+  page: number = 1,
+  limit: number = 10
+): Promise<ValuationsResponse> {
+  try {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+
+    const response = await fetch(`${API_BASE_URL}/api/valuations?${params}`, {
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error fetching valuations:', error);
+    return {
+      valuations: [],
+      pagination: {
+        page: 1,
+        limit: 10,
+        total_count: 0,
+        total_pages: 0,
+        has_next: false,
+        has_prev: false
+      }
+    };
+  }
+}
+
+export async function deleteValuation(valuationId: number): Promise<{status: string, message: string}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/valuations/${valuationId}`, {
+      method: 'DELETE',
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error deleting valuation:', error);
+    return {
+      status: 'error',
+      message: 'Error de conexión al eliminar el avalúo'
     };
   }
 }

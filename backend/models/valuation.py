@@ -13,7 +13,7 @@ class Valuation(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True, description="Unique valuation ID")
     
     # Valuation identification
-    valuation_name: str = Field(max_length=255, description="Name/description of the valuation")
+    valuation_name: str = Field(max_length=255, description="Name/description of the valuation", unique=True)
     
     # Property details
     area: float = Field(description="Property area in square meters")
