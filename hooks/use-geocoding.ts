@@ -6,6 +6,7 @@ interface UseGeocodingReturn {
   lastGeocodedAddress: string
   currentCoordinates: { lat: number; lng: number } | null
   geocodeAddress: (address: string) => Promise<GeocodeResult>
+  reverseGeocode: (lat: number, lng: number) => Promise<GeocodeResult>
   clearCoordinates: () => void
   setCoordinates: (coords: { lat: number; lng: number }) => void
 }
@@ -64,6 +65,35 @@ export function useGeocoding(): UseGeocodingReturn {
     setLastGeocodedAddress('')
   }, [])
 
+  const reverseGeocode = useCallback(async (lat: number, lng: number): Promise<GeocodeResult> => {
+    if (!lat || !lng) {
+      return {
+        latitude: 0,
+        longitude: 0,
+        formatted_address: '',
+        success: false,
+        error: 'Coordenadas inválidas'
+      }
+    }
+
+    setGeocoding(true)
+    
+    try {
+      const result = await GeocodingService.reverseGeocode(lat, lng)
+      return result
+    } catch (error) {
+      return {
+        latitude: lat,
+        longitude: lng,
+        formatted_address: '',
+        success: false,
+        error: 'Error de conexión con el servicio de geocodificación inversa'
+      }
+    } finally {
+      setGeocoding(false)
+    }
+  }, [])
+
   const setCoordinates = useCallback((coords: { lat: number; lng: number }) => {
     setCurrentCoordinates(coords)
   }, [])
@@ -73,6 +103,7 @@ export function useGeocoding(): UseGeocodingReturn {
     lastGeocodedAddress,
     currentCoordinates,
     geocodeAddress,
+    reverseGeocode,
     clearCoordinates,
     setCoordinates
   }

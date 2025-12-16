@@ -77,7 +77,7 @@ export function PropertyValuation() {
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
   const [address, setAddress] = useState("")
-  const { geocoding, lastGeocodedAddress, currentCoordinates, geocodeAddress, clearCoordinates } = useGeocoding()
+  const { geocoding, lastGeocodedAddress, currentCoordinates, geocodeAddress, reverseGeocode, clearCoordinates } = useGeocoding()
   const { confirm } = useConfirm()
   const [capitalizationRate, setCapitalizationRate] = useState('') // Sin valor por defecto
   const [editableFinalPrice, setEditableFinalPrice] = useState<string>('')
@@ -92,6 +92,7 @@ export function PropertyValuation() {
   const [showPaymentPlanForm, setShowPaymentPlanForm] = useState(false)
   const [selectedValuation, setSelectedValuation] = useState<Valuation | null>(null)
   const [paymentPlanData, setPaymentPlanData] = useState({
+    // Flujo Toperty Interno
     area: '',
     commercial_value: '',
     average_purchase_value: '',
@@ -100,8 +101,18 @@ export function PropertyValuation() {
     program_months: '',
     potential_down_payment: '',
     bank_mortgage_rate: '',
-    dupla_bank_rate: ''
+    dupla_bank_rate: '',
+    // Para Envío Usuario
+    client_name: '',
+    address: '',
+    city: '',
+    country: 'Colombia',
+    construction_year: '',
+    stratum: '',
+    apartment_type: '',
+    private_parking: ''
   })
+
 
   const loadValuations = useCallback(async () => {
     try {
@@ -244,10 +255,30 @@ export function PropertyValuation() {
     setSaveMessage(null)
   }
 
-  const handlePaymentPlan = (valuation: Valuation) => {
+  const handlePaymentPlan = async (valuation: Valuation) => {
     // Preparar datos del formulario con información del avalúo
     setSelectedValuation(valuation)
+    
+    // Obtener dirección y ciudad desde coordenadas si están disponibles
+    let resolvedAddress = address || '' // Usar la dirección del formulario actual si está disponible
+    let resolvedCity = ''
+    let resolvedCountry = 'Colombia'
+    
+    if (valuation.latitude && valuation.longitude && !address) {
+      try {
+        const result = await reverseGeocode(valuation.latitude, valuation.longitude)
+        if (result.success) {
+          resolvedAddress = result.formatted_address
+          resolvedCity = result.city || ''
+          resolvedCountry = result.country || 'Colombia'
+        }
+      } catch (error) {
+        console.log('No se pudo obtener la dirección automáticamente')
+      }
+    }
+    
     setPaymentPlanData({
+      // Flujo Toperty Interno - algunos valores del avalúo
       area: valuation.area.toString(),
       commercial_value: valuation.final_price?.toString() || '',
       average_purchase_value: '',
@@ -256,7 +287,16 @@ export function PropertyValuation() {
       program_months: '',
       potential_down_payment: '',
       bank_mortgage_rate: '',
-      dupla_bank_rate: ''
+      dupla_bank_rate: '',
+      // Para Envío Usuario - llenar con datos disponibles del avalúo
+      client_name: '',
+      address: resolvedAddress,
+      city: resolvedCity,
+      country: resolvedCountry,
+      construction_year: '',
+      stratum: valuation.stratum?.toString() || '',
+      apartment_type: '',
+      private_parking: valuation.garages?.toString() || ''
     })
     setShowPaymentPlanForm(true)
   }
@@ -316,6 +356,7 @@ export function PropertyValuation() {
     setShowPaymentPlanForm(false)
     setSelectedValuation(null)
     setPaymentPlanData({
+      // Flujo Toperty Interno
       area: '',
       commercial_value: '',
       average_purchase_value: '',
@@ -324,7 +365,16 @@ export function PropertyValuation() {
       program_months: '',
       potential_down_payment: '',
       bank_mortgage_rate: '',
-      dupla_bank_rate: ''
+      dupla_bank_rate: '',
+      // Para Envío Usuario
+      client_name: '',
+      address: '',
+      city: '',
+      country: 'Colombia',
+      construction_year: '',
+      stratum: '',
+      apartment_type: '',
+      private_parking: ''
     })
   }
 
@@ -1462,8 +1512,11 @@ export function PropertyValuation() {
             </DialogDescription>
           </DialogHeader>
           
-          <form onSubmit={handlePaymentPlanSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form onSubmit={handlePaymentPlanSubmit} className="space-y-6">
+            {/* Subtítulo: Flujo Toperty Interno */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Flujo Toperty Interno</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1635,6 +1688,170 @@ export function PropertyValuation() {
                   placeholder="Ej: 15.0"
                   required
                 />
+              </div>
+            </div>
+            </div>
+            
+            {/* Subtítulo: Para Envío Usuario */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Para Envío Usuario</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="client_name" className="cursor-help">Nombre del Cliente</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Nombre completo del cliente interesado</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="client_name"
+                    type="text"
+                    value={paymentPlanData.client_name}
+                    onChange={(e) => handlePaymentPlanChange('client_name', e.target.value)}
+                    placeholder="Ej: Juan Pérez"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="address_pp" className="cursor-help">Dirección</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Dirección completa de la propiedad</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="address_pp"
+                    type="text"
+                    value={paymentPlanData.address}
+                    onChange={(e) => handlePaymentPlanChange('address', e.target.value)}
+                    placeholder="Ej: Calle 123 #45-67"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="city_pp" className="cursor-help">Ciudad</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Ciudad donde se ubica la propiedad</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="city_pp"
+                    type="text"
+                    value={paymentPlanData.city}
+                    onChange={(e) => handlePaymentPlanChange('city', e.target.value)}
+                    placeholder="Ej: Bogotá"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="country_pp" className="cursor-help">País</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>País donde se ubica la propiedad</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="country_pp"
+                    type="text"
+                    value={paymentPlanData.country}
+                    onChange={(e) => handlePaymentPlanChange('country', e.target.value)}
+                    placeholder="Ej: Colombia"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="construction_year" className="cursor-help">Año de Construcción</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Año en que fue construida la propiedad</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="construction_year"
+                    type="number"
+                    value={paymentPlanData.construction_year}
+                    onChange={(e) => handlePaymentPlanChange('construction_year', e.target.value)}
+                    placeholder="Ej: 2015"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="stratum_pp" className="cursor-help">Estrato</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Clasificación socioeconómica del sector (1-6)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="stratum_pp"
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={paymentPlanData.stratum}
+                    onChange={(e) => handlePaymentPlanChange('stratum', e.target.value)}
+                    placeholder="Ej: 3"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="apartment_type" className="cursor-help">Apartamento</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Tipo o características del apartamento</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="apartment_type"
+                    type="number"
+                    value={paymentPlanData.apartment_type}
+                    onChange={(e) => handlePaymentPlanChange('apartment_type', e.target.value)}
+                    placeholder="Ej: 1302"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="private_parking" className="cursor-help">Parqueaderos Privados</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Número de parqueaderos privados disponibles</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="private_parking"
+                    type="number"
+                    min="0"
+                    value={paymentPlanData.private_parking}
+                    onChange={(e) => handlePaymentPlanChange('private_parking', e.target.value)}
+                    placeholder="Ej: 1"
+                    required
+                  />
+                </div>
+
               </div>
             </div>
             
