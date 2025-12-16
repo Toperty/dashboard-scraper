@@ -900,10 +900,10 @@ export function SimpleGoogleMap() {
           </div>
           
           <div className="flex gap-2 items-center">
-            <Button onClick={applyFilters}>
+            <Button onClick={applyFilters} className="transition-all duration-200 hover:scale-105 hover:shadow-lg">
               Aplicar Filtros
             </Button>
-            <Button variant="outline" onClick={resetFilters}>
+            <Button variant="outline" onClick={resetFilters} className="transition-all duration-200 hover:scale-105 hover:shadow-lg">
               <RotateCcw className="mr-2 h-4 w-4" />
               Limpiar Filtros
             </Button>

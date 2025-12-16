@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2 } from "lucide-react"
+import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2, FileText, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useGeocoding } from "@/hooks/use-geocoding"
 import { useConfirm } from "@/hooks/use-confirm"
 import { fetchValuations, deleteValuation, type Valuation, type ValuationsResponse } from "@/lib/api"
@@ -86,6 +87,21 @@ export function PropertyValuation() {
   const [valuationsData, setValuationsData] = useState<ValuationsResponse | null>(null)
   const [valuationsLoading, setValuationsLoading] = useState(true)
   const [currentValuationsPage, setCurrentValuationsPage] = useState(1)
+  
+  // Estado para el formulario de plan de pagos
+  const [showPaymentPlanForm, setShowPaymentPlanForm] = useState(false)
+  const [selectedValuation, setSelectedValuation] = useState<Valuation | null>(null)
+  const [paymentPlanData, setPaymentPlanData] = useState({
+    area: '',
+    commercial_value: '',
+    average_purchase_value: '',
+    asking_price: '',
+    user_down_payment: '',
+    program_months: '',
+    potential_down_payment: '',
+    bank_mortgage_rate: '',
+    dupla_bank_rate: ''
+  })
 
   const loadValuations = useCallback(async () => {
     try {
@@ -226,6 +242,90 @@ export function PropertyValuation() {
     setCapitalizationRate("")
     setEditableFinalPrice("")
     setSaveMessage(null)
+  }
+
+  const handlePaymentPlan = (valuation: Valuation) => {
+    // Preparar datos del formulario con información del avalúo
+    setSelectedValuation(valuation)
+    setPaymentPlanData({
+      area: valuation.area.toString(),
+      commercial_value: valuation.final_price?.toString() || '',
+      average_purchase_value: '',
+      asking_price: '',
+      user_down_payment: '',
+      program_months: '',
+      potential_down_payment: '',
+      bank_mortgage_rate: '',
+      dupla_bank_rate: ''
+    })
+    setShowPaymentPlanForm(true)
+  }
+
+  // Función para formatear valores de entrada como moneda (redondeado)
+  const formatInputValue = (value: string) => {
+    if (!value) return ''
+    // Solo limpiar y formatear lo que ya está guardado, no lo que se está escribiendo
+    const numericValue = parseInt(value.replace(/[^0-9]/g, ''))
+    if (isNaN(numericValue)) return ''
+    return numericValue.toLocaleString('es-CO')
+  }
+
+  // Función para convertir valor formateado a número
+  const parseFormattedValue = (value: string) => {
+    // Solo mantener números
+    return value.replace(/[^0-9]/g, '')
+  }
+
+  const handlePaymentPlanChange = (field: string, value: string) => {
+    const priceFields = ['average_purchase_value', 'asking_price', 'user_down_payment', 'potential_down_payment']
+    
+    if (priceFields.includes(field)) {
+      setPaymentPlanData(prev => ({
+        ...prev,
+        [field]: parseFormattedValue(value)
+      }))
+    } else if (field === 'commercial_value') {
+      // Para commercial_value, permitir texto temporal mientras se edita
+      const cleanValue = value.replace(/[^0-9]/g, '')
+      setPaymentPlanData(prev => ({
+        ...prev,
+        [field]: cleanValue
+      }))
+    } else {
+      setPaymentPlanData(prev => ({
+        ...prev,
+        [field]: value
+      }))
+    }
+  }
+
+  const handlePaymentPlanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    // TODO: Implementar envío a Google Sheets
+    console.log('Datos del plan de pagos:', {
+      valuation: selectedValuation?.valuation_name,
+      data: paymentPlanData
+    })
+    
+    // Por ahora solo cerrar el formulario
+    setShowPaymentPlanForm(false)
+    setSelectedValuation(null)
+  }
+
+  const handleClosePaymentPlanForm = () => {
+    setShowPaymentPlanForm(false)
+    setSelectedValuation(null)
+    setPaymentPlanData({
+      area: '',
+      commercial_value: '',
+      average_purchase_value: '',
+      asking_price: '',
+      user_down_payment: '',
+      program_months: '',
+      potential_down_payment: '',
+      bank_mortgage_rate: '',
+      dupla_bank_rate: ''
+    })
   }
 
   const handleDeleteValuation = async (valuation: Valuation) => {
@@ -902,7 +1002,7 @@ export function PropertyValuation() {
                     type="button"
                     onClick={handleGeocodeAddress}
                     disabled={geocoding || !address.trim()}
-                    className="shrink-0"
+                    className="shrink-0 transition-all duration-200 hover:scale-105 hover:shadow-md disabled:hover:scale-100 disabled:hover:shadow-none"
                     title="Buscar coordenadas"
                   >
                     <Search className="h-4 w-4" />
@@ -1009,7 +1109,7 @@ export function PropertyValuation() {
 
               <Button 
                 type="button" 
-                className="w-full" 
+                className="w-full transition-all duration-200 hover:scale-[1.02] hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none" 
                 disabled={loading}
                 onClick={handleCalculateValuation}
               >
@@ -1176,7 +1276,7 @@ export function PropertyValuation() {
                           type="button"
                           onClick={handleSaveValuation}
                           disabled={saving || !valuationName.trim()}
-                          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none"
                         >
                           {saving ? (
                             <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
@@ -1277,7 +1377,7 @@ export function PropertyValuation() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleEditValuation(valuation)}
-                              className="flex items-center gap-1"
+                              className="flex items-center gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md"
                             >
                               <Edit className="h-3 w-3" />
                               Editar
@@ -1285,8 +1385,17 @@ export function PropertyValuation() {
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => handlePaymentPlan(valuation)}
+                              className="flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                            >
+                              <FileText className="h-3 w-3" />
+                              Plan de pagos
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => handleDeleteValuation(valuation)}
-                              className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
                             >
                               <Trash2 className="h-3 w-3" />
                               Eliminar
@@ -1339,6 +1448,217 @@ export function PropertyValuation() {
           )}
         </CardContent>
       </Card>
+      
+      {/* Modal de Plan de Pagos */}
+      <Dialog open={showPaymentPlanForm} onOpenChange={setShowPaymentPlanForm}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Plan de Pagos - {selectedValuation?.valuation_name}
+            </DialogTitle>
+            <DialogDescription>
+              Complete la información requerida para generar el plan de pagos
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handlePaymentPlanSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="area_pp" className="cursor-help">Área (m²)</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Área total de la propiedad en metros cuadrados</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="area_pp"
+                  type="number"
+                  value={paymentPlanData.area}
+                  onChange={(e) => handlePaymentPlanChange('area', e.target.value)}
+                  placeholder="Ej: 80"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="commercial_value" className="cursor-help">Valor Comercial</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Valor comercial estimado de la propiedad</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="commercial_value"
+                  type="text"
+                  value={paymentPlanData.commercial_value && !isNaN(parseFloat(paymentPlanData.commercial_value)) ? formatCurrency(parseFloat(paymentPlanData.commercial_value)) : paymentPlanData.commercial_value}
+                  onChange={(e) => handlePaymentPlanChange('commercial_value', e.target.value)}
+                  placeholder="Ej: $ 250.000.000"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="average_purchase_value" className="cursor-help">Valor de Compra Promedio</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Valor promedio de compra en la zona</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="average_purchase_value"
+                  type="text"
+                  value={paymentPlanData.average_purchase_value ? formatInputValue(paymentPlanData.average_purchase_value) : ''}
+                  onChange={(e) => handlePaymentPlanChange('average_purchase_value', e.target.value)}
+                  placeholder="Ej: 240,000,000"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="asking_price" className="cursor-help">Asking Price</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Precio solicitado por el vendedor</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="asking_price"
+                  type="text"
+                  value={paymentPlanData.asking_price ? formatInputValue(paymentPlanData.asking_price) : ''}
+                  onChange={(e) => handlePaymentPlanChange('asking_price', e.target.value)}
+                  placeholder="Ej: 260,000,000"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="user_down_payment" className="cursor-help">Cuota Inicial del Usuario</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Monto que el usuario puede pagar de cuota inicial</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="user_down_payment"
+                  type="text"
+                  value={paymentPlanData.user_down_payment ? formatInputValue(paymentPlanData.user_down_payment) : ''}
+                  onChange={(e) => handlePaymentPlanChange('user_down_payment', e.target.value)}
+                  placeholder="Ej: 50,000,000"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="program_months" className="cursor-help">Meses en el Programa</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Duración en meses del programa de financiación</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="program_months"
+                  type="number"
+                  value={paymentPlanData.program_months}
+                  onChange={(e) => handlePaymentPlanChange('program_months', e.target.value)}
+                  placeholder="Ej: 24"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="potential_down_payment" className="cursor-help">Cuota Inicial Potencial</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Cuota inicial potencial después del programa</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="potential_down_payment"
+                  type="text"
+                  value={paymentPlanData.potential_down_payment ? formatInputValue(paymentPlanData.potential_down_payment) : ''}
+                  onChange={(e) => handlePaymentPlanChange('potential_down_payment', e.target.value)}
+                  placeholder="Ej: 100,000,000"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="bank_mortgage_rate" className="cursor-help">Tasa Bancaria Hipotecaria (%)</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Tasa de interés bancaria para crédito hipotecario</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="bank_mortgage_rate"
+                  type="number"
+                  step="0.01"
+                  value={paymentPlanData.bank_mortgage_rate}
+                  onChange={(e) => handlePaymentPlanChange('bank_mortgage_rate', e.target.value)}
+                  placeholder="Ej: 12.5"
+                  required
+                />
+              </div>
+
+              <div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="dupla_bank_rate" className="cursor-help">Tasa Bancaria Duppla (%)</Label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={5} align="center">
+                    <p>Tasa de interés para financiación duppla</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Input
+                  id="dupla_bank_rate"
+                  type="number"
+                  step="0.01"
+                  value={paymentPlanData.dupla_bank_rate}
+                  onChange={(e) => handlePaymentPlanChange('dupla_bank_rate', e.target.value)}
+                  placeholder="Ej: 15.0"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClosePaymentPlanForm}
+                className="flex items-center gap-2 transition-all duration-200 hover:scale-105 hover:shadow-md"
+              >
+                <X className="h-4 w-4" />
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="flex items-center gap-2 transition-all duration-200 hover:scale-105 hover:shadow-lg"
+              >
+                <FileText className="h-4 w-4" />
+                Generar Plan de Pagos
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

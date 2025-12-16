@@ -1031,7 +1031,7 @@ export function PropertyDatabaseView() {
             <TooltipTrigger asChild>
               <Button 
                 onClick={handleSearch} 
-                className="w-full md:w-auto md:min-w-[120px]" 
+                className="w-full md:w-auto md:min-w-[120px] transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none" 
                 disabled={geocoding || loading}
               >
                 <Search className="h-4 w-4 mr-2" />
@@ -1045,7 +1045,7 @@ export function PropertyDatabaseView() {
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" onClick={handleClearFilters} className="w-full md:w-auto md:min-w-[120px] flex items-center justify-center gap-2">
+              <Button variant="outline" onClick={handleClearFilters} className="w-full md:w-auto md:min-w-[120px] flex items-center justify-center gap-2 transition-all duration-200 hover:scale-105 hover:shadow-lg">
                 <RotateCcw className="h-4 w-4" />
                 Limpiar Filtros
               </Button>
@@ -1061,7 +1061,7 @@ export function PropertyDatabaseView() {
                 variant="outline" 
                 onClick={handleExportToExcel}
                 disabled={!data || data.pagination.total_count === 0}
-                className="w-full md:w-auto md:min-w-[180px] flex items-center justify-center gap-2 text-sm"
+                className="w-full md:w-auto md:min-w-[180px] flex items-center justify-center gap-2 text-sm transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none"
                 data-export-btn
               >
                 <Download className="h-4 w-4" />
@@ -1195,6 +1195,7 @@ export function PropertyDatabaseView() {
                 variant="outline"
                 size="sm"
                 onClick={() => handlePageChange(currentPage - 1)}
+                className="transition-all duration-200 hover:scale-105 hover:shadow-md disabled:hover:scale-100 disabled:hover:shadow-none"
                 disabled={!data.pagination.has_prev || loading}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -1211,6 +1212,7 @@ export function PropertyDatabaseView() {
                 variant="outline"
                 size="sm"
                 onClick={() => handlePageChange(currentPage + 1)}
+                className="transition-all duration-200 hover:scale-105 hover:shadow-md disabled:hover:scale-100 disabled:hover:shadow-none"
                 disabled={!data.pagination.has_next || loading}
               >
                 Siguiente

@@ -195,7 +195,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
               
               <Button 
                 onClick={handleGoogleSignIn}
-                className="w-full h-12 text-base"
+                className="w-full h-12 text-base transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
                 size="lg"
               >
                 <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
@@ -239,7 +239,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
-                className="gap-2"
+                className="gap-2 transition-all duration-200 hover:scale-105 hover:shadow-md"
               >
                 <LogOut className="h-4 w-4" />
                 Cerrar sesión
