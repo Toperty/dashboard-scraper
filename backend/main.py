@@ -3,7 +3,7 @@ Backend que FUNCIONA - Sin problemas de tablas
 """
 
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import os
@@ -2425,7 +2425,7 @@ async def get_postal_zone_statistics(
     """Obtener estadísticas de zonas agrupadas por código postal"""
     from sqlmodel import Session
     from config.db_connection import engine
-    from services.google_postal_service import GooglePostalService
+    # from services.google_postal_service import GooglePostalService  # Temporarily disabled
     from sqlalchemy import text
     import json
     
@@ -2468,7 +2468,8 @@ async def get_postal_zone_statistics(
                 } for prop in properties
             ]
             
-            postal_codes_map = GooglePostalService.batch_get_postal_codes_smart(coordinates)
+            # postal_codes_map = GooglePostalService.batch_get_postal_codes_smart(coordinates)  # Temporarily disabled
+            postal_codes_map = {}  # Fallback empty map
             
             # Group properties by postal code
             postal_zones = {}
@@ -2483,7 +2484,7 @@ async def get_postal_zone_statistics(
                     if postal_code not in postal_zones:
                         postal_zones[postal_code] = {
                             'postal_code': postal_code,
-                            'department': postal_result.department or GooglePostalService.get_department_name(postal_code[:2]),
+                            'department': postal_result.department if postal_result else '',  # Fallback
                             'properties': [],
                             'cities': set(),
                             'neighborhoods': set()
@@ -3101,6 +3102,118 @@ async def get_valuations(
                 "has_prev": False
             }
         }
+
+
+# Google Sheets Integration Models
+class PaymentPlanRequest(BaseModel):
+    """Request model for payment plan data"""
+    # Identificación
+    valuation_name: str  # Nombre del avalúo para el archivo
+    
+    # Flujo Interno
+    area: str
+    commercial_value: str
+    average_purchase_value: str
+    asking_price: str
+    user_down_payment: str
+    program_months: str
+    potential_down_payment: str  # Ahora será un porcentaje
+    bank_mortgage_rate: str
+    dupla_bank_rate: str
+    
+    # Para Usuario
+    client_name: str
+    address: str
+    city: str
+    country: str
+    construction_year: str
+    stratum: str
+    apartment_type: str
+    private_parking: str
+
+
+class PaymentPlanResponse(BaseModel):
+    """Response model for payment plan creation"""
+    success: bool
+    sheet_url: str = ""
+    message: str = ""
+
+
+# Google Sheets Endpoints
+@app.post("/api/google-sheets", response_model=PaymentPlanResponse)
+async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
+    """
+    Create a new Google Sheets document with payment plan data
+    """
+    import requests
+    from urllib.parse import urlencode
+    
+    try:
+        # Get Apps Script URL from environment
+        forms_url = os.getenv('GOOGLE_APPS_SCRIPT_URL')
+        if not forms_url:
+            raise HTTPException(
+                status_code=500, 
+                detail="Google Apps Script URL not configured"
+            )
+        
+        # Validate that required fields are present
+        if not payment_plan_data.client_name.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Client name is required"
+            )
+        
+        # Convert Pydantic model to dictionary
+        data_dict = payment_plan_data.model_dump()
+        
+        # Prepare URL parameters for GET request
+        params = urlencode(data_dict)
+        full_url = f"{forms_url}?{params}"
+        
+        # Debug: log the URL being called
+        print(f"DEBUG: Calling Apps Script URL: {full_url[:200]}...")
+        
+        # Call Apps Script with requests (better redirect handling)
+        response = requests.get(full_url, allow_redirects=True, timeout=30)
+        print(f"DEBUG: Response status: {response.status_code}, URL after redirects: {response.url}")
+        if response.status_code == 200:
+            try:
+                result = response.json()
+                if result.get('success'):
+                    return PaymentPlanResponse(
+                        success=True,
+                        sheet_url=result.get('sheet_url', ''),
+                        message=result.get('message', 'Plan de pagos creado exitosamente')
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Error en Apps Script: {result.get('error', 'Unknown error')}"
+                    )
+            except Exception as json_error:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error parsing Apps Script response: {str(json_error)}"
+                )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error calling Apps Script: {response.status_code} - {response.text[:200]}"
+            )
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    
+    except Exception as e:
+        print(f"Unexpected error in create_payment_plan_sheet: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error al crear el plan de pagos en Google Sheets"
+        )
+
+
 
 @app.get("/")
 async def root():

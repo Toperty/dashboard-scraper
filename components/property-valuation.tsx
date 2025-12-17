@@ -317,7 +317,7 @@ export function PropertyValuation() {
   }
 
   const handlePaymentPlanChange = (field: string, value: string) => {
-    const priceFields = ['average_purchase_value', 'asking_price', 'user_down_payment', 'potential_down_payment']
+    const priceFields = ['average_purchase_value', 'asking_price', 'user_down_payment']
     
     if (priceFields.includes(field)) {
       setPaymentPlanData(prev => ({
@@ -331,6 +331,13 @@ export function PropertyValuation() {
         ...prev,
         [field]: cleanValue
       }))
+    } else if (field === 'potential_down_payment' || field === 'bank_mortgage_rate' || field === 'dupla_bank_rate') {
+      // Para campos de porcentaje, manejar números decimales
+      const numericValue = value.replace(/[^0-9.]/g, '')
+      setPaymentPlanData(prev => ({
+        ...prev,
+        [field]: numericValue
+      }))
     } else {
       setPaymentPlanData(prev => ({
         ...prev,
@@ -341,15 +348,72 @@ export function PropertyValuation() {
 
   const handlePaymentPlanSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implementar envío a Google Sheets
-    console.log('Datos del plan de pagos:', {
-      valuation: selectedValuation?.valuation_name,
-      data: paymentPlanData
-    })
     
-    // Por ahora solo cerrar el formulario
-    setShowPaymentPlanForm(false)
-    setSelectedValuation(null)
+    // Validar que el nombre del cliente esté presente
+    if (!paymentPlanData.client_name.trim()) {
+      alert('El nombre del cliente es requerido')
+      return
+    }
+    
+    try {
+      setSaving(true) // Usar estado existente
+      
+      // Preparar datos para envío, agregando % a los campos de porcentaje
+      const dataToSend = {
+        ...paymentPlanData,
+        valuation_name: selectedValuation?.valuation_name || paymentPlanData.client_name, // Usar nombre del avalúo
+        potential_down_payment: paymentPlanData.potential_down_payment ? `${paymentPlanData.potential_down_payment}%` : '',
+        bank_mortgage_rate: paymentPlanData.bank_mortgage_rate ? `${paymentPlanData.bank_mortgage_rate}%` : '',
+        dupla_bank_rate: paymentPlanData.dupla_bank_rate ? `${paymentPlanData.dupla_bank_rate}%` : ''
+      }
+      
+      // Llamar al endpoint de Google Sheets
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/google-sheets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dataToSend)
+      })
+      
+      const result = await response.json()
+      
+      if (response.ok && result.success) {
+        // Éxito - mostrar mensaje y URL
+        setSaveMessage({
+          type: 'success',
+          text: `${result.message}. ¡Hoja creada exitosamente!`
+        })
+        
+        // Abrir la hoja en una nueva pestaña
+        if (result.sheet_url) {
+          window.open(result.sheet_url, '_blank')
+        }
+        
+        // Cerrar el formulario después de un breve delay
+        setTimeout(() => {
+          setShowPaymentPlanForm(false)
+          setSelectedValuation(null)
+          setSaveMessage(null)
+        }, 3000)
+        
+      } else {
+        // Error del servidor
+        setSaveMessage({
+          type: 'error',
+          text: result.detail || 'Error al crear el plan de pagos'
+        })
+      }
+      
+    } catch (error) {
+      console.error('Error al enviar plan de pagos:', error)
+      setSaveMessage({
+        type: 'error',
+        text: 'Error de conexión. Intente nuevamente.'
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleClosePaymentPlanForm = () => {
@@ -1640,14 +1704,18 @@ export function PropertyValuation() {
                     <p>Cuota inicial potencial después del programa</p>
                   </TooltipContent>
                 </Tooltip>
-                <Input
-                  id="potential_down_payment"
-                  type="text"
-                  value={paymentPlanData.potential_down_payment ? formatInputValue(paymentPlanData.potential_down_payment) : ''}
-                  onChange={(e) => handlePaymentPlanChange('potential_down_payment', e.target.value)}
-                  placeholder="Ej: 100,000,000"
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="potential_down_payment"
+                    type="text"
+                    value={paymentPlanData.potential_down_payment}
+                    onChange={(e) => handlePaymentPlanChange('potential_down_payment', e.target.value)}
+                    placeholder="Ej: 15"
+                    className="pr-8"
+                    required
+                  />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">%</span>
+                </div>
               </div>
 
               <div>
@@ -1673,7 +1741,7 @@ export function PropertyValuation() {
               <div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Label htmlFor="dupla_bank_rate" className="cursor-help">Tasa Bancaria Duppla (%)</Label>
+                    <Label htmlFor="dupla_bank_rate" className="cursor-help">Tasa Duppla (%)</Label>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={5} align="center">
                     <p>Tasa de interés para financiación duppla</p>
@@ -1867,10 +1935,11 @@ export function PropertyValuation() {
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 className="flex items-center gap-2 transition-all duration-200 hover:scale-105 hover:shadow-lg"
               >
                 <FileText className="h-4 w-4" />
-                Generar Plan de Pagos
+                {saving ? 'Creando Plan...' : 'Generar Plan de Pagos'}
               </Button>
             </div>
           </form>
