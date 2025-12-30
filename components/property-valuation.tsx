@@ -259,6 +259,49 @@ export function PropertyValuation() {
     // Preparar datos del formulario con información del avalúo
     setSelectedValuation(valuation)
     
+    // Check if dashboard already exists
+    try {
+      const checkResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/check/${encodeURIComponent(valuation.valuation_name)}`)
+      const dashboardCheck = await checkResponse.json()
+      
+      if (dashboardCheck.exists) {
+        // Dashboard exists, show confirm dialog with custom buttons
+        const result = await confirm(
+          `Ya existe un plan de pagos para "${valuation.valuation_name}".\n\nDashboard válido por ${dashboardCheck.days_remaining} días.`,
+          "Seleccione una acción",
+          {
+            buttons: [
+              { text: "Ver Dashboard Usuario", value: "user", variant: "outline" },
+              { text: "Ver Dashboard Inversionista", value: "investor", variant: "outline" },
+              { text: "Ver Excel", value: "excel", variant: "outline" },
+              { text: "Editar Plan", value: "edit", variant: "secondary" },
+              { text: "Cancelar", value: "cancel", variant: "ghost" }
+            ]
+          }
+        )
+        
+        if (result.confirmed) {
+          if (result.value === "user") {
+            window.open(`${dashboardCheck.dashboard_url}/user`, '_blank')
+            return
+          } else if (result.value === "investor") {
+            window.open(`${dashboardCheck.dashboard_url}/investor`, '_blank')
+            return
+          } else if (result.value === "excel") {
+            window.open(dashboardCheck.sheet_url, '_blank')
+            return
+          } else if (result.value === "cancel") {
+            return
+          }
+          // If "edit", continue with the form
+        } else {
+          return
+        }
+      }
+    } catch (error) {
+      console.error('Error checking dashboard existence:', error)
+    }
+    
     // Obtener dirección y ciudad desde coordenadas si están disponibles
     let resolvedAddress = address || '' // Usar la dirección del formulario actual si está disponible
     let resolvedCity = ''
@@ -320,6 +363,8 @@ export function PropertyValuation() {
     const priceFields = ['average_purchase_value', 'asking_price', 'user_down_payment']
     
     if (priceFields.includes(field)) {
+
+
       setPaymentPlanData(prev => ({
         ...prev,
         [field]: parseFormattedValue(value)
@@ -379,15 +424,34 @@ export function PropertyValuation() {
       const result = await response.json()
       
       if (response.ok && result.success) {
-        // Éxito - mostrar mensaje y URL
+        // Éxito - mostrar mensaje y URLs
         setSaveMessage({
           type: 'success',
-          text: `${result.message}. ¡Hoja creada exitosamente!`
+          text: result.message || '¡Plan de pagos creado exitosamente!'
         })
         
-        // Abrir la hoja en una nueva pestaña
-        if (result.sheet_url) {
-          window.open(result.sheet_url, '_blank')
+        // Show options to open different dashboard views
+        const viewResult = await confirm(
+          result.message,
+          "¿Qué desea hacer ahora?",
+          {
+            buttons: [
+              { text: "Ver Dashboard Usuario", value: "user", variant: "outline" },
+              { text: "Ver Dashboard Inversionista", value: "investor", variant: "outline" },
+              { text: "Ver Excel", value: "excel", variant: "outline" },
+              { text: "Cerrar", value: "close", variant: "ghost" }
+            ]
+          }
+        )
+        
+        if (viewResult.confirmed) {
+          if (viewResult.value === "user" && result.dashboard_url) {
+            window.open(`${result.dashboard_url}/user`, '_blank')
+          } else if (viewResult.value === "investor" && result.dashboard_url) {
+            window.open(`${result.dashboard_url}/investor`, '_blank')
+          } else if (viewResult.value === "excel" && result.sheet_url) {
+            window.open(result.sheet_url, '_blank')
+          }
         }
         
         // Cerrar el formulario después de un breve delay

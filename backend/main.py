@@ -3136,6 +3136,7 @@ class PaymentPlanResponse(BaseModel):
     """Response model for payment plan creation"""
     success: bool
     sheet_url: str = ""
+    dashboard_url: str = ""
     message: str = ""
 
 
@@ -3181,11 +3182,92 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
             try:
                 result = response.json()
                 if result.get('success'):
-                    return PaymentPlanResponse(
-                        success=True,
-                        sheet_url=result.get('sheet_url', ''),
-                        message=result.get('message', 'Plan de pagos creado exitosamente')
-                    )
+                    # Create dashboard entry in database
+                    from sqlmodel import Session
+                    from config.db_connection import engine
+                    from models.payment_plan_dashboard import PaymentPlanDashboard
+                    
+                    sheet_url = result.get('sheet_url', '')
+                    sheet_id = sheet_url.split('/d/')[1].split('/')[0] if '/d/' in sheet_url else ''
+                    
+                    with Session(engine) as session:
+                        # Get valuation ID if available
+                        valuation_id = None
+                        valuation_name_to_use = payment_plan_data.valuation_name or payment_plan_data.client_name
+                        
+                        if hasattr(payment_plan_data, 'valuation_name') and payment_plan_data.valuation_name:
+                            from models.valuation import Valuation
+                            valuation = session.query(Valuation).filter_by(
+                                valuation_name=payment_plan_data.valuation_name
+                            ).first()
+                            if valuation:
+                                valuation_id = valuation.id
+                        
+                        # Check if dashboard already exists
+                        existing_dashboard = session.query(PaymentPlanDashboard).filter(
+                            PaymentPlanDashboard.valuation_name == valuation_name_to_use,
+                            PaymentPlanDashboard.is_active == True
+                        ).first()
+                        
+                        if existing_dashboard:
+                            # Update existing dashboard
+                            existing_dashboard.sheet_id = sheet_id
+                            existing_dashboard.sheet_url = sheet_url
+                            existing_dashboard.sheet_data = {
+                                'area': payment_plan_data.area,
+                                'commercial_value': payment_plan_data.commercial_value,
+                                'asking_price': payment_plan_data.asking_price,
+                                'user_down_payment': payment_plan_data.user_down_payment,
+                                'program_months': payment_plan_data.program_months,
+                                'potential_down_payment': payment_plan_data.potential_down_payment,
+                                'bank_mortgage_rate': payment_plan_data.bank_mortgage_rate,
+                                'dupla_bank_rate': payment_plan_data.dupla_bank_rate
+                            }
+                            existing_dashboard.updated_at = datetime.utcnow()
+                            
+                            session.commit()
+                            session.refresh(existing_dashboard)
+                            
+                            return PaymentPlanResponse(
+                                success=True,
+                                sheet_url=sheet_url,
+                                dashboard_url=existing_dashboard.dashboard_url,
+                                message=f'Plan de pagos actualizado exitosamente. Dashboard válido por {existing_dashboard.days_remaining} días.'
+                            )
+                        else:
+                            # Create new dashboard entry
+                            dashboard = PaymentPlanDashboard(
+                                sheet_id=sheet_id,
+                                sheet_url=sheet_url,
+                                valuation_id=valuation_id,
+                                valuation_name=valuation_name_to_use,
+                                client_name=payment_plan_data.client_name,
+                                sheet_data={
+                                    'area': payment_plan_data.area,
+                                    'commercial_value': payment_plan_data.commercial_value,
+                                    'asking_price': payment_plan_data.asking_price,
+                                    'user_down_payment': payment_plan_data.user_down_payment,
+                                    'program_months': payment_plan_data.program_months,
+                                    'potential_down_payment': payment_plan_data.potential_down_payment,
+                                    'bank_mortgage_rate': payment_plan_data.bank_mortgage_rate,
+                                    'dupla_bank_rate': payment_plan_data.dupla_bank_rate
+                                }
+                            )
+                            
+                            # Generate dashboard URL
+                            base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
+                            dashboard.dashboard_url = f"{base_url}/dashboard/payment-plan/{dashboard.access_token}"
+                            
+                            session.add(dashboard)
+                            session.commit()
+                            session.refresh(dashboard)
+                            
+                            return PaymentPlanResponse(
+                                success=True,
+                                sheet_url=sheet_url,
+                                dashboard_url=dashboard.dashboard_url,
+                                message=f'Plan de pagos creado exitosamente. Dashboard válido por {dashboard.days_remaining} días.'
+                            )
                 else:
                     raise HTTPException(
                         status_code=500,
@@ -3213,6 +3295,243 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
             detail="Error al crear el plan de pagos en Google Sheets"
         )
 
+
+# Check if dashboard exists for valuation
+@app.get("/api/dashboard/check/{valuation_name}")
+async def check_dashboard_exists(valuation_name: str):
+    """
+    Check if a dashboard already exists for a valuation
+    """
+    from sqlmodel import Session
+    from config.db_connection import engine
+    from models.payment_plan_dashboard import PaymentPlanDashboard
+    
+    with Session(engine) as session:
+        dashboard = session.query(PaymentPlanDashboard).filter(
+            PaymentPlanDashboard.valuation_name == valuation_name,
+            PaymentPlanDashboard.is_active == True
+        ).first()
+        
+        if dashboard:
+            return {
+                "exists": True,
+                "dashboard_url": dashboard.dashboard_url,
+                "sheet_url": dashboard.sheet_url,
+                "expires_at": dashboard.expires_at.isoformat(),
+                "days_remaining": dashboard.days_remaining
+            }
+        
+        return {"exists": False}
+
+
+# Payment Plan Dashboard Endpoints
+@app.get("/api/dashboard/{access_token}")
+async def get_payment_dashboard(access_token: str):
+    """Get full dashboard (both user and investor data)"""
+    return await get_dashboard_by_type(access_token, "full")
+
+@app.get("/api/dashboard/{access_token}/user")
+async def get_user_dashboard(access_token: str):
+    """Get user-focused dashboard"""
+    return await get_dashboard_by_type(access_token, "user")
+
+@app.get("/api/dashboard/{access_token}/investor")
+async def get_investor_dashboard(access_token: str):
+    """Get investor-focused dashboard"""
+    return await get_dashboard_by_type(access_token, "investor")
+
+async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full"):
+    """
+    Get payment plan dashboard by access token
+    """
+    from sqlmodel import Session
+    from config.db_connection import engine
+    from models.payment_plan_dashboard import PaymentPlanDashboard
+    from datetime import datetime
+    
+    with Session(engine) as session:
+        # Find dashboard by access token
+        dashboard = session.query(PaymentPlanDashboard).filter_by(
+            access_token=access_token,
+            is_active=True
+        ).first()
+        
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found or expired")
+        
+        # Check if expired
+        if dashboard.is_expired:
+            dashboard.is_active = False
+            session.commit()
+            raise HTTPException(status_code=410, detail="Dashboard has expired")
+        
+        # Update view count
+        dashboard.view_count += 1
+        
+        # Always try to sync with Google Sheets via Apps Script for fresh data
+        import requests
+        from datetime import datetime
+        
+        # Use Apps Script to read data
+        apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
+        if apps_script_url and dashboard.sheet_id:
+            try:
+                print(f"DEBUG: Calling Apps Script with URL: {apps_script_url}?sheetId={dashboard.sheet_id}&type={dashboard_type}")
+                response = requests.get(f"{apps_script_url}?sheetId={dashboard.sheet_id}&type={dashboard_type}")
+                print(f"DEBUG: Apps Script response status: {response.status_code}")
+                if response.status_code == 200:
+                    result = response.json()
+                    print(f"DEBUG: Apps Script result: {result}")
+                    if result.get('success'):
+                        # Merge fresh data with existing data
+                        fresh_data = result.get('data', {})
+                        
+                        # Ensure the structure matches what frontend expects
+                        if not dashboard.sheet_data:
+                            dashboard.sheet_data = {}
+                        
+                        # Update with fresh data from Apps Script
+                        dashboard.sheet_data.update(fresh_data)
+                        dashboard.last_sync_at = datetime.utcnow()
+                        print(f"DEBUG: Successfully updated sheet_data with: {fresh_data}")
+                    else:
+                        print(f"DEBUG: Apps Script returned error: {result.get('error')}")
+            except Exception as e:
+                print(f"Error syncing with Apps Script: {e}")
+                # Use cached data if sync fails
+        else:
+            print(f"DEBUG: Apps Script URL not configured or no sheet_id. URL: {apps_script_url}, sheet_id: {dashboard.sheet_id}")
+        
+        session.commit()
+        session.refresh(dashboard)
+        
+        return {
+            "dashboard": {
+                "id": dashboard.id,
+                "valuation_name": dashboard.valuation_name,
+                "client_name": dashboard.client_name,
+                "sheet_url": dashboard.sheet_url,
+                "created_at": dashboard.created_at.isoformat(),
+                "expires_at": dashboard.expires_at.isoformat(),
+                "days_remaining": dashboard.days_remaining,
+                "view_count": dashboard.view_count,
+                "last_sync_at": dashboard.last_sync_at.isoformat() if dashboard.last_sync_at else None,
+                "data": dashboard.sheet_data
+            }
+        }
+
+
+@app.post("/api/dashboard/{access_token}/sync")
+async def sync_dashboard_data(access_token: str):
+    """
+    Force sync dashboard data with Google Sheets via Apps Script
+    """
+    from sqlmodel import Session
+    from config.db_connection import engine
+    from models.payment_plan_dashboard import PaymentPlanDashboard
+    import requests
+    from datetime import datetime, timedelta
+    
+    with Session(engine) as session:
+        dashboard = session.query(PaymentPlanDashboard).filter_by(
+            access_token=access_token,
+            is_active=True
+        ).first()
+        
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+        if dashboard.is_expired:
+            raise HTTPException(status_code=410, detail="Dashboard has expired")
+        
+        # Check rate limiting (max 1 sync per minute)
+        if dashboard.last_sync_at:
+            delta = datetime.utcnow() - dashboard.last_sync_at
+            if delta.total_seconds() < 60:
+                raise HTTPException(
+                    status_code=429, 
+                    detail=f"Please wait {60 - int(delta.total_seconds())} seconds before syncing again"
+                )
+        
+        # Sync with Google Sheets via Apps Script
+        apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
+        if not apps_script_url:
+            raise HTTPException(status_code=500, detail="Apps Script URL not configured")
+        
+        try:
+            response = requests.get(f"{apps_script_url}?sheetId={dashboard.sheet_id}&type=full")
+            if response.status_code != 200:
+                raise HTTPException(status_code=500, detail="Failed to connect to Google Sheets")
+            
+            result = response.json()
+            if not result.get('success'):
+                raise HTTPException(status_code=500, detail=f"Error reading sheet: {result.get('error', 'Unknown error')}")
+            
+            dashboard.sheet_data = result.get('data', {})
+            dashboard.last_sync_at = datetime.utcnow()
+            
+        except requests.RequestException as e:
+            raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error syncing data: {str(e)}")
+        
+        session.commit()
+        session.refresh(dashboard)
+        
+        return {
+            "success": True,
+            "message": "Data synced successfully",
+            "last_sync_at": dashboard.last_sync_at.isoformat(),
+            "data": dashboard.sheet_data
+        }
+
+
+@app.delete("/api/dashboard/{access_token}")
+async def delete_dashboard(access_token: str):
+    """
+    Soft delete a dashboard (set inactive)
+    """
+    from sqlmodel import Session
+    from config.db_connection import engine
+    from models.payment_plan_dashboard import PaymentPlanDashboard
+    
+    with Session(engine) as session:
+        dashboard = session.query(PaymentPlanDashboard).filter_by(
+            access_token=access_token
+        ).first()
+        
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+        dashboard.is_active = False
+        session.commit()
+        
+        return {"success": True, "message": "Dashboard deleted successfully"}
+
+
+@app.get("/api/dashboard/cleanup")
+async def cleanup_expired_dashboards():
+    """
+    Clean up expired dashboards (to be called by cron job)
+    """
+    from sqlmodel import Session
+    from config.db_connection import engine
+    from models.payment_plan_dashboard import PaymentPlanDashboard
+    from datetime import datetime
+    
+    with Session(engine) as session:
+        # Find and deactivate expired dashboards
+        expired_count = session.query(PaymentPlanDashboard).filter(
+            PaymentPlanDashboard.expires_at < datetime.utcnow(),
+            PaymentPlanDashboard.is_active == True
+        ).update({"is_active": False})
+        
+        session.commit()
+        
+        return {
+            "success": True,
+            "message": f"Cleaned up {expired_count} expired dashboards"
+        }
 
 
 @app.get("/")
