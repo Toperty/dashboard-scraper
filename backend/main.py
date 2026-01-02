@@ -3213,15 +3213,28 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             # Update existing dashboard
                             existing_dashboard.sheet_id = sheet_id
                             existing_dashboard.sheet_url = sheet_url
+                            # Store initial data in structure compatible with Apps Script Reader
                             existing_dashboard.sheet_data = {
-                                'area': payment_plan_data.area,
-                                'commercial_value': payment_plan_data.commercial_value,
-                                'asking_price': payment_plan_data.asking_price,
-                                'user_down_payment': payment_plan_data.user_down_payment,
-                                'program_months': payment_plan_data.program_months,
-                                'potential_down_payment': payment_plan_data.potential_down_payment,
-                                'bank_mortgage_rate': payment_plan_data.bank_mortgage_rate,
-                                'dupla_bank_rate': payment_plan_data.dupla_bank_rate
+                                'flujo_interno': {
+                                    'area': payment_plan_data.area,
+                                    'commercial_value': payment_plan_data.commercial_value,
+                                    'asking_price': payment_plan_data.asking_price,
+                                    'user_down_payment': payment_plan_data.user_down_payment,
+                                    'program_months': payment_plan_data.program_months,
+                                    'potential_down_payment': payment_plan_data.potential_down_payment,
+                                    'bank_mortgage_rate': payment_plan_data.bank_mortgage_rate,
+                                    'dupla_bank_rate': payment_plan_data.dupla_bank_rate
+                                },
+                                'para_usuario': {
+                                    'client_name': payment_plan_data.client_name,
+                                    'address': payment_plan_data.address,
+                                    'city': payment_plan_data.city,
+                                    'country': payment_plan_data.country,
+                                    'construction_year': payment_plan_data.construction_year,
+                                    'stratum': payment_plan_data.stratum,
+                                    'apartment_type': payment_plan_data.apartment_type,
+                                    'private_parking': payment_plan_data.private_parking
+                                }
                             }
                             existing_dashboard.updated_at = datetime.utcnow()
                             
@@ -3235,7 +3248,7 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                                 message=f'Plan de pagos actualizado exitosamente. Dashboard válido por {existing_dashboard.days_remaining} días.'
                             )
                         else:
-                            # Create new dashboard entry
+                            # Create new dashboard entry with structure compatible with Apps Script Reader
                             dashboard = PaymentPlanDashboard(
                                 sheet_id=sheet_id,
                                 sheet_url=sheet_url,
@@ -3243,14 +3256,26 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                                 valuation_name=valuation_name_to_use,
                                 client_name=payment_plan_data.client_name,
                                 sheet_data={
-                                    'area': payment_plan_data.area,
-                                    'commercial_value': payment_plan_data.commercial_value,
-                                    'asking_price': payment_plan_data.asking_price,
-                                    'user_down_payment': payment_plan_data.user_down_payment,
-                                    'program_months': payment_plan_data.program_months,
-                                    'potential_down_payment': payment_plan_data.potential_down_payment,
-                                    'bank_mortgage_rate': payment_plan_data.bank_mortgage_rate,
-                                    'dupla_bank_rate': payment_plan_data.dupla_bank_rate
+                                    'flujo_interno': {
+                                        'area': payment_plan_data.area,
+                                        'commercial_value': payment_plan_data.commercial_value,
+                                        'asking_price': payment_plan_data.asking_price,
+                                        'user_down_payment': payment_plan_data.user_down_payment,
+                                        'program_months': payment_plan_data.program_months,
+                                        'potential_down_payment': payment_plan_data.potential_down_payment,
+                                        'bank_mortgage_rate': payment_plan_data.bank_mortgage_rate,
+                                        'dupla_bank_rate': payment_plan_data.dupla_bank_rate
+                                    },
+                                    'para_usuario': {
+                                        'client_name': payment_plan_data.client_name,
+                                        'address': payment_plan_data.address,
+                                        'city': payment_plan_data.city,
+                                        'country': payment_plan_data.country,
+                                        'construction_year': payment_plan_data.construction_year,
+                                        'stratum': payment_plan_data.stratum,
+                                        'apartment_type': payment_plan_data.apartment_type,
+                                        'private_parking': payment_plan_data.private_parking
+                                    }
                                 }
                             )
                             
@@ -3383,17 +3408,13 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full")
                     result = response.json()
                     print(f"DEBUG: Apps Script result: {result}")
                     if result.get('success'):
-                        # Merge fresh data with existing data
+                        # Replace with fresh data from Apps Script (don't merge)
                         fresh_data = result.get('data', {})
-                        
-                        # Ensure the structure matches what frontend expects
-                        if not dashboard.sheet_data:
-                            dashboard.sheet_data = {}
-                        
-                        # Update with fresh data from Apps Script
-                        dashboard.sheet_data.update(fresh_data)
+
+                        # Replace sheet_data completely with fresh data
+                        dashboard.sheet_data = fresh_data
                         dashboard.last_sync_at = datetime.utcnow()
-                        print(f"DEBUG: Successfully updated sheet_data with: {fresh_data}")
+                        print(f"DEBUG: Successfully replaced sheet_data with fresh data from Apps Script")
                     else:
                         print(f"DEBUG: Apps Script returned error: {result.get('error')}")
             except Exception as e:

@@ -3,16 +3,19 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart } from 'lucide-react'
+import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+
+const MONTHS_PER_PAGE = 12
 
 export default function InvestorDashboardPage() {
   const params = useParams()
   const token = params.token as string
-  
+
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cashFlowPage, setCashFlowPage] = useState(0)
 
   const fetchDashboard = async () => {
     try {
@@ -74,24 +77,23 @@ export default function InvestorDashboardPage() {
     )
   }
 
-  const formatCurrency = (value: string | undefined): string => {
-    if (!value) return '$0'
-    const numValue = parseFloat(value.replace(/[^\d.,]/g, '').replace(/,/g, ''))
-    if (isNaN(numValue)) return value
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(numValue)
+  const formatCurrency = (value: string | number | undefined): string => {
+    if (value === undefined || value === null || value === '') return '-'
+    const numValue = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d.,]/g, '').replace(/,/g, ''))
+    if (isNaN(numValue)) return String(value)
+    // Formato completo con separador de miles
+    return `$${Math.round(numValue).toLocaleString('es-CO')}`
   }
 
-  const formatPercent = (value: string | undefined): string => {
-    if (!value) return '0%'
-    if (value.includes('%')) return value
-    const numValue = parseFloat(value)
-    if (isNaN(numValue)) return value
-    return `${numValue.toFixed(1)}%`
+  const formatPercent = (value: string | number | undefined): string => {
+    if (value === undefined || value === null || value === '') return '0%'
+    const strValue = String(value)
+    if (strValue.includes('%')) return strValue
+    const numValue = typeof value === 'number' ? value : parseFloat(strValue)
+    if (isNaN(numValue)) return strValue
+    // If value is less than 1, assume it's a decimal (e.g., 0.2 = 20%)
+    const percentValue = numValue < 1 ? numValue * 100 : numValue
+    return `${percentValue.toFixed(1)}%`
   }
 
   const investorMetrics = [
@@ -112,20 +114,20 @@ export default function InvestorDashboardPage() {
       description: 'Precio objetivo de venta'
     },
     {
-      title: 'Inversión Total',
-      value: formatCurrency(dashboardData.data?.flujo_interno?.total_investment),
+      title: 'Total Inversión por Unidad',
+      value: formatCurrency(dashboardData.data?.flujo_interno?.inversion_por_unidad),
       icon: BarChart3,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
-      description: 'Capital requerido total'
+      description: 'Inversión requerida por unidad'
     },
     {
-      title: 'ROI Proyectado',
-      value: formatPercent(dashboardData.data?.flujo_interno?.projected_roi),
+      title: 'Valor a Financiar al Cliente',
+      value: formatCurrency(dashboardData.data?.flujo_interno?.valor_a_financiar),
       icon: PieChart,
       color: 'text-orange-600',
       bgColor: 'bg-orange-50',
-      description: 'Retorno esperado de inversión'
+      description: 'Monto a financiar'
     }
   ]
 
@@ -185,6 +187,37 @@ export default function InvestorDashboardPage() {
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="space-y-6">
+          {/* Program Information - Datos C2-C6 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Información del Programa</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div>
+                  <span className="text-sm text-gray-500">Valor de Lanzamiento</span>
+                  <p className="font-medium">{dashboardData.data?.flujo_interno?.valor_lanzamiento || '-'}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Tipo de Programa</span>
+                  <p className="font-medium">{dashboardData.data?.flujo_interno?.tipo_programa || '-'}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Tipo de Vivienda</span>
+                  <p className="font-medium">{dashboardData.data?.flujo_interno?.tipo_vivienda || '-'}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Con Alistamiento</span>
+                  <p className="font-medium">{dashboardData.data?.flujo_interno?.con_alistamiento === 'Si' ? 'Sí' : 'No'}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Financiación Gastos Cierre</span>
+                  <p className="font-medium">{dashboardData.data?.flujo_interno?.con_financiacion_gastos === 'Si' ? 'Sí' : 'No'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Key metrics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {investorMetrics.map((metric, index) => (
@@ -262,47 +295,174 @@ export default function InvestorDashboardPage() {
             </Card>
           </div>
 
-          {/* Cash Flow Table */}
-          {dashboardData.data?.cash_flow && dashboardData.data.cash_flow.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Proyección de Flujo de Caja</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead>
-                      <tr className="border-b">
-                        {dashboardData.data.cash_flow[0]?.map((header, index) => (
-                          <th key={index} className="px-4 py-2 text-left text-sm font-medium text-gray-600">
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dashboardData.data.cash_flow.slice(1, 13).map((row, rowIndex) => (
-                        <tr key={rowIndex} className="border-b hover:bg-gray-50">
-                          {row.map((cell, cellIndex) => (
-                            <td key={cellIndex} className="px-4 py-2 text-sm">
-                              {cellIndex > 0 && !isNaN(parseFloat(cell)) 
-                                ? formatCurrency(cell.toString())
-                                : cell}
+          {/* Cash Flow Table - Investor View */}
+          {dashboardData.data?.investor_cash_flow?.mes_numero?.length > 0 && (() => {
+            const cashFlow = dashboardData.data.investor_cash_flow
+            const programMonths = dashboardData.data?.flujo_interno?.program_months || 60
+            const totalCols = programMonths + 2 // mes 0 + programa + 1 final
+            const allDates = (cashFlow.fecha || []).slice(0, totalCols)
+            const allMonths = (cashFlow.mes_numero || []).slice(0, totalCols)
+            // Usar fecha si existe, sino usar mes_numero formateado
+            const headers = allDates.length > 0 && allDates[0] ? allDates : allMonths.map((m: number) => `M${m}`)
+            const totalMonths = totalCols
+            const totalPages = Math.ceil(totalMonths / MONTHS_PER_PAGE)
+            const startIdx = cashFlowPage * MONTHS_PER_PAGE
+            const endIdx = Math.min(startIdx + MONTHS_PER_PAGE, totalMonths)
+            const visibleHeaders = headers.slice(startIdx, endIdx)
+            const visibleCount = visibleHeaders.length
+
+            const getSlice = (arr: any[]) => arr ? arr.slice(startIdx, endIdx) : []
+
+            // Para cuota inicial M0, usar user_down_payment si el array no tiene valor
+            const getCuotaInicialValue = (value: number | null, index: number) => {
+              const actualMonth = allMonths[startIdx + index]
+              if (actualMonth === 0 && !value) {
+                return dashboardData.data?.flujo_interno?.user_down_payment
+              }
+              return value
+            }
+
+            return (
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-base">Proyección de Flujo de Caja</CardTitle>
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.max(0, p - 1))} disabled={cashFlowPage === 0} className="h-7 px-2">
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="text-xs text-gray-600">{cashFlowPage + 1}/{totalPages}</span>
+                        <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.min(totalPages - 1, p + 1))} disabled={cashFlowPage >= totalPages - 1} className="h-7 px-2">
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-2 md:p-4 pt-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse table-fixed">
+                      <thead>
+                        <tr className="border-b bg-gray-100">
+                          <th className="px-2 py-1 text-left font-medium text-gray-700 sticky left-0 z-10 bg-gray-100 w-44">Concepto</th>
+                          {visibleHeaders.map((header: string, index: number) => (
+                            <th key={index} className={`px-1 py-1 text-right font-medium text-gray-700 whitespace-nowrap w-[85px] ${allMonths[startIdx + index] <= 1 ? 'bg-blue-50' : ''}`}>{header || '-'}</th>
+                          ))}
+                          <th className="bg-gray-100"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="bg-green-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-green-800">Ingresos</td></tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Cuota Inicial</td>
+                          {getSlice(cashFlow.cuota_inicial_usuario).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>
+                              {getCuotaInicialValue(value, i) ? formatCurrency(getCuotaInicialValue(value, i)) : '-'}
                             </td>
                           ))}
+                          <td></td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {dashboardData.data.cash_flow.length > 13 && (
-                    <p className="text-sm text-gray-500 mt-4 text-center">
-                      Mostrando los primeros 12 meses. Ver análisis completo en Excel.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Renta</td>
+                          {getSlice(cashFlow.renta).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Compra Parcial</td>
+                          {getSlice(cashFlow.compra_parcial).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Venta</td>
+                          {getSlice(cashFlow.venta).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="bg-orange-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-orange-800">A Cargo del Usuario</td></tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Impuesto Predial</td>
+                          {getSlice(cashFlow.impuesto_predial).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Administración</td>
+                          {getSlice(cashFlow.administracion).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Todo Riesgo</td>
+                          {getSlice(cashFlow.seguro_todo_riesgo).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Reparaciones</td>
+                          {getSlice(cashFlow.reparaciones_estimadas).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="bg-purple-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-purple-800">A Cargo del Inversionista</td></tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Arrendamiento</td>
+                          {getSlice(cashFlow.seguro_arrendamiento).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Ganancia Ocasional</td>
+                          {getSlice(cashFlow.ganancia_ocasional).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) ICA</td>
+                          {getSlice(cashFlow.ica).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) GMF</td>
+                          {getSlice(cashFlow.gmf).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Comisión Gestión</td>
+                          {getSlice(cashFlow.comision_toperty_gestion).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Comisión Exit</td>
+                          {getSlice(cashFlow.comision_toperty_exit).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })()}
 
           {/* Investment Highlights */}
           <Card>
