@@ -121,7 +121,7 @@ export default function UserDashboardPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b">
-        <div className="max-w-6xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold">Tu Plan de Pagos</h1>
@@ -139,7 +139,7 @@ export default function UserDashboardPage() {
       </div>
       
       {/* Main content */}
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="space-y-6">
           {/* Welcome message */}
           <Card>
@@ -319,7 +319,7 @@ export default function UserDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Cuota Inicial</td>
                           {getSlice(cashFlow.cuota_inicial_usuario).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>
                               {getCuotaInicialValue(value, i) ? formatCurrency(getCuotaInicialValue(value, i)) : '-'}
                             </td>
                           ))}
@@ -328,14 +328,14 @@ export default function UserDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Renta</td>
                           {getSlice(cashFlow.renta).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Compra Parcial</td>
                           {getSlice(cashFlow.compra_parcial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
@@ -343,28 +343,28 @@ export default function UserDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Impuesto Predial</td>
                           {getSlice(cashFlow.impuesto_predial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Administración</td>
                           {getSlice(cashFlow.administracion).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Todo Riesgo</td>
                           {getSlice(cashFlow.seguro_todo_riesgo).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Reparaciones</td>
                           {getSlice(cashFlow.reparaciones_estimadas).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
@@ -372,7 +372,7 @@ export default function UserDashboardPage() {
                         <tr className="border-b hover:bg-gray-50 bg-blue-50/30">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white font-medium">(=) Total Participación</td>
                           {getSlice(cashFlow.participacion_adquirida).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-blue-700 font-semibold whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-100' : ''}`}>{value ? `${(value * 100).toFixed(2)}%` : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-blue-700 font-semibold whitespace-nowrap`}>{value ? `${(value * 100).toFixed(2)}%` : '-'}</td>
                           ))}
                           <td></td>
                         </tr>

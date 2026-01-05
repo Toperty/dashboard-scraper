@@ -96,6 +96,30 @@ export default function InvestorDashboardPage() {
     return `${percentValue.toFixed(1)}%`
   }
 
+  const formatPercent2Decimals = (value: string | number | undefined): string => {
+    if (value === undefined || value === null || value === '') return 'N/A'
+    const strValue = String(value)
+    if (strValue.includes('%')) {
+      // Si ya viene con %, extraer el número y reformatearlo
+      const numValue = parseFloat(strValue.replace('%', ''))
+      if (isNaN(numValue)) return strValue
+      return `${numValue.toFixed(2)}%`
+    }
+    const numValue = typeof value === 'number' ? value : parseFloat(strValue)
+    if (isNaN(numValue)) return strValue
+    // If value is less than 1, assume it's a decimal (e.g., 0.2 = 20%)
+    const percentValue = numValue < 1 ? numValue * 100 : numValue
+    return `${percentValue.toFixed(2)}%`
+  }
+
+  const formatNumber2Decimals = (value: string | number | undefined): string => {
+    if (value === undefined || value === null || value === '') return 'N/A'
+    const strValue = String(value)
+    const numValue = typeof value === 'number' ? value : parseFloat(strValue.replace(/[^\d.,]/g, '').replace(/,/g, ''))
+    if (isNaN(numValue)) return strValue
+    return numValue.toFixed(2)
+  }
+
   const investorMetrics = [
     {
       title: 'Valor Comercial',
@@ -131,28 +155,6 @@ export default function InvestorDashboardPage() {
     }
   ]
 
-  const financialMetrics = [
-    {
-      label: 'Período de Inversión',
-      value: `${dashboardData.data?.flujo_interno?.program_months || '0'} meses`,
-      type: 'info'
-    },
-    {
-      label: 'Rendimiento Mensual Estimado',
-      value: formatCurrency(dashboardData.data?.flujo_interno?.monthly_payment),
-      type: 'success'
-    },
-    {
-      label: 'Retorno Total Estimado',
-      value: formatCurrency(dashboardData.data?.flujo_interno?.estimated_return),
-      type: 'success'
-    },
-    {
-      label: 'Break Even',
-      value: `${dashboardData.data?.metrics?.break_even_months || 'N/A'} meses`,
-      type: 'warning'
-    }
-  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -238,57 +240,179 @@ export default function InvestorDashboardPage() {
             ))}
           </div>
 
-          {/* Financial Analysis */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Investment Summary */}
+          {/* Property Information - Full Width */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Información General</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+                <div>
+                  <span className="text-sm text-gray-500 text-center block">Inmueble</span>
+                  <p className="font-medium">{dashboardData.data?.resumen?.edificio_nombre || 'N/A'}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-sm text-gray-500">Área Construida</span>
+                  <p className="font-medium">{dashboardData.data?.resumen?.area_construida || 'N/A'}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-sm text-gray-500">Año de Construcción</span>
+                  <p className="font-medium">{dashboardData.data?.resumen?.ano_construccion || 'N/A'}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-sm text-gray-500">Habitaciones</span>
+                  <p className="font-medium">{dashboardData.data?.resumen?.habitaciones || 'N/A'}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-sm text-gray-500">Administración Mensual</span>
+                  <p className="font-medium">{dashboardData.data?.resumen?.cuota_administracion ? formatCurrency(dashboardData.data.resumen.cuota_administracion) : 'N/A'}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-sm text-gray-500">Parqueadero</span>
+                  <p className="font-medium">{dashboardData.data?.resumen?.parqueadero || 'N/A'}</p>
+                </div>
+                <div className="text-center">
+                  <span className="text-sm text-gray-500">Ascensor</span>
+                  <p className="font-medium">{dashboardData.data?.resumen?.ascensor || 'N/A'}</p>
+                </div>
+                {dashboardData.data?.resumen?.amenities && (
+                  <div>
+                    <span className="text-sm text-gray-500 text-center block">Amenidades</span>
+                    <p className="font-medium">{dashboardData.data.resumen.amenities}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Investment Summary Cards */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            {/* Commercial Valuation */}
             <Card>
               <CardHeader>
-                <CardTitle>Resumen de Inversión</CardTitle>
+                <CardTitle>Avalúo Comercial y Valor de Compra</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {financialMetrics.map((metric, index) => (
-                    <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                      <span className="text-gray-600">{metric.label}</span>
-                      <span className={`font-semibold ${
-                        metric.type === 'success' ? 'text-green-600' :
-                        metric.type === 'warning' ? 'text-orange-600' :
-                        'text-gray-900'
-                      }`}>
-                        {metric.value}
-                      </span>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Valor Comercial - Avalúo Toperty</span>
+                      <span className="font-semibold text-green-600">{dashboardData.data?.resumen?.valor_comercial_toperty ? formatCurrency(dashboardData.data.resumen.valor_comercial_toperty) : 'N/A'}</span>
                     </div>
-                  ))}
+                    <div className="text-right text-xs text-gray-500">
+                      {dashboardData.data?.resumen?.valor_comercial_toperty_m2 ? 
+                        `${formatCurrency(dashboardData.data.resumen.valor_comercial_toperty_m2)} por m²` : 
+                        'N/A por m²'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Valor de Compra</span>
+                      <span className="font-semibold">{dashboardData.data?.resumen?.valor_compra ? formatCurrency(dashboardData.data.resumen.valor_compra) : 'N/A'}</span>
+                    </div>
+                    <div className="text-right text-xs text-gray-500">
+                      {dashboardData.data?.resumen?.valor_compra_m2 ? 
+                        `${formatCurrency(dashboardData.data.resumen.valor_compra_m2)} por m²` : 
+                        'N/A por m²'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Gastos de Cierre</span>
+                      <span className="font-semibold">{dashboardData.data?.resumen?.gastos_cierre ? formatCurrency(dashboardData.data.resumen.gastos_cierre) : 'N/A'}</span>
+                    </div>
+                    <div className="text-right text-xs text-gray-500">
+                      {dashboardData.data?.resumen?.gastos_cierre_m2 ? 
+                        `${formatCurrency(dashboardData.data.resumen.gastos_cierre_m2)} por m²` : 
+                        'N/A por m²'}
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-900 font-medium">Monto Total Inversión</span>
+                      <span className="font-bold text-blue-600">{dashboardData.data?.resumen?.monto_total_inversion ? formatCurrency(dashboardData.data.resumen.monto_total_inversion) : 'N/A'}</span>
+                    </div>
+                    <div className="text-right text-xs text-gray-500">
+                      {dashboardData.data?.resumen?.monto_total_inversion_m2 ? 
+                        `${formatCurrency(dashboardData.data.resumen.monto_total_inversion_m2)} por m²` : 
+                        'N/A por m²'}
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Risk Analysis */}
+            {/* User Information and Returns */}
             <Card>
               <CardHeader>
-                <CardTitle>Análisis de Riesgo</CardTitle>
+                <CardTitle>Información Usuario y Retornos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <h4 className="font-semibold text-green-800 mb-2">Escenario Optimista</h4>
-                    <p className="text-sm text-green-700">
-                      ROI: {formatPercent(dashboardData.data?.metrics?.best_case_roi)}
-                    </p>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Canon de Arrendamiento</span>
+                      <span className="font-semibold text-green-600">{dashboardData.data?.resumen?.canon_arrendamiento ? formatCurrency(dashboardData.data.resumen.canon_arrendamiento) : 'N/A'}</span>
+                    </div>
+                    <div className="text-right text-xs text-gray-500">
+                      {dashboardData.data?.resumen?.canon_arrendamiento_m2 ? 
+                        `${formatCurrency(dashboardData.data.resumen.canon_arrendamiento_m2)} por m²` : 
+                        'N/A por m²'}
+                    </div>
                   </div>
-                  
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-semibold text-blue-800 mb-2">Escenario Esperado</h4>
-                    <p className="text-sm text-blue-700">
-                      ROI: {formatPercent(dashboardData.data?.metrics?.expected_roi)}
-                    </p>
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Going-in Yield % Año 1</span>
+                      <span className="font-semibold text-blue-600">{formatPercent2Decimals(dashboardData.data?.resumen?.going_in_yield)}</span>
+                    </div>
                   </div>
-                  
-                  <div className="p-4 bg-orange-50 rounded-lg">
-                    <h4 className="font-semibold text-orange-800 mb-2">Escenario Pesimista</h4>
-                    <p className="text-sm text-orange-700">
-                      ROI: {formatPercent(dashboardData.data?.metrics?.worst_case_roi)}
-                    </p>
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Cash-on-cash Yield % Año 1</span>
+                      <span className="font-semibold text-blue-600">{formatPercent2Decimals(dashboardData.data?.resumen?.cash_on_cash_yield)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Retornos Estimados Anuales</span>
+                      <span className="font-semibold text-purple-600">{formatPercent2Decimals(dashboardData.data?.resumen?.retornos_estimados)}</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-900 font-medium">Múltiplo de la Inversión</span>
+                      <span className="font-bold text-green-600">{dashboardData.data?.resumen?.multiplo_inversion ? `${formatNumber2Decimals(dashboardData.data.resumen.multiplo_inversion)}x` : 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Final Sale to User */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Venta Final al Usuario</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Valor de Venta Final</span>
+                      <span className="font-semibold text-green-600">{dashboardData.data?.resumen?.valor_venta_final ? formatCurrency(dashboardData.data.resumen.valor_venta_final) : 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Aportes de Compra Durante el Programa</span>
+                      <span className="font-semibold text-blue-600">{dashboardData.data?.resumen?.aportes_compra_programa ? formatCurrency(dashboardData.data.resumen.aportes_compra_programa) : 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-900 font-medium">Saldo a Pagar con Crédito</span>
+                      <span className="font-bold text-orange-600">{dashboardData.data?.resumen?.saldo_credito_vivienda ? formatCurrency(dashboardData.data.resumen.saldo_credito_vivienda) : 'N/A'}</span>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -357,7 +481,7 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Cuota Inicial</td>
                           {getSlice(cashFlow.cuota_inicial_usuario).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>
                               {getCuotaInicialValue(value, i) ? formatCurrency(getCuotaInicialValue(value, i)) : '-'}
                             </td>
                           ))}
@@ -366,21 +490,21 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Renta</td>
                           {getSlice(cashFlow.renta).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Compra Parcial</td>
                           {getSlice(cashFlow.compra_parcial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Venta</td>
                           {getSlice(cashFlow.venta).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
@@ -388,28 +512,28 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Impuesto Predial</td>
                           {getSlice(cashFlow.impuesto_predial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Administración</td>
                           {getSlice(cashFlow.administracion).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Todo Riesgo</td>
                           {getSlice(cashFlow.seguro_todo_riesgo).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Reparaciones</td>
                           {getSlice(cashFlow.reparaciones_estimadas).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
@@ -417,42 +541,42 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Arrendamiento</td>
                           {getSlice(cashFlow.seguro_arrendamiento).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Ganancia Ocasional</td>
                           {getSlice(cashFlow.ganancia_ocasional).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) ICA</td>
                           {getSlice(cashFlow.ica).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) GMF</td>
                           {getSlice(cashFlow.gmf).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Comisión Gestión</td>
                           {getSlice(cashFlow.comision_toperty_gestion).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Comisión Exit</td>
                           {getSlice(cashFlow.comision_toperty_exit).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap ${allMonths[startIdx + i] <= 1 ? 'bg-blue-50' : ''}`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
