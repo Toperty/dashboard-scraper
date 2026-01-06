@@ -3,9 +3,20 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Clock, RefreshCw, Home, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AlertCircle, Clock, RefreshCw, Home, User, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import {
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 
 const MONTHS_PER_PAGE = 12
 
@@ -133,6 +144,17 @@ export default function UserDashboardPage() {
                 <Clock className="w-4 h-4" />
                 <span>Válido por {dashboardData.days_remaining} días</span>
               </div>
+              {/* Indicador de estado del plan */}
+              {dashboardData.data?.plan_status && (
+                <div className={`flex items-center gap-2 text-sm mt-1 ${dashboardData.data.plan_status.valid ? 'text-green-600' : 'text-red-600'}`}>
+                  {dashboardData.data.plan_status.valid ? (
+                    <CheckCircle className="w-4 h-4" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4" />
+                  )}
+                  <span>{dashboardData.data.plan_status.message}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -257,6 +279,132 @@ export default function UserDashboardPage() {
             </CardContent>
           </Card>
 
+          {/* Gráficas de Análisis */}
+          {dashboardData.data?.graficas && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Primera gráfica: Barras apiladas + línea */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Evolución de Inversión</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {dashboardData.data.graficas.grafica1 && (() => {
+                      const data = dashboardData.data.graficas.grafica1.headers.map((header: string, index: number) => ({
+                        name: header,
+                        [dashboardData.data.graficas.grafica1.label1 || 'Serie 1']: dashboardData.data.graficas.grafica1.serie1[index] || 0,
+                        [dashboardData.data.graficas.grafica1.label2 || 'Serie 2']: dashboardData.data.graficas.grafica1.serie2[index] || 0,
+                        [dashboardData.data.graficas.grafica1.label3 || 'Serie 3']: dashboardData.data.graficas.grafica1.serie3[index] || 0,
+                      }))
+
+                      return (
+                        <ResponsiveContainer width="100%" height={300}>
+                          <ComposedChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis 
+                              tickFormatter={(value) => {
+                                if (value >= 1000000) {
+                                  return `${(value / 1000000).toFixed(0)}M`
+                                } else if (value >= 1000) {
+                                  return `${(value / 1000).toFixed(0)}K`
+                                }
+                                return value.toString()
+                              }}
+                              width={30}
+                            />
+                            <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : value} />
+                            <Legend />
+                            <Bar dataKey={dashboardData.data.graficas.grafica1.label1 || 'Serie 1'} stackId="a" fill="#280541" />
+                            <Bar dataKey={dashboardData.data.graficas.grafica1.label2 || 'Serie 2'} stackId="a" fill="#e46c0a" />
+                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica1.label3 || 'Serie 3'} stroke="#0bd0d9" strokeWidth={2} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      )
+                    })()}
+                  </CardContent>
+                </Card>
+
+                {/* Segunda gráfica: Barras comparativas + línea */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Comparación de Flujos</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {dashboardData.data.graficas.grafica2 && (() => {
+                      const data = dashboardData.data.graficas.grafica2.headers.map((header: string, index: number) => ({
+                        name: header,
+                        [dashboardData.data.graficas.grafica2.label1 || 'Serie 1']: dashboardData.data.graficas.grafica2.serie1[index] || 0,
+                        [dashboardData.data.graficas.grafica2.label2 || 'Serie 2']: dashboardData.data.graficas.grafica2.serie2[index] || 0,
+                        [dashboardData.data.graficas.grafica2.label3 || 'Serie 3']: dashboardData.data.graficas.grafica2.serie3[index] || 0,
+                      }))
+
+                      return (
+                        <ResponsiveContainer width="100%" height={300}>
+                          <ComposedChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 25 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis 
+                              tickFormatter={(value) => {
+                                if (value >= 1000000) {
+                                  return `${(value / 1000000).toFixed(0)}M`
+                                } else if (value >= 1000) {
+                                  return `${(value / 1000).toFixed(0)}K`
+                                }
+                                return value.toString()
+                              }}
+                              width={30}
+                            />
+                            <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : value} />
+                            <Legend />
+                            <Bar dataKey={dashboardData.data.graficas.grafica2.label1 || 'Serie 1'} fill="#280541" />
+                            <Bar dataKey={dashboardData.data.graficas.grafica2.label2 || 'Serie 2'} fill="#e46c0a" />
+                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica2.label3 || 'Serie 3'} stroke="#ffc000" strokeWidth={2} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      )
+                    })()}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Tabla Comparativa */}
+              {dashboardData.data.graficas.tabla_comparativa && (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle>Análisis Comparativo</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-gray-50">
+                            {dashboardData.data.graficas.tabla_comparativa.headers.filter((header: string, index: number) => index % 2 === 0).map((header: string, index: number) => (
+                              <th key={index} className={`px-2 py-3 ${index === 0 ? 'text-left' : 'text-center'} font-medium text-gray-700 ${index === 0 ? 'sticky left-0 z-10 bg-gray-50' : ''}`}>
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dashboardData.data.graficas.tabla_comparativa.data.map((row: any[], rowIndex: number) => (
+                            <tr key={rowIndex} className="border-b hover:bg-gray-50">
+                              {row.filter((cell: any, cellIndex: number) => cellIndex % 2 === 0).map((filteredCell: any, newIndex: number) => (
+                                <td key={newIndex} className={`px-2 py-3 ${newIndex === 0 ? 'sticky left-0 z-10 bg-white font-medium' : ''} ${typeof filteredCell === 'number' ? 'text-right' : ''}`}>
+                                  {typeof filteredCell === 'number' ? formatCurrency(filteredCell) : (filteredCell || '')}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
           {/* Cash Flow Projection - User View */}
           {dashboardData.data?.user_cash_flow?.mes_numero?.length > 0 && (() => {
             const cashFlow = dashboardData.data.user_cash_flow
@@ -315,7 +463,7 @@ export default function UserDashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="bg-green-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-green-800">Ingresos</td></tr>
+                        <tr className="bg-green-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-green-800">Pagos Rent to Own</td></tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Cuota Inicial</td>
                           {getSlice(cashFlow.cuota_inicial_usuario).map((value: number, i: number) => (
@@ -336,6 +484,13 @@ export default function UserDashboardPage() {
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Compra Parcial</td>
                           {getSlice(cashFlow.compra_parcial).map((value: number, i: number) => (
                             <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="border-b hover:bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white font-medium">Total Pagos Rent to Own</td>
+                          {getSlice(cashFlow.total_pagos_rent_to_own).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 font-semibold whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>

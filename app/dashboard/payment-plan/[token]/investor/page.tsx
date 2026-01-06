@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const MONTHS_PER_PAGE = 12
@@ -167,20 +167,22 @@ export default function InvestorDashboardPage() {
               <p className="text-gray-600">Análisis financiero - {dashboardData.valuation_name}</p>
             </div>
             
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="flex items-center gap-2 text-sm text-orange-600">
-                  <Clock className="w-4 h-4" />
-                  <span>Válido por {dashboardData.days_remaining} días</span>
-                </div>
+            <div className="text-right">
+              <div className="flex items-center gap-2 text-sm text-orange-600">
+                <Clock className="w-4 h-4" />
+                <span>Válido por {dashboardData.days_remaining} días</span>
               </div>
-              <Button
-                onClick={() => window.open(dashboardData.sheet_url, '_blank')}
-                variant="default"
-                size="sm"
-              >
-                Ver Análisis Completo
-              </Button>
+              {/* Indicador de estado del plan */}
+              {dashboardData.data?.plan_status && (
+                <div className={`flex items-center gap-2 text-sm mt-1 ${dashboardData.data.plan_status.valid ? 'text-green-600' : 'text-red-600'}`}>
+                  {dashboardData.data.plan_status.valid ? (
+                    <CheckCircle className="w-4 h-4" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4" />
+                  )}
+                  <span>{dashboardData.data.plan_status.message}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -469,9 +471,9 @@ export default function InvestorDashboardPage() {
                     <table className="w-full text-xs border-collapse table-fixed">
                       <thead>
                         <tr className="border-b bg-gray-100">
-                          <th className="px-2 py-1 text-left font-medium text-gray-700 sticky left-0 z-10 bg-gray-100 w-44">Concepto</th>
+                          <th className="px-2 py-1 text-left font-medium text-gray-700 sticky left-0 z-10 bg-gray-100 w-42">Concepto</th>
                           {visibleHeaders.map((header: string, index: number) => (
-                            <th key={index} className={`px-1 py-1 text-right font-medium text-gray-700 whitespace-nowrap w-[85px] ${allMonths[startIdx + index] <= 1 ? 'bg-blue-50' : ''}`}>{header || '-'}</th>
+                            <th key={index} className={`px-1 py-1 text-right font-medium text-gray-700 whitespace-nowrap ${cashFlowPage === 0 && index === 1 ? 'w-[95px]' : 'w-[85px]'} ${allMonths[startIdx + index] <= 1 ? 'bg-blue-50' : ''}`}>{header || '-'}</th>
                           ))}
                           <th className="bg-gray-100"></th>
                         </tr>
@@ -577,6 +579,16 @@ export default function InvestorDashboardPage() {
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Comisión Exit</td>
                           {getSlice(cashFlow.comision_toperty_exit).map((value: number, i: number) => (
                             <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                          ))}
+                          <td></td>
+                        </tr>
+                        <tr className="bg-gray-100 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-gray-800">Flujo Operativo</td></tr>
+                        <tr className="border-b hover:bg-gray-50 bg-gray-50">
+                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white font-bold">(=) Flujo de Caja Operativo</td>
+                          {getSlice(cashFlow.flujo_caja_operativo).map((value: number, i: number) => (
+                            <td key={i} className={`px-2 py-1 text-right font-bold whitespace-nowrap ${value >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {value ? formatCurrency(value) : '-'}
+                            </td>
                           ))}
                           <td></td>
                         </tr>
