@@ -315,9 +315,9 @@ export default function UserDashboardPage() {
                             />
                             <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : value} />
                             <Legend />
-                            <Bar dataKey={dashboardData.data.graficas.grafica1.label1 || 'Serie 1'} stackId="a" fill="#280541" />
-                            <Bar dataKey={dashboardData.data.graficas.grafica1.label2 || 'Serie 2'} stackId="a" fill="#e46c0a" />
-                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica1.label3 || 'Serie 3'} stroke="#0bd0d9" strokeWidth={2} />
+                            <Bar dataKey={dashboardData.data.graficas.grafica1.label1 || 'Serie 1'} stackId="a" fill="#021945" />
+                            <Bar dataKey={dashboardData.data.graficas.grafica1.label2 || 'Serie 2'} stackId="a" fill="#6efafb" />
+                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica1.label3 || 'Serie 3'} stroke="#0466c9" strokeWidth={2} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       )
@@ -357,9 +357,9 @@ export default function UserDashboardPage() {
                             />
                             <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : value} />
                             <Legend />
-                            <Bar dataKey={dashboardData.data.graficas.grafica2.label1 || 'Serie 1'} fill="#280541" />
-                            <Bar dataKey={dashboardData.data.graficas.grafica2.label2 || 'Serie 2'} fill="#e46c0a" />
-                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica2.label3 || 'Serie 3'} stroke="#ffc000" strokeWidth={2} />
+                            <Bar dataKey={dashboardData.data.graficas.grafica2.label1 || 'Serie 1'} fill="#021945" />
+                            <Bar dataKey={dashboardData.data.graficas.grafica2.label2 || 'Serie 2'} fill="#6efafb" />
+                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica2.label3 || 'Serie 3'} stroke="#0466c9" strokeWidth={2} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       )
@@ -389,11 +389,27 @@ export default function UserDashboardPage() {
                         <tbody>
                           {dashboardData.data.graficas.tabla_comparativa.data.map((row: any[], rowIndex: number) => (
                             <tr key={rowIndex} className="border-b hover:bg-gray-50">
-                              {row.filter((cell: any, cellIndex: number) => cellIndex % 2 === 0).map((filteredCell: any, newIndex: number) => (
-                                <td key={newIndex} className={`px-2 py-3 ${newIndex === 0 ? 'sticky left-0 z-10 bg-white font-medium' : ''} ${typeof filteredCell === 'number' ? 'text-right' : ''}`}>
-                                  {typeof filteredCell === 'number' ? formatCurrency(filteredCell) : (filteredCell || '')}
-                                </td>
-                              ))}
+                              {row.filter((cell: any, cellIndex: number) => cellIndex % 2 === 0).map((filteredCell: any, newIndex: number) => {
+                                // Obtener el nombre de la fila (primera celda filtrada)
+                                const rowName = row.filter((cell: any, cellIndex: number) => cellIndex % 2 === 0)[0]?.toString().toLowerCase() || '';
+                                
+                                let displayValue = filteredCell || '';
+                                
+                                if (typeof filteredCell === 'number') {
+                                  // Si es la fila de tasas o cuotas mensuales/VC y el valor es decimal, formatear como porcentaje
+                                  if ((rowName.includes('tasa') || rowName.includes('cuota mensual / vc')) && filteredCell < 1 && filteredCell > 0) {
+                                    displayValue = (filteredCell * 100).toFixed(2) + '%';
+                                  } else {
+                                    displayValue = formatCurrency(filteredCell);
+                                  }
+                                }
+                                
+                                return (
+                                  <td key={newIndex} className={`px-2 py-3 ${newIndex === 0 ? 'sticky left-0 z-10 bg-white font-medium' : ''} ${typeof filteredCell === 'number' ? 'text-right' : ''}`}>
+                                    {displayValue}
+                                  </td>
+                                )
+                              })}
                             </tr>
                           ))}
                         </tbody>
