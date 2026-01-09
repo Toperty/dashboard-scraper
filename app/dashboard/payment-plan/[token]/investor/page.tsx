@@ -163,13 +163,9 @@ export default function InvestorDashboardPage() {
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-start">
-            {/* Logo y título */}
+            {/* Logo */}
             <div className="flex items-center gap-4">
               <TopertyLogo width={100} height={40} />
-              <div>
-                <h1 className="text-2xl font-bold">Dashboard de Inversión</h1>
-                <p className="text-gray-600">Análisis financiero - {dashboardData.valuation_name}</p>
-              </div>
             </div>
             
             <div className="text-right">
@@ -196,6 +192,11 @@ export default function InvestorDashboardPage() {
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="space-y-6">
+          {/* Título principal */}
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Dashboard de Inversión</h1>
+            <p className="text-xl text-gray-600 mb-6">Análisis financiero - {dashboardData.valuation_name}</p>
+          </div>
           {/* Program Information - Datos C2-C6 */}
           <Card>
             <CardHeader>

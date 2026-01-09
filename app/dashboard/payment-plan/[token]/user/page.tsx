@@ -140,13 +140,9 @@ export default function UserDashboardPage() {
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-start">
-            {/* Logo y título */}
+            {/* Logo */}
             <div className="flex items-center gap-4">
               <TopertyLogo width={100} height={40} />
-              <div>
-                <h1 className="text-2xl font-bold">Tu Plan de Pagos</h1>
-                <p className="text-gray-600">{dashboardData.data?.para_usuario?.client_name}</p>
-              </div>
             </div>
             
             {/* Status e indicadores */}
@@ -174,6 +170,12 @@ export default function UserDashboardPage() {
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="space-y-6">
+          {/* Título principal */}
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Tu Plan de Pagos</h1>
+            <p className="text-xl text-gray-600 mb-6">{dashboardData.data?.para_usuario?.client_name}</p>
+          </div>
+
           {/* Welcome message */}
           <Card>
             <CardContent className="pt-6">
