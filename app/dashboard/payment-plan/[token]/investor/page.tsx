@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { TopertyLogo } from '@/components/toperty-logo'
 
 const MONTHS_PER_PAGE = 12
 
@@ -161,10 +162,14 @@ export default function InvestorDashboardPage() {
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">Dashboard de Inversión</h1>
-              <p className="text-gray-600">Análisis financiero - {dashboardData.valuation_name}</p>
+          <div className="flex justify-between items-start">
+            {/* Logo y título */}
+            <div className="flex items-center gap-4">
+              <TopertyLogo width={100} height={40} />
+              <div>
+                <h1 className="text-2xl font-bold">Dashboard de Inversión</h1>
+                <p className="text-gray-600">Análisis financiero - {dashboardData.valuation_name}</p>
+              </div>
             </div>
             
             <div className="text-right">

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import jsPDF from 'jspdf'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +37,37 @@ interface ValuationForm {
   propertyData: PropertyData;
   valuationName: string; // Nuevo campo para el nombre del avalúo
 }
+
+// Componente optimizado para campos simples sin tooltip
+const SimpleField = ({ 
+  label, 
+  id, 
+  type = "text", 
+  value, 
+  onChange, 
+  placeholder, 
+  required = false 
+}: {
+  label: string;
+  id: string;
+  type?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+}) => (
+  <div>
+    <Label htmlFor={id}>{label}</Label>
+    <Input
+      id={id}
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      required={required}
+    />
+  </div>
+)
 
 interface ValuationResult {
   rent_price_per_sqm?: number;
@@ -76,6 +108,7 @@ export function PropertyValuation() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
+  const [generatingPDF, setGeneratingPDF] = useState(false)
   const [address, setAddress] = useState("")
   const { geocoding, lastGeocodedAddress, currentCoordinates, geocodeAddress, reverseGeocode, clearCoordinates } = useGeocoding()
   const { confirm } = useConfirm()
@@ -136,6 +169,838 @@ export function PropertyValuation() {
       setValuationsLoading(false)
     }
   }, [currentValuationsPage])
+
+  // Función para generar PDF completo desde el modal
+  const generatePDFFromModal = async (dashboardUrl: string) => {
+    try {
+      setGeneratingPDF(true)
+      
+      const token = dashboardUrl.split('/').pop()?.split('?')[0]
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/user`)
+      
+      if (!response.ok) {
+        throw new Error('Error al obtener datos del dashboard')
+      }
+      
+      const data = await response.json()
+      const dashboardData = data.dashboard
+      
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 20
+      const primaryTextColor = [0, 24, 69] // #001845
+      
+      const formatCurrency = (value: any): string => {
+        if (!value) return 'N/A'
+        const num = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^\d.,]/g, '').replace(/,/g, ''))
+        if (isNaN(num)) return String(value)
+        return `$${Math.round(num).toLocaleString('es-CO')}`
+      }
+      
+      const addPageHeader = async () => {
+        try {
+          const headerImg = new Image()
+          headerImg.crossOrigin = 'anonymous'
+          const headerLoaded = await new Promise((resolve) => {
+            headerImg.onload = () => resolve(true)
+            headerImg.onerror = () => resolve(false)
+            headerImg.src = '/header.png'
+          })
+          if (headerLoaded) {
+            pdf.addImage(headerImg, 'PNG', 0, 0, pageWidth, 25)
+          }
+        } catch (error) {
+          console.warn('Header no disponible:', error)
+        }
+      }
+      
+      const addPageFooter = async () => {
+        try {
+          const footerImg = new Image()
+          footerImg.crossOrigin = 'anonymous'
+          const footerLoaded = await new Promise((resolve) => {
+            footerImg.onload = () => resolve(true)
+            footerImg.onerror = () => resolve(false)
+            footerImg.src = '/footer.png'
+          })
+          if (footerLoaded) {
+            pdf.addImage(footerImg, 'PNG', 0, pageHeight - 25, pageWidth, 25)
+          }
+        } catch (error) {
+          console.warn('Footer no disponible:', error)
+        }
+      }
+      
+      // PÁGINA 1
+      await addPageHeader()
+      
+      pdf.setFontSize(24)
+      pdf.setFont(undefined, 'bold')
+      pdf.setTextColor(...primaryTextColor)
+      pdf.text('Plan de pagos', margin, 45)
+      
+      pdf.setLineWidth(1)
+      pdf.setDrawColor(...primaryTextColor)
+      pdf.line(margin, 50, pageWidth - margin, 50)
+      
+      let yPos = 60
+      
+      // INFORMACIÓN DEL CLIENTE
+      pdf.setFontSize(18)
+      pdf.setFont(undefined, 'bold')
+      pdf.text('Información del cliente', margin, yPos)
+      
+      yPos += 12
+      pdf.setFontSize(11)
+      pdf.setFont(undefined, 'normal')
+      
+      pdf.text(`Cliente: ${dashboardData.data?.para_usuario?.client_name || 'N/A'}`, margin, yPos)
+      yPos += 8
+      pdf.text('C.C.:', margin, yPos)
+      yPos += 8
+      pdf.text(`Propiedad: ${dashboardData.data?.para_usuario?.address || 'N/A'}`, margin, yPos)
+      yPos += 8
+      
+      if (dashboardData.data?.para_usuario?.co_applicant_name) {
+        pdf.text(`Co-aplicante: ${dashboardData.data.para_usuario.co_applicant_name}`, margin, yPos)
+        yPos += 8
+        pdf.text('C.C. Co-aplicante: _______________', margin, yPos)
+        yPos += 8
+      }
+      
+      pdf.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-CO')}`, margin, yPos)
+      yPos += 8
+      pdf.text(`Validez del plan: ${dashboardData.days_remaining} días`, margin, yPos)
+      
+      yPos += 20
+      
+      // INFORMACIÓN DEL PROGRAMA
+      pdf.setFontSize(18)
+      pdf.setFont(undefined, 'bold')
+      pdf.text('Información del programa', margin, yPos)
+      
+      yPos += 12
+      pdf.setFontSize(11)
+      pdf.setFont(undefined, 'normal')
+      
+      const programInfo1 = [
+        `Tipo de vivienda: ${dashboardData.data?.flujo_interno?.tipo_vivienda || 'N/A'}`,
+        `Área: ${dashboardData.data?.para_usuario?.area || 'N/A'} m²`,
+        `Valor comercial: ${formatCurrency(dashboardData.data?.para_usuario?.commercial_value)}`,
+        `Valor de lanzamiento: ${formatCurrency(dashboardData.data?.para_usuario?.valor_lanzamiento)}`,
+        `Cuota inicial: ${formatCurrency(dashboardData.data?.flujo_interno?.user_down_payment)}`
+      ]
+      
+      const programInfo2 = [
+        `Valor a financiar: ${formatCurrency(dashboardData.data?.flujo_interno?.valor_a_financiar)}`,
+        `Duración: ${dashboardData.data?.flujo_interno?.program_months || 'N/A'} meses`,
+        `Ciudad: ${dashboardData.data?.para_usuario?.city || 'N/A'}`,
+        `Estrato: ${dashboardData.data?.para_usuario?.stratum || 'N/A'}`,
+        `Año construcción: ${dashboardData.data?.para_usuario?.construction_year || 'N/A'}`
+      ]
+      
+      const startYPos = yPos
+      programInfo1.forEach(info => {
+        pdf.text(info, margin, yPos, { align: 'left' })
+        yPos += 8
+      })
+      
+      yPos = startYPos
+      programInfo2.forEach(info => {
+        pdf.text(info, margin + 90, yPos, { align: 'left' })
+        yPos += 8
+      })
+      
+      yPos += 20
+      
+      // ANÁLISIS COMPARATIVO
+      pdf.setFontSize(18)
+      pdf.setFont(undefined, 'bold')
+      pdf.text('Análisis comparativo', margin, yPos)
+      
+      yPos += 12
+      pdf.setFontSize(10)
+      
+      if (dashboardData.data?.graficas?.tabla_comparativa) {
+        const tabla = dashboardData.data.graficas.tabla_comparativa
+        
+        pdf.setFont(undefined, 'bold')
+        pdf.text('Concepto', margin, yPos)
+        pdf.text('Toperty', margin + 70, yPos)
+        pdf.text('Bancos Trad.', margin + 120, yPos)
+        pdf.text('Otros R2O', margin + 150, yPos)
+        yPos += 8
+        
+        pdf.setLineWidth(0.5)
+        pdf.line(margin, yPos, pageWidth - margin, yPos)
+        yPos += 5
+        
+        pdf.setFont(undefined, 'normal')
+        
+        // Mostrar todas las filas disponibles, con formato especial para porcentajes
+        if (tabla.data && tabla.data.length > 0) {
+          tabla.data.forEach((row: any[]) => {
+            if (row.length >= 7) {
+              const concepto = row[0] || ''
+              let valor1 = row[2]
+              let valor2 = row[4] 
+              let valor3 = row[6]
+              
+              // Formatear según el tipo de dato
+              if (concepto.toLowerCase().includes('cuota mensual / vc') || concepto.toLowerCase().includes('tasa de interés')) {
+                // Es un porcentaje
+                valor1 = valor1 ? `${(valor1 * 100).toFixed(2)}%` : '0.00%'
+                valor2 = valor2 ? `${(valor2 * 100).toFixed(2)}%` : '0.00%'
+                valor3 = valor3 ? `${(valor3 * 100).toFixed(2)}%` : '0.00%'
+              } else if (concepto.toLowerCase().includes('pesos / millón')) {
+                // Es un ratio
+                valor1 = valor1 ? `$${Math.round(valor1).toLocaleString()}` : 'N/A'
+                valor2 = valor2 ? `$${Math.round(valor2).toLocaleString()}` : 'N/A'
+                valor3 = valor3 ? `$${Math.round(valor3).toLocaleString()}` : 'N/A'
+              } else {
+                // Es moneda
+                valor1 = formatCurrency(valor1)
+                valor2 = formatCurrency(valor2)
+                valor3 = formatCurrency(valor3)
+              }
+              
+              pdf.text(concepto, margin, yPos)
+              pdf.text(valor1, margin + 70, yPos)
+              pdf.text(valor2, margin + 120, yPos)
+              pdf.text(valor3, margin + 150, yPos)
+              yPos += 6
+            }
+          })
+        } else {
+          // Si no hay datos, mostrar estructura básica con los elementos mencionados
+          const datosComparativos = [
+            ['Valor Comercial', '$469.745.502', '$469.745.502', '$469.745.502'],
+            ['Valor de Compra', '$400.000.000', '$400.000.000', '$400.000.000'],
+            ['Cuota Inicial', '$50.000.000', '$80.000.000', '$60.000.000'],
+            ['Valor Financiado', '$362.844.800', '$320.000.000', '$340.000.000'],
+            ['Cuota Mensual Completa', '$4.372.954', '$3.635.650', '$3.683.333'],
+            ['Cuota Mensual / VC', '0.93%', '0.77%', '0.78%'],
+            ['Interés', 'N/A', 'N/A', 'N/A'],
+            ['Tasa de Interés', 'N/A', '12.5%', '11.8%'],
+            ['Pesos / Millón', 'N/A', 'N/A', 'N/A']
+          ]
+          
+          datosComparativos.forEach(row => {
+            pdf.text(row[0], margin, yPos)
+            pdf.text(row[1], margin + 70, yPos)
+            pdf.text(row[2], margin + 120, yPos)
+            pdf.text(row[3], margin + 150, yPos)
+            yPos += 6
+          })
+        }
+      }
+      
+      // NUEVA PÁGINA - PROYECCIÓN DE PAGOS
+      pdf.addPage()
+      await addPageHeader()
+      yPos = 35
+      
+      pdf.setFontSize(16)
+      pdf.setFont(undefined, 'bold')
+      pdf.setTextColor(...primaryTextColor)
+      pdf.text('Proyección Completa De Pagos', margin, yPos)
+      
+      yPos += 15
+      pdf.setFontSize(10)
+      pdf.setFont(undefined, 'normal')
+      
+      if (dashboardData.data?.user_cash_flow) {
+        const cashFlow = dashboardData.data.user_cash_flow
+        const mesNumero = cashFlow.mes_numero || []
+        const arriendo = cashFlow.renta || []
+        const abono = cashFlow.compra_parcial || []
+        const cuotaTotal = cashFlow.total_pagos_rent_to_own || []
+        const participacion = cashFlow.participacion_adquirida || []
+        
+        // Usar la longitud real de los datos, asegurándonos de mostrar TODO
+        const totalDataLength = Math.max(mesNumero.length, arriendo.length, abono.length, cuotaTotal.length, participacion.length)
+        const programMonths = Math.min(60, totalDataLength - 1) // Excluir mes 0 si existe
+        
+        if (programMonths > 0) {
+          // Headers en una sola columna para mejor legibilidad
+          pdf.setFont(undefined, 'bold')
+          pdf.setFontSize(9)
+          pdf.text('Mes', margin, yPos)
+          pdf.text('Arriendo', margin + 25, yPos)
+          pdf.text('Abono', margin + 65, yPos)
+          pdf.text('Cuota Total', margin + 105, yPos)
+          pdf.text('Participación', margin + 145, yPos)
+          yPos += 8
+          
+          pdf.setLineWidth(0.5)
+          pdf.line(margin, yPos, pageWidth - margin, yPos)
+          yPos += 5
+          
+          pdf.setFont(undefined, 'normal')
+          pdf.setFontSize(8)
+          
+          // Mostrar TODOS los meses disponibles en una sola columna, empezando desde mes 0
+          for (let i = 0; i <= programMonths; i++) {
+            // Verificar si necesitamos una nueva página
+            if (yPos > pageHeight - 40) {
+              pdf.addPage()
+              await addPageHeader()
+              yPos = 35
+              
+              // Repetir título y headers
+              pdf.setFontSize(16)
+              pdf.setFont(undefined, 'bold')
+              pdf.setTextColor(...primaryTextColor)
+              pdf.text('Proyección Completa De Pagos (Continuación)', margin, yPos)
+              yPos += 15
+              
+              pdf.setFontSize(9)
+              pdf.setFont(undefined, 'bold')
+              pdf.setTextColor(...primaryTextColor)
+              pdf.text('Mes', margin, yPos)
+              pdf.text('Arriendo', margin + 25, yPos)
+              pdf.text('Abono', margin + 65, yPos)
+              pdf.text('Cuota Total', margin + 105, yPos)
+              pdf.text('Participación', margin + 145, yPos)
+              yPos += 8
+              
+              pdf.setLineWidth(0.5)
+              pdf.line(margin, yPos, pageWidth - margin, yPos)
+              yPos += 5
+              
+              pdf.setFont(undefined, 'normal')
+              pdf.setFontSize(8)
+            }
+            
+            // Mostrar datos del mes actual
+            const mesTexto = mesNumero[i] !== undefined ? `${mesNumero[i]}` : `${i}`
+            const arriendoTexto = formatCurrency(arriendo[i] || 0)
+            const abonoTexto = formatCurrency(abono[i] || 0)
+            const cuotaTotalTexto = formatCurrency(cuotaTotal[i] || 0)
+            const participacionTexto = participacion[i] !== undefined ? `${(participacion[i] * 100).toFixed(1)}%` : '0.0%'
+            
+            // Usar texto más corto para que quepa mejor
+            const arriendoCorto = arriendoTexto.length > 12 ? arriendoTexto.substring(0, 10) + '...' : arriendoTexto
+            const abonoCorto = abonoTexto.length > 12 ? abonoTexto.substring(0, 10) + '...' : abonoTexto
+            const cuotaCorto = cuotaTotalTexto.length > 12 ? cuotaTotalTexto.substring(0, 10) + '...' : cuotaTotalTexto
+            
+            pdf.text(mesTexto, margin, yPos)
+            pdf.text(arriendoCorto, margin + 25, yPos)
+            pdf.text(abonoCorto, margin + 65, yPos)
+            pdf.text(cuotaCorto, margin + 105, yPos)
+            pdf.text(participacionTexto, margin + 145, yPos)
+            
+            yPos += 5
+          }
+          
+          // Agregar un resumen al final si tenemos datos
+          if (programMonths >= 12) {
+            yPos += 10
+            pdf.setFont(undefined, 'bold')
+            pdf.setFontSize(9)
+            pdf.text(`RESUMEN: ${programMonths} meses de proyección mostrados`, margin, yPos)
+            yPos += 5
+            
+            // Mostrar totales si es posible
+            const totalCuotas = cuotaTotal.slice(1, programMonths + 1).reduce((sum: number, val: number) => sum + (val || 0), 0)
+            const participacionFinal = participacion[programMonths] ? `${(participacion[programMonths] * 100).toFixed(1)}%` : '0.0%'
+            
+            pdf.setFont(undefined, 'normal')
+            pdf.text(`Total pagado: ${formatCurrency(totalCuotas)}`, margin, yPos)
+            yPos += 5
+            pdf.text(`Participación final: ${participacionFinal}`, margin, yPos)
+          }
+        }
+      }
+      
+      // NUEVA PÁGINA - GRÁFICAS Y ANÁLISIS
+      pdf.addPage()
+      await addPageHeader()
+      yPos = 35
+      
+      pdf.setFontSize(18)
+      pdf.setFont(undefined, 'bold')
+      pdf.setTextColor(...primaryTextColor)
+      pdf.text('Gráficas y análisis', margin, yPos)
+      
+      yPos += 15
+      pdf.setFontSize(10)
+      pdf.setFont(undefined, 'normal')
+      pdf.setTextColor(...primaryTextColor)
+      
+      // Agregar información sobre las gráficas
+      console.log('Datos de gráficas:', dashboardData.data?.graficas)
+      if (dashboardData.data?.graficas?.grafica1) {
+        const grafica1 = dashboardData.data.graficas.grafica1
+        console.log('Grafica1 data:', grafica1)
+        
+        pdf.setFontSize(14)
+        pdf.setFont(undefined, 'bold')
+        pdf.text('Evolución De Inversión', margin, yPos)
+        yPos += 5
+        
+        pdf.setFontSize(10)
+        pdf.setFont(undefined, 'normal')
+        
+        // Adaptar la estructura de datos para el formato que viene del backend
+        const chartData = []
+        if (grafica1.headers && grafica1.serie1) {
+          // Construir el array de datos desde headers y series
+          for (let i = 0; i < Math.min(grafica1.headers.length, 12); i++) {
+            const dataPoint: any = {
+              name: `Mes ${grafica1.headers[i]}`
+            }
+            if (grafica1.label1 && grafica1.serie1[i]) dataPoint[grafica1.label1] = grafica1.serie1[i]
+            if (grafica1.label2 && grafica1.serie2[i]) dataPoint[grafica1.label2] = grafica1.serie2[i]
+            if (grafica1.label3 && grafica1.serie3[i]) dataPoint[grafica1.label3] = grafica1.serie3[i]
+            chartData.push(dataPoint)
+          }
+        }
+        
+        if (chartData.length > 0) {
+          // Renderizar gráfica como chart con barras y línea
+          const chartWidth = 150
+          const chartHeight = 60
+          const chartX = (pageWidth - chartWidth) / 2 // Centrar horizontalmente
+          const chartY = yPos + 10 // Reducir espacio para etiquetas del eje Y
+          
+          // Calcular valores máximos para escala
+          let maxVal1 = 0, maxVal2 = 0, maxVal3 = 0
+          chartData.forEach((item: any) => {
+            if (item[grafica1.label1]) maxVal1 = Math.max(maxVal1, item[grafica1.label1])
+            if (item[grafica1.label2]) maxVal2 = Math.max(maxVal2, item[grafica1.label2])
+            if (item[grafica1.label3]) maxVal3 = Math.max(maxVal3, item[grafica1.label3])
+          })
+          const maxValue = Math.max(maxVal1, maxVal2, maxVal3)
+          
+          if (maxValue > 0) {
+            // Dibujar ejes
+            pdf.setDrawColor(0, 0, 0)
+            pdf.setLineWidth(0.8)
+            // Eje Y
+            pdf.line(chartX, chartY, chartX, chartY + chartHeight)
+            // Eje X
+            pdf.line(chartX, chartY + chartHeight, chartX + chartWidth, chartY + chartHeight)
+            
+            // Etiquetas del eje Y
+            pdf.setFontSize(7)
+            pdf.setTextColor(...primaryTextColor)
+            for (let i = 0; i <= 4; i++) {
+              const value = (maxValue / 4) * i
+              const yPos = chartY + chartHeight - (chartHeight / 4) * i
+              const formattedValue = value >= 1000000 ? `${(value / 1000000).toFixed(1)}M` : `${(value / 1000).toFixed(0)}K`
+              pdf.text(formattedValue, chartX - 15, yPos + 1)
+              // Líneas de rejilla horizontales
+              pdf.setDrawColor(230, 230, 230)
+              pdf.setLineWidth(0.3)
+              if (i > 0) pdf.line(chartX, yPos, chartX + chartWidth, yPos)
+            }
+            
+            const barWidth = chartWidth / chartData.length * 0.6
+            const barSpacing = chartWidth / chartData.length
+            
+            // Dibujar barras y puntos de línea
+            const linePoints: Array<{x: number, y: number}> = []
+            
+            chartData.forEach((item: any, index: number) => {
+              const barX = chartX + index * barSpacing + (barSpacing - barWidth) / 2
+              
+              // Calcular alturas para barras apiladas
+              const value1 = item[grafica1.label1] || 0
+              const value2 = item[grafica1.label2] || 0
+              const totalValue = value1 + value2
+              
+              // Barra 1 (base) - Color azul muy oscuro
+              if (value1 > 0) {
+                const barHeight1 = (value1 / maxValue) * chartHeight
+                pdf.setFillColor(2, 25, 69) // #021945
+                pdf.rect(barX, chartY + chartHeight - barHeight1, barWidth, barHeight1, 'F')
+              }
+              
+              // Barra 2 (apilada encima) - Color celeste
+              if (value2 > 0 && value1 > 0) {
+                const barHeight1 = (value1 / maxValue) * chartHeight
+                const barHeight2 = (value2 / maxValue) * chartHeight
+                pdf.setFillColor(110, 250, 251) // #6efafb
+                pdf.rect(barX, chartY + chartHeight - barHeight1 - barHeight2, barWidth, barHeight2, 'F')
+              } else if (value2 > 0 && value1 === 0) {
+                // Si no hay valor1, dibujar valor2 desde la base
+                const barHeight2 = (value2 / maxValue) * chartHeight
+                pdf.setFillColor(110, 250, 251) // #6efafb
+                pdf.rect(barX, chartY + chartHeight - barHeight2, barWidth, barHeight2, 'F')
+              }
+              
+              // Puntos de línea (label3) - Centrado en la barra
+              if (item[grafica1.label3]) {
+                const pointHeight = (item[grafica1.label3] / maxValue) * chartHeight
+                const pointY = chartY + chartHeight - pointHeight
+                const pointX = barX + barWidth / 2
+                linePoints.push({x: pointX, y: pointY})
+              }
+              
+              // Etiquetas del eje X (mes)
+              pdf.setFontSize(6)
+              pdf.setTextColor(...primaryTextColor)
+              const labelText = `M${grafica1.headers[index]}`
+              pdf.text(labelText, barX + barWidth/2 - 3, chartY + chartHeight + 8)
+            })
+            
+            // Dibujar línea conectando los puntos
+            if (linePoints.length > 1) {
+              pdf.setDrawColor(4, 102, 201) // #0466c9
+              pdf.setLineWidth(2)
+              for (let i = 0; i < linePoints.length - 1; i++) {
+                pdf.line(linePoints[i].x, linePoints[i].y, linePoints[i + 1].x, linePoints[i + 1].y)
+              }
+              // Dibujar puntos como pequeños cuadrados
+              linePoints.forEach(point => {
+                pdf.setFillColor(4, 102, 201) // #0466c9
+                pdf.rect(point.x - 1.5, point.y - 1.5, 3, 3, 'F')
+              })
+            }
+            
+            // Leyenda
+            yPos += chartHeight + 15 // Espacio muy reducido para leyenda
+            pdf.setFontSize(8)
+            pdf.setFont(undefined, 'normal')
+            pdf.setTextColor(...primaryTextColor)
+            
+            // Leyenda con colores (centrada)
+            const legendStartX = (pageWidth - 160) / 2 // Centrar la leyenda
+            pdf.setFillColor(2, 25, 69) // #021945
+            pdf.rect(legendStartX, yPos, 3, 3, 'F')
+            pdf.text(grafica1.label1 || 'Serie 1', legendStartX + 8, yPos + 2)
+            
+            pdf.setFillColor(110, 250, 251) // #6efafb
+            pdf.rect(legendStartX + 60, yPos, 3, 3, 'F')
+            pdf.text(grafica1.label2 || 'Serie 2', legendStartX + 68, yPos + 2)
+            
+            pdf.setDrawColor(4, 102, 201) // #0466c9
+            pdf.setLineWidth(2)
+            pdf.line(legendStartX + 120, yPos + 1.5, legendStartX + 126, yPos + 1.5)
+            pdf.text(grafica1.label3 || 'Serie 3', legendStartX + 130, yPos + 2)
+            
+            yPos += 8
+          }
+        }
+        yPos += 10
+      } else {
+        // Si no hay datos de gráfica 1, mostrar mensaje
+        pdf.setFontSize(10)
+        pdf.text('No se encontraron datos para la primera gráfica', margin, yPos)
+        yPos += 15
+      }
+      
+      // Segunda gráfica
+      if (dashboardData.data?.graficas?.grafica2) {
+        // Verificar si hay espacio suficiente para la segunda gráfica completa (título + gráfico + leyenda + footer)
+        const requiredSpace = 100 // título(5) + espacio(10) + gráfico(60) + leyenda(15) + margen footer(25) = 115, pero reducimos más
+        if (yPos > pageHeight - requiredSpace) {
+          pdf.addPage()
+          await addPageHeader()
+          yPos = 35
+        }
+        
+        const grafica2 = dashboardData.data.graficas.grafica2
+        
+        pdf.setFontSize(14)
+        pdf.setFont(undefined, 'bold')
+        pdf.text('Comparación De Flujos', margin, yPos)
+        yPos += 5
+        
+        pdf.setFontSize(10)
+        pdf.setFont(undefined, 'normal')
+        
+        // Adaptar la estructura de datos para el formato que viene del backend
+        const chartData2 = []
+        if (grafica2.headers && grafica2.serie1) {
+          // Construir el array de datos desde headers y series
+          for (let i = 0; i < Math.min(grafica2.headers.length, 12); i++) {
+            const dataPoint: any = {
+              name: `Mes ${grafica2.headers[i]}`
+            }
+            if (grafica2.label1 && grafica2.serie1[i]) dataPoint[grafica2.label1] = grafica2.serie1[i]
+            if (grafica2.label2 && grafica2.serie2[i]) dataPoint[grafica2.label2] = grafica2.serie2[i]
+            if (grafica2.label3 && grafica2.serie3[i]) dataPoint[grafica2.label3] = grafica2.serie3[i]
+            chartData2.push(dataPoint)
+          }
+        }
+        
+        if (chartData2.length > 0) {
+          // Renderizar segunda gráfica como chart con barras y línea
+          const chartWidth = 150
+          const chartHeight = 60
+          const chartX = (pageWidth - chartWidth) / 2 // Centrar horizontalmente
+          const chartY = yPos + 10 // Reducir espacio para etiquetas del eje Y
+          
+          // Calcular valores máximos para escala
+          let maxVal1 = 0, maxVal2 = 0, maxVal3 = 0
+          chartData2.forEach((item: any) => {
+            if (item[grafica2.label1]) maxVal1 = Math.max(maxVal1, item[grafica2.label1])
+            if (item[grafica2.label2]) maxVal2 = Math.max(maxVal2, item[grafica2.label2])
+            if (item[grafica2.label3]) maxVal3 = Math.max(maxVal3, item[grafica2.label3])
+          })
+          const maxValue2 = Math.max(maxVal1, maxVal2, maxVal3)
+          
+          if (maxValue2 > 0) {
+            // Dibujar ejes
+            pdf.setDrawColor(0, 0, 0)
+            pdf.setLineWidth(0.8)
+            // Eje Y
+            pdf.line(chartX, chartY, chartX, chartY + chartHeight)
+            // Eje X
+            pdf.line(chartX, chartY + chartHeight, chartX + chartWidth, chartY + chartHeight)
+            
+            // Etiquetas del eje Y
+            pdf.setFontSize(7)
+            pdf.setTextColor(...primaryTextColor)
+            for (let i = 0; i <= 4; i++) {
+              const value = (maxValue2 / 4) * i
+              const yPos = chartY + chartHeight - (chartHeight / 4) * i
+              const formattedValue = value >= 1000000 ? `${(value / 1000000).toFixed(1)}M` : `${(value / 1000).toFixed(0)}K`
+              pdf.text(formattedValue, chartX - 15, yPos + 1)
+              // Líneas de rejilla horizontales
+              pdf.setDrawColor(230, 230, 230)
+              pdf.setLineWidth(0.3)
+              if (i > 0) pdf.line(chartX, yPos, chartX + chartWidth, yPos)
+            }
+            
+            const barGroupWidth = chartWidth / chartData2.length * 0.8
+            const barIndividualWidth = barGroupWidth / 3 // 3 barras por grupo
+            const barSpacing = chartWidth / chartData2.length
+            
+            // Dibujar barras y puntos de línea
+            const linePoints2: Array<{x: number, y: number}> = []
+            
+            chartData2.forEach((item: any, index: number) => {
+              const groupStartX = chartX + index * barSpacing + (barSpacing - barGroupWidth) / 2
+              
+              // Barra 1 (label1) - Color azul muy oscuro
+              if (item[grafica2.label1]) {
+                const barHeight1 = (item[grafica2.label1] / maxValue2) * chartHeight
+                pdf.setFillColor(2, 25, 69) // #021945
+                pdf.rect(groupStartX, chartY + chartHeight - barHeight1, barIndividualWidth, barHeight1, 'F')
+              }
+              
+              // Barra 2 (label2) - Color celeste
+              if (item[grafica2.label2]) {
+                const barHeight2 = (item[grafica2.label2] / maxValue2) * chartHeight
+                pdf.setFillColor(110, 250, 251) // #6efafb
+                pdf.rect(groupStartX + barIndividualWidth, chartY + chartHeight - barHeight2, barIndividualWidth, barHeight2, 'F')
+              }
+              
+              // Puntos de línea (label3) - Centrado en el grupo de barras
+              if (item[grafica2.label3]) {
+                const pointHeight = (item[grafica2.label3] / maxValue2) * chartHeight
+                const pointY = chartY + chartHeight - pointHeight
+                const pointX = groupStartX + (barGroupWidth / 2)
+                linePoints2.push({x: pointX, y: pointY})
+              }
+              
+              // Etiquetas del eje X (mes)
+              pdf.setFontSize(6)
+              pdf.setTextColor(...primaryTextColor)
+              const labelText = `M${grafica2.headers[index]}`
+              pdf.text(labelText, groupStartX + barGroupWidth/2 - 3, chartY + chartHeight + 8)
+            })
+            
+            // Dibujar línea conectando los puntos
+            if (linePoints2.length > 1) {
+              pdf.setDrawColor(4, 102, 201) // #0466c9
+              pdf.setLineWidth(2)
+              for (let i = 0; i < linePoints2.length - 1; i++) {
+                pdf.line(linePoints2[i].x, linePoints2[i].y, linePoints2[i + 1].x, linePoints2[i + 1].y)
+              }
+              // Dibujar puntos como pequeños cuadrados
+              linePoints2.forEach(point => {
+                pdf.setFillColor(4, 102, 201) // #0466c9
+                pdf.rect(point.x - 1.5, point.y - 1.5, 3, 3, 'F')
+              })
+            }
+            
+            // Leyenda
+            yPos += chartHeight + 15 // Espacio muy reducido para leyenda
+            pdf.setFontSize(8)
+            pdf.setFont(undefined, 'normal')
+            pdf.setTextColor(...primaryTextColor)
+            
+            // Leyenda con colores (centrada)
+            const legendStartX = (pageWidth - 160) / 2 // Centrar la leyenda
+            pdf.setFillColor(2, 25, 69) // #021945
+            pdf.rect(legendStartX, yPos, 3, 3, 'F')
+            pdf.text(grafica2.label1 || 'Serie 1', legendStartX + 8, yPos + 2)
+            
+            pdf.setFillColor(110, 250, 251) // #6efafb
+            pdf.rect(legendStartX + 60, yPos, 3, 3, 'F')
+            pdf.text(grafica2.label2 || 'Serie 2', legendStartX + 68, yPos + 2)
+            
+            pdf.setDrawColor(4, 102, 201) // #0466c9
+            pdf.setLineWidth(2)
+            pdf.line(legendStartX + 120, yPos + 1.5, legendStartX + 126, yPos + 1.5)
+            pdf.text(grafica2.label3 || 'Serie 3', legendStartX + 130, yPos + 2)
+            
+            yPos += 8
+          }
+        } else {
+          // Si no hay datos de gráfica 2, mostrar mensaje
+          pdf.setFontSize(10)
+          pdf.text('No se encontraron datos para la segunda gráfica', margin, yPos)
+          yPos += 15
+        }
+      }
+      
+      // NUEVA PÁGINA - PRÓXIMOS PASOS
+      pdf.addPage()
+      await addPageHeader()
+      yPos = 35
+      
+      pdf.setFontSize(18)
+      pdf.setFont(undefined, 'bold')
+      pdf.setTextColor(...primaryTextColor)
+      pdf.text('Próximos pasos', margin, yPos)
+      
+      yPos += 15
+      pdf.setFontSize(11)
+      pdf.setFont(undefined, 'normal')
+      
+      const proximospasos = [
+        '1. Aprueba Tu Plan De Pagos: Revisa detalladamente este plan de pagos y asegúrate de entender las cuotas mensuales, la duración del programa y la evolución del valor comercial del inmueble. Si estás de acuerdo con las condiciones, confírmale tu aprobación al asesor de Toperty que ha liderado tu proceso.',
+        '2. Firma tu plan de pagos: Una vez confirmes la aprobación, te enviaremos un documento con la información del plan de pagos para que lo firmes digitalmente. Este documento formaliza tu aceptación de las condiciones del programa.',
+        '3. Pago Del Fee De Entrada: Para que Toperty pueda iniciar la negociación formal con el propietario actual del inmueble, deberás realizar el pago del fee de entrada. Este pago nos permite proceder con la visita técnica al inmueble y la debida diligencia legal.',
+        '4. Firma De Promesa De Compraventa Con El Propietario: Toperty firmará la promesa de compraventa con el propietario actual del inmueble. En este momento, deberás aportar la cuota inicial acordada en tu plan de pagos.',
+        '5. Firma De Promesa De Compraventa Contigo: Firmaremos la promesa de compraventa entre Toperty y tú, donde quedarán establecidas las condiciones del programa Rent to Own, incluyendo el valor de compra futuro y los términos de tu participación.',
+        '6. Escrituración Y Desembolso: Toperty procederá con la escrituración y desembolso para adquirir el inmueble. Una vez completado este proceso, el inmueble quedará a nombre de Toperty (o del vehículo constituido para tal fin).',
+        '7. Entrega Del Inmueble Y Contrato De Arriendo: Recibirás las llaves de tu nueva vivienda y firmaremos el contrato de arrendamiento. Los pagos mensuales inician desde la fecha de entrega del inmueble. Si la entrega se realiza a mitad de mes, la cuota de ese primer mes se calculará de forma proporcional.',
+        '8. Pagos Mensuales: Cada mes pagarás el canon de arrendamiento más el componente de compra parcial, además de los gastos operativos a tu cargo (administración, predial, seguro y mantenimiento).',
+        '9. Monitorea Tu Progreso: Accede a tu dashboard personalizado para consultar tu porcentaje de participación, tiempo transcurrido y valor actualizado del inmueble.',
+        '10. Gestión De Crédito: Antes de alcanzar tu porcentaje objetivo, te ayudaremos a gestionar tu crédito de vivienda o leasing habitacional.',
+        '11. Transferencia Final: Una vez aprobado tu crédito, realizaremos la transferencia del inmueble a tu nombre. ¡Serás oficialmente propietario!'
+      ]
+      
+      for (const paso of proximospasos) {
+        if (yPos > pageHeight - 40) {
+          pdf.addPage()
+          await addPageHeader()
+          yPos = 35
+        }
+        const lineas = pdf.splitTextToSize(paso, pageWidth - 2 * margin)
+        pdf.text(lineas, margin, yPos, { maxWidth: pageWidth - 2 * margin })
+        yPos += lineas.length * 5 + 5
+      }
+      
+      // NUEVA PÁGINA - DESCARGO DE RESPONSABILIDAD
+      pdf.addPage()
+      await addPageHeader()
+      yPos = 35
+      
+      pdf.setFontSize(18)
+      pdf.setFont(undefined, 'bold')
+      pdf.setTextColor(...primaryTextColor)
+      pdf.text('Descargo de responsabilidad', margin, yPos)
+      
+      yPos += 15
+      pdf.setFontSize(10)
+      pdf.setFont(undefined, 'normal')
+      
+      const disclaimer = `TOPERTY S.A.S. (en adelante "Toperty") pone a disposición el presente plan de pagos, el cual está sujeto a la negociación de Toperty con el actual propietario del inmueble. La obligación de Toperty con respecto a la adquisición del inmueble es de medio y no de resultado.
+
+NATURALEZA PROYECTIVA DEL PLAN: El presente plan de pagos es una proyección elaborada con supuestos macroeconómicos para propósitos ilustrativos únicamente, y no constituye el plan de pagos final. Las cuotas mensuales están sujetas a incrementos anuales de acuerdo al Índice de Precios al Consumidor (IPC) certificado por el DANE.
+
+GASTOS ADICIONALES A CARGO DEL USUARIO: Los gastos asociados a la propiedad del inmueble tales como impuestos prediales, seguro todo riesgo, cuotas de administración (ordinarias y extraordinarias), reparaciones y mantenimiento general, entre otros, serán pagados por el usuario. Toperty se encargará únicamente del pago del seguro de arrendamiento.
+
+OBJETIVO DEL PROGRAMA: El presente plan de pagos está estructurado para que el usuario compre la vivienda al finalizar el programa con el porcentaje de participación indicado en este documento.
+
+VALORACIÓN DEL INMUEBLE: El presente plan de pagos está estructurado de acuerdo a las características del inmueble que el usuario seleccionó mediante el formato suministrado por Toperty.
+
+Este documento no representa una oferta vinculante para Toperty S.A.S., la cual está sujeta únicamente a que se completen todos los pasos del proceso. Toperty S.A.S. se reserva el derecho a dar por terminado el proceso en cualquier momento y bajo su absoluta discreción.`
+      
+      const lineasDisclaimer = pdf.splitTextToSize(disclaimer, pageWidth - 2 * margin)
+      pdf.text(lineasDisclaimer, margin, yPos, { maxWidth: pageWidth - 2 * margin })
+      yPos += lineasDisclaimer.length * 4 + 20
+      
+      // FIRMAS (sin título)
+      yPos += 25 // Aumentar espacio respecto a los descargos
+      
+      const clientName = dashboardData.data?.para_usuario?.client_name || 'N/A'
+      const clientId = dashboardData.data?.para_usuario?.client_id || 'N/A'
+      const coApplicantName = dashboardData.data?.para_usuario?.co_applicant_name
+      const coApplicantId = dashboardData.data?.para_usuario?.co_applicant_id
+      
+      // Layout horizontal para todas las firmas
+      const firmaBaseYPos = yPos
+      const columnWidth = (pageWidth - 2 * margin) / 3
+      const leftColumn = margin
+      const centerColumn = margin + columnWidth
+      const rightColumn = margin + 2 * columnWidth
+      
+      // Cliente principal (columna izquierda)
+      pdf.setDrawColor(0, 24, 69) // Color #001845
+      pdf.setLineWidth(0.3)
+      pdf.line(leftColumn, yPos, leftColumn + columnWidth - 10, yPos)
+      yPos += 8
+      pdf.setFontSize(11)
+      pdf.setFont(undefined, 'bold')
+      pdf.text('Toperty S.A.S', rightColumn, yPosRight)
+      pdf.setFont(undefined, 'normal')
+      yPosRight += 6
+      pdf.text('Nicolás Maldonado J.', rightColumn, yPosRight)
+      yPosRight += 6
+      pdf.text('Representante Legal', rightColumn, yPosRight)
+      yPosRight += 6
+      pdf.text('C.C 1020758219', rightColumn, yPosRight)
+      
+      // Co-aplicante (columna central)
+      let yPosCenter = firmaBaseYPos
+      if (coApplicantName) {
+        pdf.setDrawColor(0, 24, 69) // Color #001845
+        pdf.setLineWidth(0.3)
+        pdf.line(centerColumn, yPosCenter, centerColumn + columnWidth - 10, yPosCenter)
+        yPosCenter += 8
+        pdf.setFontSize(11)
+        pdf.setFont(undefined, 'normal')
+        pdf.text(`Nombre: ${coApplicantName}`, centerColumn, yPosCenter)
+        yPosCenter += 6
+        pdf.text('C.C. _______________', centerColumn, yPosCenter)
+      } 
+      
+      // Toperty (columna derecha)
+      let yPosRight = firmaBaseYPos
+      
+      pdf.setDrawColor(0, 24, 69) // Color #001845
+      pdf.setLineWidth(0.3)
+      pdf.line(rightColumn, yPosRight, rightColumn + columnWidth - 10, yPosRight)
+      yPosRight += 8
+      pdf.setFontSize(11)
+      pdf.setFont(undefined, 'normal')
+      pdf.text(`Nombre: ${clientName}`, leftColumn, yPos)
+      yPos += 6
+      pdf.text('C.C.: _______________', leftColumn, yPos)
+
+      
+      // Asegurar que yPos sea el mayor de todas las columnas
+      yPos = Math.max(yPos, yPosCenter, yPosRight) + 15
+      
+      // Agregar footers a todas las páginas
+      const totalPages = pdf.getNumberOfPages()
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i)
+        await addPageFooter()
+      }
+      
+      pdf.save(`Plan_Pagos_${clientName?.replace(/\s+/g, '_') || 'Cliente'}_${new Date().toISOString().split('T')[0]}.pdf`)
+      
+      // Cerrar modal tras éxito
+      setShowPaymentPlanForm(false)
+      setSelectedValuation(null)
+      
+    } catch (error) {
+      console.error('Error generando PDF:', error)
+      alert('Error al generar el PDF. Por favor, intente nuevamente.')
+    } finally {
+      setGeneratingPDF(false)
+    }
+  }
 
   // Cargar avalúos al montar el componente
   useEffect(() => {
@@ -274,6 +1139,7 @@ export function PropertyValuation() {
               { text: "Ver Dashboard Usuario", value: "user", variant: "outline" },
               { text: "Ver Dashboard Inversionista", value: "investor", variant: "outline" },
               { text: "Ver Excel", value: "excel", variant: "outline" },
+              { text: generatingPDF ? "🔄 Generando PDF..." : "Exportar PDF", value: "pdf", variant: "outline" },
               { text: "Editar Plan", value: "edit", variant: "secondary" },
               { text: "Cancelar", value: "cancel", variant: "ghost" }
             ]
@@ -289,6 +1155,28 @@ export function PropertyValuation() {
             return
           } else if (result.value === "excel") {
             window.open(dashboardCheck.sheet_url, '_blank')
+            return
+          } else if (result.value === "pdf") {
+            setGeneratingPDF(true)
+            
+            // Generar PDF directamente desde aquí
+            try {
+              await generatePDFFromModal(dashboardCheck.dashboard_url)
+              // Mostrar mensaje de éxito global después
+              setSaveMessage({
+                type: 'success',
+                text: '✅ PDF generado exitosamente y descargado.'
+              })
+              // Limpiar mensaje después de 3 segundos
+              setTimeout(() => setSaveMessage(null), 3000)
+            } catch (error) {
+              setSaveMessage({
+                type: 'error',
+                text: '❌ Error al generar el PDF. Intente nuevamente.'
+              })
+              // Limpiar mensaje después de 5 segundos
+              setTimeout(() => setSaveMessage(null), 5000)
+            }
             return
           } else if (result.value === "cancel") {
             return
@@ -339,9 +1227,20 @@ export function PropertyValuation() {
       construction_year: '',
       stratum: valuation.stratum?.toString() || '',
       apartment_type: '',
-      private_parking: valuation.garages?.toString() || ''
+      private_parking: valuation.garages?.toString() || '',
+      // Co-aplicante - campos vacíos por defecto
+      client_id: '',
+      co_applicant_name: '',
+      co_applicant_id: ''
     })
     setShowPaymentPlanForm(true)
+  }
+
+
+  // Función para convertir valor formateado a número
+  const parseFormattedValue = (value: string) => {
+    // Solo mantener números
+    return value.replace(/[^0-9]/g, '')
   }
 
   // Función para formatear valores de entrada como moneda (redondeado)
@@ -353,10 +1252,30 @@ export function PropertyValuation() {
     return numericValue.toLocaleString('es-CO')
   }
 
-  // Función para convertir valor formateado a número
-  const parseFormattedValue = (value: string) => {
-    // Solo mantener números
-    return value.replace(/[^0-9]/g, '')
+  const handleClosePaymentPlanForm = () => {
+    setShowPaymentPlanForm(false)
+    setSelectedValuation(null)
+    setPaymentPlanData({
+      // Flujo Toperty Interno
+      area: '',
+      commercial_value: '',
+      average_purchase_value: '',
+      asking_price: '',
+      user_down_payment: '',
+      program_months: '',
+      potential_down_payment: '',
+      bank_mortgage_rate: '',
+      dupla_bank_rate: '',
+      // Para Envío Usuario
+      client_name: '',
+      address: '',
+      city: '',
+      country: 'Colombia',
+      construction_year: '',
+      stratum: '',
+      apartment_type: '',
+      private_parking: ''
+    })
   }
 
   const handlePaymentPlanChange = (field: string, value: string) => {
@@ -439,6 +1358,7 @@ export function PropertyValuation() {
               { text: "Ver Dashboard Usuario", value: "user", variant: "outline" },
               { text: "Ver Dashboard Inversionista", value: "investor", variant: "outline" },
               { text: "Ver Excel", value: "excel", variant: "outline" },
+              { text: generatingPDF ? "🔄 Generando PDF..." : "Exportar PDF", value: "pdf", variant: "outline" },
               { text: "Cerrar", value: "close", variant: "ghost" }
             ]
           }
@@ -451,6 +1371,27 @@ export function PropertyValuation() {
             window.open(`${result.dashboard_url}/investor`, '_blank')
           } else if (viewResult.value === "excel" && result.sheet_url) {
             window.open(result.sheet_url, '_blank')
+          } else if (viewResult.value === "pdf" && result.dashboard_url) {
+            setGeneratingPDF(true)
+            
+            // Generar PDF directamente desde aquí
+            try {
+              await generatePDFFromModal(result.dashboard_url)
+              // Mostrar mensaje de éxito global después
+              setSaveMessage({
+                type: 'success',
+                text: '✅ PDF generado exitosamente y descargado.'
+              })
+              // Limpiar mensaje después de 3 segundos
+              setTimeout(() => setSaveMessage(null), 3000)
+            } catch (error) {
+              setSaveMessage({
+                type: 'error',
+                text: '❌ Error al generar el PDF. Intente nuevamente.'
+              })
+              // Limpiar mensaje después de 5 segundos
+              setTimeout(() => setSaveMessage(null), 5000)
+            }
           }
         }
         
@@ -480,31 +1421,6 @@ export function PropertyValuation() {
     }
   }
 
-  const handleClosePaymentPlanForm = () => {
-    setShowPaymentPlanForm(false)
-    setSelectedValuation(null)
-    setPaymentPlanData({
-      // Flujo Toperty Interno
-      area: '',
-      commercial_value: '',
-      average_purchase_value: '',
-      asking_price: '',
-      user_down_payment: '',
-      program_months: '',
-      potential_down_payment: '',
-      bank_mortgage_rate: '',
-      dupla_bank_rate: '',
-      // Para Envío Usuario
-      client_name: '',
-      address: '',
-      city: '',
-      country: 'Colombia',
-      construction_year: '',
-      stratum: '',
-      apartment_type: '',
-      private_parking: ''
-    })
-  }
 
   const handleDeleteValuation = async (valuation: Valuation) => {
     const result = await confirm(
@@ -875,7 +1791,10 @@ export function PropertyValuation() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // No hacer nada, el cálculo se maneja con botón separado
+    // Manejar envío del formulario - llamar a calcular avalúo
+    if (!loading) {
+      handleCalculateValuation()
+    }
   }
 
   const formatCurrency = (value: number) => {
@@ -892,6 +1811,30 @@ export function PropertyValuation() {
         <Calculator className="h-6 w-6" />
         <h2 className="text-2xl font-bold">Avalúo de Propiedades</h2>
       </div>
+      
+      {/* Mensaje global de estado */}
+      {saveMessage && (
+        <div className={`p-4 rounded-lg text-center font-medium ${
+          saveMessage.type === 'success' 
+            ? 'bg-green-100 text-green-800 border border-green-200' 
+            : 'bg-red-100 text-red-800 border border-red-200'
+        }`}>
+          {saveMessage.text}
+        </div>
+      )}
+
+      {/* Notificación de generación de PDF */}
+      {generatingPDF && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl flex items-center gap-4 max-w-md mx-4">
+            <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+            <div>
+              <p className="font-medium text-gray-900">Generando PDF...</p>
+              <p className="text-sm text-gray-600">El archivo se descargará automáticamente</p>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Formulario */}
@@ -1286,10 +2229,9 @@ export function PropertyValuation() {
               </div>
 
               <Button 
-                type="button" 
+                type="submit" 
                 className="w-full transition-all duration-200 hover:scale-[1.02] hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none" 
                 disabled={loading}
-                onClick={handleCalculateValuation}
               >
                 {loading ? "Calculando avalúo..." : "Calcular Avalúo"}
               </Button>

@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Clock, RefreshCw, Home, User, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
+import { AlertCircle, Clock, RefreshCw, Home, User, ChevronLeft, ChevronRight, CheckCircle, ChevronDown, ChevronUp, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -17,17 +17,21 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts'
+import { TopertyLogo } from '@/components/toperty-logo'
 
 const MONTHS_PER_PAGE = 12
 
 export default function UserDashboardPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const token = params.token as string
 
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cashFlowPage, setCashFlowPage] = useState(0)
+  const [expandedSteps, setExpandedSteps] = useState<number[]>([])
+  const [disclaimerExpanded, setDisclaimerExpanded] = useState(false)
 
   const fetchDashboard = async () => {
     try {
@@ -58,9 +62,11 @@ export default function UserDashboardPage() {
     }
   }
 
+
   useEffect(() => {
     fetchDashboard()
   }, [token])
+
 
   if (loading) {
     return (
@@ -133,12 +139,17 @@ export default function UserDashboardPage() {
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">Tu Plan de Pagos</h1>
-              <p className="text-gray-600">{dashboardData.data?.para_usuario?.client_name}</p>
+          <div className="flex justify-between items-start">
+            {/* Logo y título */}
+            <div className="flex items-center gap-4">
+              <TopertyLogo width={100} height={40} />
+              <div>
+                <h1 className="text-2xl font-bold">Tu Plan de Pagos</h1>
+                <p className="text-gray-600">{dashboardData.data?.para_usuario?.client_name}</p>
+              </div>
             </div>
             
+            {/* Status e indicadores */}
             <div className="text-right">
               <div className="flex items-center gap-2 text-sm text-orange-600">
                 <Clock className="w-4 h-4" />
@@ -233,17 +244,30 @@ export default function UserDashboardPage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-2xl font-bold text-green-600">
-                    {participacionPorcentaje.toFixed(2)}%
-                  </span>
+                  <div>
+                    <span className="text-2xl font-bold text-green-600">
+                      {participacionPorcentaje.toFixed(2)}%
+                    </span>
+                    <span className="text-sm text-gray-500 ml-2">
+                      de {((dashboardData.data?.flujo_interno?.potential_down_payment || 0.20) * 100).toFixed(0)}%
+                    </span>
+                  </div>
                   <span className="text-sm text-gray-500">
-                    de participación adquirida
+                    Objetivo de adquisición
                   </span>
                 </div>
-                <Progress value={participacionPorcentaje} className="h-4" />
-                <p className="text-sm text-gray-600">
-                  Este porcentaje representa tu participación actual en la propiedad. Al completar el programa, podrás acceder a financiación hipotecaria.
-                </p>
+                <Progress 
+                  value={(participacionPorcentaje / ((dashboardData.data?.flujo_interno?.potential_down_payment || 0.20) * 100)) * 100} 
+                  className="h-4" 
+                />
+                <div className="text-sm text-gray-600">
+                  <p>
+                    Este porcentaje representa tu participación actual en la propiedad. 
+                  </p>
+                  <p className="mt-1">
+                    <strong>Meta:</strong> Al alcanzar el {((dashboardData.data?.flujo_interno?.potential_down_payment || 0.20) * 100).toFixed(0)}% podrás acceder a financiación hipotecaria.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -561,30 +585,128 @@ export default function UserDashboardPage() {
               <CardTitle>Próximos Pasos</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
-                  <div>
-                    <h3 className="font-semibold">Mantén tu ahorro constante</h3>
-                    <p className="text-gray-600">Realiza tus pagos mensuales puntualmente durante {dashboardData.data?.flujo_interno?.program_months || 'el'} mes{parseInt(dashboardData.data?.flujo_interno?.program_months || '0') > 1 ? 'es' : ''} del programa.</p>
+              <div className="space-y-2">
+                {[
+                  {
+                    title: "Aprueba tu plan de pagos",
+                    content: "Revisa detalladamente este plan de pagos y asegúrate de entender las cuotas mensuales, la duración del programa y la evolución del valor comercial del inmueble. Si estás de acuerdo con las condiciones, confírmale tu aprobación al asesor de Toperty que ha liderado tu proceso."
+                  },
+                  {
+                    title: "Firma tu plan de pagos",
+                    content: "Una vez confirmes la aprobación, te enviaremos un documento con la información del plan de pagos para que lo firmes digitalmente. Este documento formaliza tu aceptación de las condiciones del programa."
+                  },
+                  {
+                    title: "Pago del fee de entrada",
+                    content: "Para que Toperty pueda iniciar la negociación formal con el propietario actual del inmueble, deberás realizar el pago del fee de entrada. Este pago nos permite proceder con la visita técnica al inmueble y la debida diligencia legal."
+                  },
+                  {
+                    title: "Firma de promesa de compraventa con el propietario",
+                    content: "Toperty firmará la promesa de compraventa con el propietario actual del inmueble. En este momento, deberás aportar la cuota inicial acordada en tu plan de pagos."
+                  },
+                  {
+                    title: "Firma de promesa de compraventa contigo",
+                    content: "Firmaremos la promesa de compraventa entre Toperty y tú, donde quedarán establecidas las condiciones del programa Rent to Own, incluyendo el valor de compra futuro y los términos de tu participación."
+                  },
+                  {
+                    title: "Escrituración y desembolso",
+                    content: "Toperty procederá con la escrituración y desembolso para adquirir el inmueble. Una vez completado este proceso, el inmueble quedará a nombre de Toperty (o del vehículo constituido para tal fin)."
+                  },
+                  {
+                    title: "Entrega del inmueble y firma del contrato de arriendo",
+                    content: "Recibirás las llaves de tu nueva vivienda y firmaremos el contrato de arrendamiento. Los pagos mensuales inician desde la fecha de entrega del inmueble. Si la entrega se realiza a mitad de mes, la cuota de ese primer mes se calculará de forma proporcional."
+                  },
+                  {
+                    title: "Pagos mensuales",
+                    content: "Cada mes pagarás el canon de arrendamiento más el componente de compra parcial, además de los gastos operativos a tu cargo (administración, predial, seguro y mantenimiento)."
+                  },
+                  {
+                    title: "Monitorea tu progreso",
+                    content: "Accede a tu dashboard personalizado para consultar tu porcentaje de participación, tiempo transcurrido y valor actualizado del inmueble."
+                  },
+                  {
+                    title: "Gestión de crédito",
+                    content: "Antes de alcanzar tu porcentaje objetivo, te ayudaremos a gestionar tu crédito de vivienda o leasing habitacional."
+                  },
+                  {
+                    title: "Transferencia final",
+                    content: "Una vez aprobado tu crédito, realizaremos la transferencia del inmueble a tu nombre. ¡Serás oficialmente propietario!"
+                  }
+                ].map((step, index) => (
+                  <div key={index} className="border rounded-lg">
+                    <button
+                      className="w-full px-4 py-3 flex items-start gap-3 hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        if (expandedSteps.includes(index)) {
+                          setExpandedSteps(expandedSteps.filter(i => i !== index))
+                        } else {
+                          setExpandedSteps([...expandedSteps, index])
+                        }
+                      }}
+                    >
+                      <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <h3 className="font-semibold">
+                          {index < 7 ? `Paso ${index + 1} - ` : index >= 7 ? 'Durante el programa: ' : ''}
+                          {step.title}
+                        </h3>
+                      </div>
+                      <div className="flex-shrink-0">
+                        {expandedSteps.includes(index) ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                      </div>
+                    </button>
+                    {expandedSteps.includes(index) && (
+                      <div className="px-4 pb-3 pl-13">
+                        <p className="text-gray-600">{step.content}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
-                  <div>
-                    <h3 className="font-semibold">Prepara tu documentación</h3>
-                    <p className="text-gray-600">Reúne los documentos necesarios para el proceso hipotecario.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
-                  <div>
-                    <h3 className="font-semibold">¡Obtén las llaves!</h3>
-                    <p className="text-gray-600">Al completar el programa, estarás listo para solicitar tu crédito hipotecario y mudarte a tu nuevo hogar.</p>
-                  </div>
-                </div>
+                ))}
               </div>
             </CardContent>
+          </Card>
+
+          {/* Descargo de Responsabilidad */}
+          <Card>
+            <CardHeader>
+              <button
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setDisclaimerExpanded(!disclaimerExpanded)}
+              >
+                <CardTitle>Descargo de Responsabilidad</CardTitle>
+                {disclaimerExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
+            </CardHeader>
+            {disclaimerExpanded && (
+              <CardContent>
+                <div className="space-y-4 text-sm text-gray-600">
+                  <p>
+                    Toperty S.A.S. (en adelante "Toperty") pone a disposición el presente plan de pagos, el cual está sujeto a la negociación de Toperty con el actual propietario del inmueble. La obligación de Toperty con respecto a la adquisición del inmueble es de medio y no de resultado.
+                  </p>
+                  
+                  <div>
+                    Naturaleza proyectiva del plan: El presente plan de pagos es una proyección elaborada con supuestos macroeconómicos para propósitos ilustrativos únicamente, y no constituye el plan de pagos final. Las cuotas mensuales están sujetas a incrementos anuales de acuerdo al Índice de Precios al Consumidor (IPC) certificado por el DANE, y el valor comercial del inmueble se actualizará en función de (i) la inflación certificada por el DANE o la tasa de incremento fija anual del 5,5% (la que sea mayor); y (ii) el tiempo que el usuario tarde en adquirir el porcentaje objetivo de participación. Por lo tanto, las cifras aquí presentadas podrán variar por factores externos que Toperty no controla, incluyendo la evolución de la inflación en Colombia y los aportes extraordinarios del usuario a modo de prepago, entre otros.
+                  </div>
+                  
+                  <div>
+                    Gastos adicionales a cargo del usuario: Los gastos asociados a la propiedad del inmueble tales como impuestos prediales, seguro todo riesgo, cuotas de administración (ordinarias y extraordinarias), reparaciones y mantenimiento general, entre otros, serán pagados por el usuario de conformidad con los contratos del modelo de negocio acordado. Toperty se encargará únicamente del pago del seguro de arrendamiento.
+                  </div>
+                  
+                  <div>
+                    Objetivo del programa: El presente plan de pagos está estructurado para que el usuario compre la vivienda al finalizar el programa con el porcentaje de participación indicado en este documento. Dependiendo del tipo de financiación que el usuario elija al finalizar el programa (leasing habitacional o crédito hipotecario), el porcentaje objetivo de adquisición y las condiciones del plan podrán ajustarse.
+                  </div>
+                  
+                  <div>
+                    Valoración del inmueble: El presente plan de pagos está estructurado de acuerdo a las características del inmueble que el usuario seleccionó mediante el formato suministrado por Toperty en https://avaluo.toperty.co/. De haber alguna inconsistencia en la información suministrada, el plan de pagos podrá variar.
+                  </div>
+                  
+                  <p>
+                    Este documento no representa una oferta vinculante para Toperty S.A.S., la cual está sujeta únicamente a que se completen todos los pasos del proceso. Toperty S.A.S. se reserva el derecho a dar por terminado el proceso en cualquier momento y bajo su absoluta discreción.
+                  </p>
+                </div>
+              </CardContent>
+            )}
           </Card>
         </div>
       </div>
