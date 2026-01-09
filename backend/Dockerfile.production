@@ -24,4 +24,4 @@ COPY backend/ .
 EXPOSE 8080
 
 # Comando para iniciar la aplicación
-CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT
+CMD exec uvicorn main_refactored:app --host 0.0.0.0 --port $PORT
