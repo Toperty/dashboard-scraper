@@ -4,6 +4,7 @@ Payment Plan Dashboard model - Represents temporary dashboards for payment plans
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from sqlmodel import SQLModel, Field, JSON, Column
+from sqlalchemy import ForeignKey, Integer
 import secrets
 import string
 
@@ -27,8 +28,12 @@ class PaymentPlanDashboard(SQLModel, table=True):
     sheet_id: str = Field(max_length=255, description="Google Sheets document ID", index=True)
     sheet_url: str = Field(description="Full Google Sheets URL")
     
-    # Valuation reference
-    valuation_id: Optional[int] = Field(default=None, foreign_key="valuation.id", description="Related valuation ID")
+    # Valuation reference - CASCADE delete when valuation is deleted
+    valuation_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("valuation.id", ondelete="CASCADE")),
+        description="Related valuation ID"
+    )
     valuation_name: str = Field(max_length=255, description="Name of the valuation")
     
     # Access control

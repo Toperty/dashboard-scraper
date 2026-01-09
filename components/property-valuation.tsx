@@ -195,6 +195,15 @@ export function PropertyValuation() {
       const primaryTextColor = [0, 24, 69] // #001845
       const sectionTitleColor = [5, 103, 201] // #0567C9
       const bodyTextColor = [136, 136, 136] // #888888
+      const separatorColor = [220, 220, 220] // Light gray for subtle separators
+      
+      // Helper function to draw subtle separator
+      const drawSectionSeparator = (yPosition: number): number => {
+        pdf.setDrawColor(...separatorColor)
+        pdf.setLineWidth(0.3)
+        pdf.line(margin, yPosition, pageWidth - margin, yPosition)
+        return yPosition + 8
+      }
       
       // Configurar fuente Inter (o Arial como fallback)
       await addInterFont(pdf)
@@ -247,7 +256,7 @@ export function PropertyValuation() {
       await addPageHeader()
       let yPos = 60
       pdf.setFontSize(17)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...primaryTextColor)
       pdf.text('Plan de pagos', margin, yPos)
       
@@ -257,14 +266,14 @@ export function PropertyValuation() {
       pdf.line(margin, yPos, pageWidth - margin, yPos)
       yPos += 10
       // INFORMACIÓN DEL CLIENTE
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFontSize(14)
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...sectionTitleColor)
       pdf.text('Información del cliente', margin, yPos)
       
       yPos += 12
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'normal')
+      pdf.setFontSize(14)
+      pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
       const clientInfo = [
@@ -284,25 +293,25 @@ export function PropertyValuation() {
       )
       
       clientInfo.forEach(info => {
-        pdf.setFont(undefined, 'bold')
+        pdf.setFont('Inter', 'bold')
         const labelWidth = pdf.getTextWidth(info.label)
         pdf.text(info.label, margin, yPos)
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         pdf.text(` ${info.value}`, margin + labelWidth, yPos)
         yPos += 8
       })
-      
-      yPos += 10
+
+      yPos = drawSectionSeparator(yPos)
       
       // INFORMACIÓN DEL PROGRAMA
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFontSize(14)
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...sectionTitleColor)
       pdf.text('Información del programa', margin, yPos)
       
       yPos += 12
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'normal')
+      pdf.setFontSize(14)
+      pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
       const programInfo1 = [
@@ -323,29 +332,29 @@ export function PropertyValuation() {
       
       const startYPos = yPos
       programInfo1.forEach(info => {
-        pdf.setFont(undefined, 'bold')
+        pdf.setFont('Inter', 'bold')
         const labelWidth = pdf.getTextWidth(info.label)
         pdf.text(info.label, margin, yPos)
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         pdf.text(` ${info.value}`, margin + labelWidth, yPos)
         yPos += 8
       })
       
       yPos = startYPos
       programInfo2.forEach(info => {
-        pdf.setFont(undefined, 'bold')
+        pdf.setFont('Inter', 'bold')
         const labelWidth = pdf.getTextWidth(info.label)
         pdf.text(info.label, margin + 95, yPos)
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         pdf.text(` ${info.value}`, margin + 95 + labelWidth, yPos)
         yPos += 8
       })
-      
-      yPos += 10
+
+      yPos = drawSectionSeparator(yPos)
       
       // ANÁLISIS COMPARATIVO
       pdf.setFontSize(17)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...primaryTextColor)
       pdf.text('Análisis comparativo', margin, yPos)
       
@@ -355,7 +364,7 @@ export function PropertyValuation() {
       if (dashboardData.data?.graficas?.tabla_comparativa) {
         const tabla = dashboardData.data.graficas.tabla_comparativa
         
-        pdf.setFont(undefined, 'bold')
+        pdf.setFont('Inter', 'bold')
         pdf.setTextColor(...sectionTitleColor)
         pdf.text('Concepto', margin, yPos)
         pdf.text('Toperty', margin + 70, yPos)
@@ -367,7 +376,7 @@ export function PropertyValuation() {
         pdf.line(margin, yPos, pageWidth - margin, yPos)
         yPos += 5
         
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         pdf.setTextColor(...bodyTextColor)
         
         // Mostrar todas las filas disponibles, con formato especial para porcentajes
@@ -434,13 +443,13 @@ export function PropertyValuation() {
       yPos = 60
       
       pdf.setFontSize(17)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...primaryTextColor)
       pdf.text('Proyección Completa De Pagos', margin, yPos)
       
       yPos += 15
       pdf.setFontSize(15)
-      pdf.setFont(undefined, 'normal')
+      pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
       if (dashboardData.data?.user_cash_flow) {
@@ -457,7 +466,7 @@ export function PropertyValuation() {
         
         if (programMonths > 0) {
           // Headers con formato consistente
-          pdf.setFont(undefined, 'bold')
+          pdf.setFont('Inter', 'bold')
           pdf.setTextColor(...sectionTitleColor)
           pdf.setFontSize(9)
           pdf.text('Mes', margin, yPos)
@@ -471,7 +480,7 @@ export function PropertyValuation() {
           pdf.line(margin, yPos, pageWidth - margin, yPos)
           yPos += 5
           
-          pdf.setFont(undefined, 'normal')
+          pdf.setFont('Inter', 'normal')
           pdf.setTextColor(...bodyTextColor)
           pdf.setFontSize(8)
           
@@ -485,13 +494,13 @@ export function PropertyValuation() {
               
               // Repetir título y headers
               pdf.setFontSize(15)
-              pdf.setFont(undefined, 'bold')
+              pdf.setFont('Inter', 'bold')
               pdf.setTextColor(...primaryTextColor)
               pdf.text('Proyección Completa De Pagos (Continuación)', margin, yPos)
               yPos += 15
               
               pdf.setFontSize(9)
-              pdf.setFont(undefined, 'bold')
+              pdf.setFont('Inter', 'bold')
               pdf.setTextColor(...sectionTitleColor)
               pdf.text('Mes', margin, yPos)
               pdf.text('Arriendo', margin + 25, yPos)
@@ -504,7 +513,7 @@ export function PropertyValuation() {
               pdf.line(margin, yPos, pageWidth - margin, yPos)
               yPos += 5
               
-              pdf.setFont(undefined, 'normal')
+              pdf.setFont('Inter', 'normal')
               pdf.setTextColor(...bodyTextColor)
               pdf.setFontSize(8)
             }
@@ -533,7 +542,7 @@ export function PropertyValuation() {
           // Agregar un resumen al final si tenemos datos
           if (programMonths >= 12) {
             yPos += 10
-            pdf.setFont(undefined, 'bold')
+            pdf.setFont('Inter', 'bold')
             pdf.setFontSize(12)
             pdf.setTextColor(...primaryTextColor)
             pdf.text(`RESUMEN: ${programMonths} meses de proyección mostrados`, margin, yPos)
@@ -543,7 +552,7 @@ export function PropertyValuation() {
             const totalCuotas = cuotaTotal.slice(1, programMonths + 1).reduce((sum: number, val: number) => sum + (val || 0), 0)
             const participacionFinal = participacion[programMonths] ? `${(participacion[programMonths] * 100).toFixed(1)}%` : '0.0%'
             
-            pdf.setFont(undefined, 'normal')
+            pdf.setFont('Inter', 'normal')
             pdf.setTextColor(...sectionTitleColor)
             pdf.text(`Total pagado: ${formatCurrency(totalCuotas)}`, margin, yPos)
             yPos += 6
@@ -559,13 +568,13 @@ export function PropertyValuation() {
       yPos = 60
       
       pdf.setFontSize(15)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...sectionTitleColor)
       pdf.text('Gráficas y análisis', margin, yPos)
       
       yPos += 15
       pdf.setFontSize(15)
-      pdf.setFont(undefined, 'normal')
+      pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       pdf.setTextColor(...primaryTextColor)
       
@@ -576,12 +585,12 @@ export function PropertyValuation() {
         console.log('Grafica1 data:', grafica1)
         
         pdf.setFontSize(14)
-        pdf.setFont(undefined, 'bold')
+        pdf.setFont('Inter', 'bold')
         pdf.text('Evolución De Inversión', margin, yPos)
         yPos += 2
         
         pdf.setFontSize(10)
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         
         // Adaptar la estructura de datos para el formato que viene del backend
         const chartData = []
@@ -715,21 +724,21 @@ export function PropertyValuation() {
             // Dibujar línea conectando los puntos
             if (linePoints.length > 1) {
               pdf.setDrawColor(4, 102, 201) // #0466c9
-              pdf.setLineWidth(1)
+              pdf.setLineWidth(0.5)
               for (let i = 0; i < linePoints.length - 1; i++) {
                 pdf.line(linePoints[i].x, linePoints[i].y, linePoints[i + 1].x, linePoints[i + 1].y)
               }
               // Dibujar puntos como pequeños cuadrados
               linePoints.forEach(point => {
                 pdf.setFillColor(4, 102, 201) // #0466c9
-                pdf.rect(point.x - 1.5, point.y - 1.5, 3, 3, 'F')
+                pdf.rect(point.x - 0.8, point.y - 0.8, 1.6, 1.6, 'F')
               })
             }
             
             // Leyenda
             yPos += chartHeight + 20 // Más espacio para la leyenda
             pdf.setFontSize(8)
-            pdf.setFont(undefined, 'normal')
+            pdf.setFont('Inter', 'normal')
             pdf.setTextColor(...primaryTextColor)
             
             // Leyenda con colores y valores (centrada)
@@ -775,12 +784,12 @@ export function PropertyValuation() {
         const grafica2 = dashboardData.data.graficas.grafica2
         
         pdf.setFontSize(14)
-        pdf.setFont(undefined, 'bold')
+        pdf.setFont('Inter', 'bold')
         pdf.text('Comparación De Flujos', margin, yPos)
         yPos += 2
         
         pdf.setFontSize(10)
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         
         // Adaptar la estructura de datos para el formato que viene del backend
         const chartData2 = []
@@ -902,21 +911,21 @@ export function PropertyValuation() {
             // Dibujar línea conectando los puntos
             if (linePoints2.length > 1) {
               pdf.setDrawColor(4, 102, 201) // #0466c9
-              pdf.setLineWidth(1)
+              pdf.setLineWidth(0.5)
               for (let i = 0; i < linePoints2.length - 1; i++) {
                 pdf.line(linePoints2[i].x, linePoints2[i].y, linePoints2[i + 1].x, linePoints2[i + 1].y)
               }
               // Dibujar puntos como pequeños cuadrados
               linePoints2.forEach(point => {
                 pdf.setFillColor(4, 102, 201) // #0466c9
-                pdf.rect(point.x - 1.5, point.y - 1.5, 3, 3, 'F')
+                pdf.rect(point.x - 0.8, point.y - 0.8, 1.6, 1.6, 'F')
               })
             }
             
             // Leyenda
             yPos += chartHeight + 20 // Más espacio para la leyenda
             pdf.setFontSize(8)
-            pdf.setFont(undefined, 'normal')
+            pdf.setFont('Inter', 'normal')
             pdf.setTextColor(...primaryTextColor)
             
             // Leyenda con colores y valores
@@ -953,14 +962,14 @@ export function PropertyValuation() {
       await addPageHeader()
       yPos = 60
       
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFontSize(14)
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...sectionTitleColor)
       pdf.text('Descargo de responsabilidad', margin, yPos)
       
-      yPos += 15
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'normal')
+      yPos += 12
+      pdf.setFontSize(12)
+      pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
       // Texto introductorio
@@ -968,7 +977,7 @@ export function PropertyValuation() {
       
       const lineasIntro = pdf.splitTextToSize(introText, pageWidth - 2 * margin)
       pdf.text(lineasIntro, margin, yPos, { maxWidth: pageWidth - 2 * margin })
-      yPos += lineasIntro.length * 6 + 8
+      yPos += lineasIntro.length * 5 + 10
       
       // Secciones con títulos en bold
       const disclaimerSections = [
@@ -991,40 +1000,69 @@ export function PropertyValuation() {
       ]
       
       for (const section of disclaimerSections) {
+        // Calcular altura necesaria para esta sección
+        const lineasTituloPreview = pdf.splitTextToSize(section.titulo, pageWidth - 2 * margin)
+        const lineasTextoPreview = pdf.splitTextToSize(section.texto, pageWidth - 2 * margin)
+        const sectionHeight = (lineasTituloPreview.length * 5 + 2) + (lineasTextoPreview.length * 5 + 10)
+        
+        // Check if we need a new page (leave 40mm for footer)
+        if (yPos + sectionHeight > pageHeight - 40) {
+          pdf.addPage()
+          await addPageHeader()
+          yPos = 60
+        }
+        
         // Título en bold
-        pdf.setFont(undefined, 'bold')
+        pdf.setFontSize(12)
+        pdf.setFont('Inter', 'bold')
         const lineasTitulo = pdf.splitTextToSize(section.titulo, pageWidth - 2 * margin)
         pdf.text(lineasTitulo, margin, yPos, { maxWidth: pageWidth - 2 * margin })
-        yPos += lineasTitulo.length * 6 + 2
+        yPos += lineasTitulo.length * 5 + 2
         
         // Texto normal
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         const lineasTexto = pdf.splitTextToSize(section.texto, pageWidth - 2 * margin)
         pdf.text(lineasTexto, margin, yPos, { maxWidth: pageWidth - 2 * margin })
-        yPos += lineasTexto.length * 6 + 8
+        yPos += lineasTexto.length * 5 + 10
       }
       
-      // Texto final
+      // Texto final - verificar espacio antes del footer (40mm)
       const finalText = `Este documento no representa una oferta vinculante para Toperty S.A.S., la cual está sujeta únicamente a que se completen todos los pasos del proceso. Toperty S.A.S. se reserva el derecho a dar por terminado el proceso en cualquier momento y bajo su absoluta discreción.`
-
-
       
       const lineasFinal = pdf.splitTextToSize(finalText, pageWidth - 2 * margin)
+      const finalTextHeight = lineasFinal.length * 5 + 10
+      
+      // Verificar si cabe antes del footer (40mm de margen)
+      if (yPos + finalTextHeight > pageHeight - 40) {
+        pdf.addPage()
+        await addPageHeader()
+        yPos = 60
+      }
+      
       pdf.text(lineasFinal, margin, yPos, { maxWidth: pageWidth - 2 * margin })
+      yPos += lineasFinal.length * 5 + 15
       
-      // NUEVA PÁGINA - PRÓXIMOS PASOS
-      pdf.addPage()
-      await addPageHeader()
-      yPos = 60
+      // PRÓXIMOS PASOS - Continúa en la misma página si hay espacio
+      // Calcular si cabe el título + al menos el primer paso
+      const firstStepHeight = 30 // Aproximado para título + primer paso
+      if (yPos + firstStepHeight > pageHeight - 40) {
+        pdf.addPage()
+        await addPageHeader()
+        yPos = 60
+      }
       
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'bold')
+      // Separador visual antes de próximos pasos
+      drawSectionSeparator(yPos - 5)
+      yPos += 5
+      
+      pdf.setFontSize(14)
+      pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...sectionTitleColor)
       pdf.text('Próximos pasos', margin, yPos)
       
-      yPos += 15
-      pdf.setFontSize(15)
-      pdf.setFont(undefined, 'normal')
+      yPos += 12
+      pdf.setFontSize(12)
+      pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
       const proximospasos = [
@@ -1042,30 +1080,37 @@ export function PropertyValuation() {
       ]
       
       for (const paso of proximospasos) {
-        if (yPos > pageHeight - 80) {
+        // Calcular altura necesaria para este paso
+        const lineasTituloPreview = pdf.splitTextToSize(paso.titulo, pageWidth - 2 * margin)
+        const lineasTextoPreview = pdf.splitTextToSize(paso.texto, pageWidth - 2 * margin)
+        const pasoHeight = (lineasTituloPreview.length * 5) + (lineasTextoPreview.length * 5 + 10)
+        
+        // Check if we need a new page (leave 40mm for footer)
+        if (yPos + pasoHeight > pageHeight - 40) {
           pdf.addPage()
           await addPageHeader()
           yPos = 60
         }
         
         // Título en bold
-        pdf.setFont(undefined, 'bold')
+        pdf.setFontSize(12)
+        pdf.setFont('Inter', 'bold')
         const lineasTitulo = pdf.splitTextToSize(paso.titulo, pageWidth - 2 * margin)
         pdf.text(lineasTitulo, margin, yPos, { maxWidth: pageWidth - 2 * margin })
-        yPos += lineasTitulo.length * 6
+        yPos += lineasTitulo.length * 5
         
         // Texto normal
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         const lineasTexto = pdf.splitTextToSize(paso.texto, pageWidth - 2 * margin)
         pdf.text(lineasTexto, margin, yPos, { maxWidth: pageWidth - 2 * margin })
-        yPos += lineasTexto.length * 6 + 8
+        yPos += lineasTexto.length * 5 + 10
       }
       
       // FIRMAS al final de próximos pasos
       yPos += 15
       
-      // Asegurar suficiente espacio para las firmas
-      if (yPos > pageHeight - 30) {
+      // Asegurar suficiente espacio para las firmas (necesitan ~60mm)
+      if (yPos > pageHeight - 70) {
         pdf.addPage()
         await addPageHeader()
         yPos = 60
@@ -1089,15 +1134,15 @@ export function PropertyValuation() {
       pdf.line(leftColumn, yPos, leftColumn + columnWidth - 10, yPos)
       yPos += 8
       pdf.setFontSize(11)
-      pdf.setFont(undefined, 'bold')
+      pdf.setFont('Inter', 'bold')
       pdf.text('Toperty S.A.S', leftColumn, yPos)
-      pdf.setFont(undefined, 'normal')
+      pdf.setFont('Inter', 'normal')
       yPos += 6
       pdf.text('Nicolás Maldonado J.', leftColumn, yPos)
       yPos += 6
       pdf.text('Representante Legal', leftColumn, yPos)
       yPos += 6
-      pdf.text('C.C 1020758219', leftColumn, yPos)
+      pdf.text('C.C. 1020758219', leftColumn, yPos)
       
       // Co-aplicante (columna central)
       let yPosCenter = firmaBaseYPos
@@ -1107,7 +1152,7 @@ export function PropertyValuation() {
         pdf.line(centerColumn, yPosCenter, centerColumn + columnWidth - 10, yPosCenter)
         yPosCenter += 8
         pdf.setFontSize(11)
-        pdf.setFont(undefined, 'normal')
+        pdf.setFont('Inter', 'normal')
         pdf.text(`Nombre: ${coApplicantName}`, centerColumn, yPosCenter)
         yPosCenter += 6
         pdf.text('C.C. _______________', centerColumn, yPosCenter)
@@ -1121,10 +1166,10 @@ export function PropertyValuation() {
       pdf.line(rightColumn, yPosRight, rightColumn + columnWidth - 10, yPosRight)
       yPosRight += 8
       pdf.setFontSize(11)
-      pdf.setFont(undefined, 'normal')
-      pdf.text(`Nombre: ${clientName}`, rightColumn, yPosRight)
+      pdf.setFont('Inter', 'normal')
+      pdf.text(`${clientName}`, rightColumn, yPosRight)
       yPosRight += 6
-      pdf.text('C.C.: _______________', rightColumn, yPosRight)
+      pdf.text('C.C. _______________', rightColumn, yPosRight)
 
       
       // Asegurar que yPos sea el mayor de todas las columnas
@@ -2641,7 +2686,7 @@ export function PropertyValuation() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleEditValuation(valuation)}
-                              className="flex items-center gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                              className="w-24 flex items-center justify-center gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md"
                             >
                               <Edit className="h-3 w-3" />
                               Editar
@@ -2650,16 +2695,20 @@ export function PropertyValuation() {
                               variant="outline"
                               size="sm"
                               onClick={() => handlePaymentPlan(valuation)}
-                              className="flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                              className={`w-36 flex items-center justify-center gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md ${
+                                valuation.has_payment_plan 
+                                  ? 'border-blue-800 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-900' 
+                                  : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                              }`}
                             >
                               <FileText className="h-3 w-3" />
-                              Plan de pagos
+                              {valuation.has_payment_plan ? 'Ver plan' : 'Crear plan'}
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeleteValuation(valuation)}
-                              className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                              className="w-24 flex items-center justify-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
                             >
                               <Trash2 className="h-3 w-3" />
                               Eliminar

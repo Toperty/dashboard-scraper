@@ -179,6 +179,7 @@ export interface Valuation {
   total_sell_price?: number;
   total_rent_price?: number;
   final_price: number;
+  has_payment_plan?: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -1,32 +1,59 @@
-// Inter font for jsPDF - Base64 encoded
-// Warning: This adds ~556KB to the bundle
+// Inter font for jsPDF - Loads Regular and Bold variants
+// Warning: This adds ~800KB to the bundle (both fonts)
 
 export const addInterFont = async (pdf: any) => {
   try {
-    const response = await fetch('/fonts/Inter-Regular.ttf')
-    if (!response.ok) {
-      throw new Error('Font file not found')
+    // Load Inter Regular
+    const regularResponse = await fetch('/fonts/Inter-Regular.ttf')
+    if (!regularResponse.ok) {
+      throw new Error('Inter-Regular.ttf not found')
     }
     
-    const arrayBuffer = await response.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
+    const regularBuffer = await regularResponse.arrayBuffer()
+    const regularUint8 = new Uint8Array(regularBuffer)
+    const regularBinary = Array.from(regularUint8, byte => String.fromCharCode(byte)).join('')
+    const regularBase64 = btoa(regularBinary)
     
-    // Convert to base64
-    const binaryString = Array.from(uint8Array, byte => String.fromCharCode(byte)).join('')
-    const base64String = btoa(binaryString)
-    
-    // Add font to PDF
-    pdf.addFileToVFS('Inter-Regular.ttf', base64String)
+    // Add Regular font to PDF
+    pdf.addFileToVFS('Inter-Regular.ttf', regularBase64)
     pdf.addFont('Inter-Regular.ttf', 'Inter', 'normal')
-    pdf.setFont('Inter', 'normal')
-    console.log('Inter font loaded successfully')
     
-  } catch (error) {
-    console.warn('Inter font could not be loaded, using Arial fallback:', error)
-    try {
-      pdf.setFont('Arial', 'normal')
-    } catch {
-      pdf.setFont('helvetica', 'normal')
+    // Load Inter Bold
+    const boldResponse = await fetch('/fonts/Inter-Bold.ttf')
+    if (!boldResponse.ok) {
+      console.warn('Inter-Bold.ttf not found, using Regular for bold')
+      pdf.addFont('Inter-Regular.ttf', 'Inter', 'bold')
+    } else {
+      const boldBuffer = await boldResponse.arrayBuffer()
+      const boldUint8 = new Uint8Array(boldBuffer)
+      const boldBinary = Array.from(boldUint8, byte => String.fromCharCode(byte)).join('')
+      const boldBase64 = btoa(boldBinary)
+      
+      // Add Bold font to PDF
+      pdf.addFileToVFS('Inter-Bold.ttf', boldBase64)
+      pdf.addFont('Inter-Bold.ttf', 'Inter', 'bold')
     }
+    
+    pdf.setFont('Inter', 'normal')
+    console.log('Inter fonts loaded successfully (Regular + Bold)')
+    
+    return true
+  } catch (error) {
+    console.warn('Inter font could not be loaded, using Helvetica fallback:', error)
+    try {
+      pdf.setFont('helvetica', 'normal')
+    } catch {
+      // Helvetica is always available as default
+    }
+    return false
+  }
+}
+
+// Helper to set Inter font with style
+export const setInterFont = (pdf: any, style: 'normal' | 'bold' = 'normal') => {
+  try {
+    pdf.setFont('Inter', style)
+  } catch {
+    pdf.setFont('helvetica', style)
   }
 }
