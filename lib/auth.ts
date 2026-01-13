@@ -93,8 +93,11 @@ export class AuthService {
       // Decodificar el JWT token de Google
       const userInfo = this.parseJWT(response.credential);
       
-      // Verificar que el email sea de @toperty.co
-      if (!userInfo.email.endsWith('@toperty.co')) {
+      // Lista de correos específicos permitidos (externos a @toperty.co)
+      const allowedEmails = ['felipe.sanchez@valio.com.co'];
+      
+      // Verificar que el email sea de @toperty.co o esté en la lista de permitidos
+      if (!userInfo.email.endsWith('@toperty.co') && !allowedEmails.includes(userInfo.email)) {
         // Emitir evento personalizado para que el componente pueda manejarlo
         window.dispatchEvent(new CustomEvent('auth-invalid-email', {
           detail: { email: userInfo.email }

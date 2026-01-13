@@ -76,6 +76,7 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState('')
   const [resolvePromise, setResolvePromise] = useState<((value: ConfirmResult) => void) | null>(null)
+  const [isClosing, setIsClosing] = useState(false)
   
   const confirm = (message: string, title?: string, options?: ConfirmOptions): Promise<ConfirmResult> => {
     return new Promise((resolve) => {
@@ -119,6 +120,8 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
   }
   
   const handleCancel = () => {
+    if (isClosing) return // Evitar doble cierre
+    setIsClosing(true)
     if (resolvePromise) {
       resolvePromise({ confirmed: false })
       setResolvePromise(null)
@@ -126,9 +129,12 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
     setState(prev => ({ ...prev, isOpen: false }))
     setEmail('')
     setEmailError('')
+    setTimeout(() => setIsClosing(false), 100)
   }
   
   const handleButtonClick = (value: string) => {
+    if (isClosing) return // Evitar doble cierre
+    setIsClosing(true)
     if (resolvePromise) {
       resolvePromise({
         confirmed: true,
@@ -140,14 +146,15 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
     setState(prev => ({ ...prev, isOpen: false }))
     setEmail('')
     setEmailError('')
+    setTimeout(() => setIsClosing(false), 100)
   }
   
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
       <AlertDialog open={state.isOpen} onOpenChange={(open) => {
-        // Solo permitir cerrar si no requiere email o si el email es válido
-        if (!open) {
+        if (!open && !isClosing) {
+          // Solo permitir cerrar si no requiere email o si el email es válido
           if (state.requireEmail && (!email.trim() || !email.includes('@'))) {
             // No cerrar si requiere email y no es válido
             return
