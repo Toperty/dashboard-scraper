@@ -198,7 +198,7 @@ async def get_zone_details(
     east: float = None,
     west: float = None
 ):
-    """Obtener detalles de una zona específica"""
+    """Obtener detalles de una zona específica con comparación de períodos"""
     from datetime import datetime, timedelta
     
     try:
@@ -236,8 +236,22 @@ async def get_zone_details(
                     {{date_filter}}
                     {{type_filter}}
             ),
+            area_stats AS (
+                SELECT AVG(area) as mean_area, STDDEV(area) as stddev_area FROM zone_data
+            ),
+            price_stats AS (
+                SELECT offer, AVG(price) as mean_price, STDDEV(price) as stddev_price
+                FROM zone_data GROUP BY offer
+            ),
             filtered_data AS (
-                SELECT * FROM zone_data
+                SELECT zd.*
+                FROM zone_data zd
+                CROSS JOIN area_stats ast
+                LEFT JOIN price_stats ps ON zd.offer = ps.offer
+                WHERE zd.price BETWEEN (ps.mean_price - 3 * COALESCE(ps.stddev_price, 0)) 
+                                   AND (ps.mean_price + 3 * COALESCE(ps.stddev_price, 0))
+                  AND zd.area BETWEEN (ast.mean_area - 3 * COALESCE(ast.stddev_area, 0))
+                                  AND (ast.mean_area + 3 * COALESCE(ast.stddev_area, 0))
             )
             SELECT 
                 COUNT(DISTINCT fr_property_id) as total_properties,
@@ -276,7 +290,55 @@ async def get_zone_details(
             final_query = query_filtered.format(city_filter=city_filter, date_filter=date_filter, type_filter=type_filter)
             result_filtered = session.execute(text(final_query), location_params).first()
             
-            # Procesar resultado
+            # PERÍODO ACTUAL (último mes) - solo si hay filtro de fecha
+            result_current = None
+            if has_date_filter:
+                date_30_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                
+                query_current = f"""
+                WITH zone_data AS (
+                    SELECT 
+                        p.fr_property_id, p.offer, p.price, p.area, p.last_update
+                    FROM property p
+                    WHERE {location_filter}
+                        AND p.area > 0 AND p.price > 0
+                        {{city_filter}}
+                        {{type_filter}}
+                        AND p.last_update >= :date_30_days_ago
+                ),
+                area_stats AS (
+                    SELECT AVG(area) as mean_area, STDDEV(area) as stddev_area FROM zone_data
+                ),
+                price_stats AS (
+                    SELECT offer, AVG(price) as mean_price, STDDEV(price) as stddev_price
+                    FROM zone_data GROUP BY offer
+                ),
+                filtered_data AS (
+                    SELECT zd.*
+                    FROM zone_data zd
+                    CROSS JOIN area_stats ast
+                    LEFT JOIN price_stats ps ON zd.offer = ps.offer
+                    WHERE zd.price BETWEEN (ps.mean_price - 3 * COALESCE(ps.stddev_price, 0)) 
+                                       AND (ps.mean_price + 3 * COALESCE(ps.stddev_price, 0))
+                      AND zd.area BETWEEN (ast.mean_area - 3 * COALESCE(ast.stddev_area, 0))
+                                      AND (ast.mean_area + 3 * COALESCE(ast.stddev_area, 0))
+                )
+                SELECT 
+                    COUNT(DISTINCT fr_property_id) as total_properties,
+                    COUNT(DISTINCT CASE WHEN offer = 'sell' THEN fr_property_id END) as sale_count,
+                    COUNT(DISTINCT CASE WHEN offer = 'rent' THEN fr_property_id END) as rent_count,
+                    AVG(CASE WHEN offer = 'sell' THEN price / NULLIF(area, 0) END) as sale_price_m2,
+                    AVG(CASE WHEN offer = 'rent' THEN price / NULLIF(area, 0) END) as rent_price_m2,
+                    AVG(CASE WHEN offer = 'sell' THEN price END) as avg_sale_price,
+                    AVG(CASE WHEN offer = 'rent' THEN price END) as avg_rent_price
+                FROM filtered_data;
+                """
+                
+                final_query_current = query_current.format(city_filter=city_filter, type_filter=type_filter)
+                current_params = {**location_params, "date_30_days_ago": date_30_days_ago}
+                result_current = session.execute(text(final_query_current), current_params).first()
+            
+            # Procesar resultado del período filtrado
             filtered_data = {}
             if result_filtered:
                 sale_count = int(result_filtered[1]) if result_filtered[1] else 0
@@ -298,18 +360,51 @@ async def get_zone_details(
                     'cap_rate': cap_rate
                 }
             
+            # Procesar resultado del período actual (último mes)
+            current_data = None
+            if result_current and has_date_filter:
+                sale_count_current = int(result_current[1]) if result_current[1] else 0
+                rent_count_current = int(result_current[2]) if result_current[2] else 0
+                sale_price_m2_current = float(result_current[3]) if result_current[3] else 0
+                rent_avg_price_current = float(result_current[4]) if result_current[4] else 0
+                avg_sale_price_current = float(result_current[5]) if result_current[5] else 0
+                avg_rent_price_current = float(result_current[6]) if result_current[6] else 0
+                
+                cap_rate_current = ((avg_rent_price_current * 12) / avg_sale_price_current) if avg_sale_price_current > 0 and avg_rent_price_current > 0 else 0
+                cap_rate_current = 0 if math.isnan(cap_rate_current) or math.isinf(cap_rate_current) else cap_rate_current
+                
+                property_count_current = int(result_current[0]) if result_current[0] else 0
+                
+                if property_count_current > 0:
+                    current_data = {
+                        'property_count': property_count_current,
+                        'sale_count': sale_count_current,
+                        'rent_count': rent_count_current,
+                        'sale_avg_price_m2': sale_price_m2_current,
+                        'rent_avg_price_m2': rent_avg_price_current,
+                        'cap_rate': cap_rate_current
+                    }
+                    print(f"✅ Período actual (último mes): {property_count_current} propiedades en {zone_name}")
+            
+            # has_comparison solo True si tenemos AMBOS períodos con datos
+            has_comparison = has_date_filter and current_data is not None and filtered_data.get('property_count', 0) > 0
+            
+            print(f"📊 Zone: {zone_name}, has_date_filter: {has_date_filter}, has_comparison: {has_comparison}")
+            
             return {
                 'status': 'success',
                 'data': {
                     'filtered_period': filtered_data if filtered_data else {
                         'property_count': 0, 'sale_avg_price_m2': 0, 'rent_avg_price_m2': 0, 'cap_rate': 0
                     },
-                    'current_period': None,
-                    'has_comparison': False
+                    'current_period': current_data,
+                    'has_comparison': has_comparison
                 }
             }
     except Exception as e:
         print(f"Error getting zone details: {e}")
+        import traceback
+        traceback.print_exc()
         return {'status': 'error', 'message': str(e)}
 
 
