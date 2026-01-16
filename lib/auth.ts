@@ -93,11 +93,13 @@ export class AuthService {
       // Decodificar el JWT token de Google
       const userInfo = this.parseJWT(response.credential);
       
-      // Dominios permitidos
+      // Dominios y correos permitidos
       const allowedDomains = ['@toperty.co', '@valio.com.co'];
+      const allowedEmails = ['pipesanchezt2@gmail.com'];
       
-      // Verificar que el email sea de un dominio permitido
-      const isAllowedEmail = allowedDomains.some(domain => userInfo.email.endsWith(domain));
+      // Verificar que el email sea de un dominio permitido o sea un correo específico
+      const isAllowedEmail = allowedDomains.some(domain => userInfo.email.endsWith(domain)) || 
+                             allowedEmails.includes(userInfo.email);
       if (!isAllowedEmail) {
         // Emitir evento personalizado para que el componente pueda manejarlo
         window.dispatchEvent(new CustomEvent('auth-invalid-email', {
@@ -179,11 +181,13 @@ export class AuthService {
       if (savedUser) {
         const user = JSON.parse(savedUser);
         
-        // Dominios permitidos
+        // Dominios y correos permitidos
         const allowedDomains = ['@toperty.co', '@valio.com.co'];
+        const allowedEmails = ['pipesanchezt2@gmail.com'];
         
         // Verificar que siga siendo un email válido
-        const isAllowedEmail = allowedDomains.some(domain => user.email.endsWith(domain));
+        const isAllowedEmail = allowedDomains.some(domain => user.email.endsWith(domain)) || 
+                               allowedEmails.includes(user.email);
         if (user.email && isAllowedEmail) {
           this.authState = {
             isAuthenticated: true,
