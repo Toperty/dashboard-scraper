@@ -70,7 +70,7 @@ export function AuthGate({ children }: AuthGateProps) {
     const handleInvalidEmail = async (event: CustomEvent) => {
       await confirm(
         'Acceso restringido',
-        `Solo se permite el acceso a correos corporativos de @toperty.co.
+        `Solo se permite el acceso a correos corporativos de @toperty.co y @valio.com.co.
 
 El correo ${event.detail.email} no está autorizado para acceder al sistema.`
       )
@@ -189,7 +189,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
                   Inicia sesión con tu cuenta corporativa
                 </p>
                 <p className="text-xs text-muted-foreground bg-muted/50 px-3 py-1 rounded-full inline-block">
-                  Solo correos @toperty.co
+                  Solo correos @toperty.co o @valio.com.co
                 </p>
               </div>
               
@@ -211,7 +211,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
             <div className="pt-4 border-t">
               <p className="text-xs text-center text-muted-foreground">
                 Al iniciar sesión, aceptas que solo los usuarios con correos
-                corporativos @toperty.co pueden acceder a este sistema.
+                corporativos @toperty.co o @valio.com.co pueden acceder a este sistema.
               </p>
             </div>
           </CardContent>

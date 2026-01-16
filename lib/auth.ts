@@ -179,8 +179,12 @@ export class AuthService {
       if (savedUser) {
         const user = JSON.parse(savedUser);
         
+        // Dominios permitidos
+        const allowedDomains = ['@toperty.co', '@valio.com.co'];
+        
         // Verificar que siga siendo un email válido
-        if (user.email && user.email.endsWith('@toperty.co')) {
+        const isAllowedEmail = allowedDomains.some(domain => user.email.endsWith(domain));
+        if (user.email && isAllowedEmail) {
           this.authState = {
             isAuthenticated: true,
             user

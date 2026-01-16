@@ -3124,8 +3124,8 @@ export function PropertyValuation() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="si">Sí</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
+                      <SelectItem value="Si">Sí</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3147,8 +3147,8 @@ export function PropertyValuation() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="si">Sí</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
+                      <SelectItem value="Si">Sí</SelectItem>
+                      <SelectItem value="No">No</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
