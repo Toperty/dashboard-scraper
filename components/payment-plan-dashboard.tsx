@@ -109,8 +109,8 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
     { label: 'Valor de Lanzamiento', value: formatCurrency(data.flujo_interno?.valor_lanzamiento) },
     { label: 'Tipo de Programa', value: data.flujo_interno?.tipo_programa || '-' },
     { label: 'Tipo de Vivienda', value: data.flujo_interno?.tipo_vivienda || '-' },
-    { label: 'Con Alistamiento en la Entrega', value: data.flujo_interno?.con_alistamiento === 'SI' ? 'Sí' : 'No' },
-    { label: 'Con Financiación de Gastos de Cierre', value: data.flujo_interno?.con_financiacion_gastos === 'SI' ? 'Sí' : 'No' }
+    { label: 'Con Alistamiento en la Entrega', value: data.flujo_interno?.con_alistamiento === 'Si' ? 'Sí' : 'No' },
+    { label: 'Con Financiación de Gastos de Cierre', value: data.flujo_interno?.con_financiacion_gastos === 'Si' ? 'Sí' : 'No' }
   ]
 
   const metrics = [

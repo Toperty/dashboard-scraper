@@ -8,10 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2, FileText, X } from "lucide-react"
+import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2, FileText, X, Check, ExternalLink } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Toast } from '@/components/ui/toast'
 import { addInterFont } from '@/lib/inter-font'
 import { useGeocoding } from "@/hooks/use-geocoding"
@@ -126,8 +126,17 @@ export function PropertyValuation() {
   
   // Estado para el formulario de plan de pagos
   const [showPaymentPlanForm, setShowPaymentPlanForm] = useState(false)
+  const [isEditingPaymentPlan, setIsEditingPaymentPlan] = useState(false)
+  const [loadingPaymentPlanId, setLoadingPaymentPlanId] = useState<number | null>(null)
   const [selectedValuation, setSelectedValuation] = useState<Valuation | null>(null)
   const [paymentPlanData, setPaymentPlanData] = useState({
+    // Configuración del Programa
+    programa: '' as string, // ID del template de Google Sheets (obligatorio)
+    valor_lanzamiento: 'descuento' as 'descuento' | 'comercial',
+    tipo_programa: 'gradiente' as 'lineal' | 'gradiente',
+    tipo_vivienda: 'usada' as 'nueva' | 'usada',
+    alistamiento_acabados: 'no' as 'si' | 'no',
+    financiacion_gastos: 'si' as 'si' | 'no',
     // Flujo Toperty Interno
     area: '',
     commercial_value: '',
@@ -146,9 +155,30 @@ export function PropertyValuation() {
     construction_year: '',
     stratum: '',
     apartment_type: '',
-    private_parking: ''
+    private_parking: '',
+    // Co-aplicante
+    client_id: '',
+    co_applicant_name: '',
+    co_applicant_id: ''
   })
 
+  // Estado unificado para el modal de acciones del dashboard
+  const [dashboardActionsModal, setDashboardActionsModal] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    dashboardUrl: string | null
+    sheetUrl: string | null
+    showEditButton: boolean // true para "Ver plan existente", false para después de crear/editar
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    dashboardUrl: null,
+    sheetUrl: null,
+    showEditButton: false
+  })
+  const [generatingPDFInModal, setGeneratingPDFInModal] = useState(false)
 
   const loadValuations = useCallback(async () => {
     try {
@@ -176,7 +206,10 @@ export function PropertyValuation() {
   // Función para generar PDF completo desde el modal
   const generatePDFFromModal = async (dashboardUrl: string) => {
     try {
-      setShowToast(true)
+      setGeneratingPDF(true)
+      
+      // Pequeño delay para permitir que la UI se actualice antes de la generación pesada del PDF
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       const token = dashboardUrl.split('/').pop()?.split('?')[0]
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/user`)
@@ -272,7 +305,7 @@ export function PropertyValuation() {
       pdf.text('Información del cliente', margin, yPos)
       
       yPos += 12
-      pdf.setFontSize(14)
+      pdf.setFontSize(12)
       pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
@@ -310,7 +343,7 @@ export function PropertyValuation() {
       pdf.text('Información del programa', margin, yPos)
       
       yPos += 12
-      pdf.setFontSize(14)
+      pdf.setFontSize(12)
       pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
@@ -350,10 +383,107 @@ export function PropertyValuation() {
         yPos += 8
       })
 
-      yPos = drawSectionSeparator(yPos)
+      // LÓGICA BASADA EN LA EXISTENCIA DE DATOS:
+      // Caso 1: No existen datos de acabados (programas 1 y 7) - No mostrar nada
+      // Caso 2: Existen datos pero con_alistamiento es 'No' - Solo mostrar ingresos a certificar
+      // Caso 3: Existen datos y con_alistamiento es 'Si' - Mostrar todo
+
+      const acabadosExisten = dashboardData.data?.acabados?.ingresos_certificar_pesos !== undefined &&
+                             dashboardData.data?.acabados?.ingresos_certificar_pesos !== null &&
+                             dashboardData.data?.acabados?.ingresos_certificar_pesos !== ''
+
+      // INGRESOS A CERTIFICAR - Si existen los datos de acabados (no es programa 1 o 7)
+      const showIngresos = acabadosExisten
+
+      // PAQUETE ACABADOS - Solo si existen los datos Y con_alistamiento es 'Si'
+      const showPaqueteAcabados = acabadosExisten &&
+                                  (dashboardData.data?.flujo_interno?.con_alistamiento === 'si' || 
+                                   dashboardData.data?.flujo_interno?.con_alistamiento === 'Si')
+
+      if (showIngresos || showPaqueteAcabados) {
+        yPos = drawSectionSeparator(yPos)
+        
+        pdf.setFontSize(14)
+        pdf.setFont('Inter', 'bold')
+        pdf.setTextColor(...sectionTitleColor)
+        
+        if (showIngresos && showPaqueteAcabados) {
+          pdf.text('Información de acabados', margin, yPos)
+        } else if (showIngresos) {
+          pdf.text('Ingresos a certificar', margin, yPos)
+        } else {
+          pdf.text('Paquete de acabados', margin, yPos)
+        }
+        
+        yPos += 12
+        pdf.setFontSize(12)
+        pdf.setFont('Inter', 'normal')
+        pdf.setTextColor(...bodyTextColor)
+        
+        const startYPosAcabados = yPos
+        let leftColumnUsed = false
+
+        // Ingresos a certificar (si aplica)
+        if (showIngresos) {
+          pdf.setFont('Inter', 'bold')
+          
+          pdf.setFont('Inter', 'normal')
+          const ingresosInfo = [
+            { label: 'En pesos:', value: formatCurrency(dashboardData.data.acabados.ingresos_certificar_pesos) },
+            { label: 'En SMMLV:', value: `${parseFloat(dashboardData.data.acabados.ingresos_certificar_smmlv || '0').toFixed(2)}` }
+          ]
+          
+          ingresosInfo.forEach(info => {
+            pdf.setFont('Inter', 'bold')
+            const labelWidth = pdf.getTextWidth(info.label)
+            pdf.text(info.label, margin, yPos)
+            pdf.setFont('Inter', 'normal')
+            pdf.text(` ${info.value}`, margin + labelWidth, yPos)
+            yPos += 8
+          })
+          leftColumnUsed = true
+        }
+        
+        // Paquete de acabados (si aplica)
+        if (showPaqueteAcabados) {
+          if (leftColumnUsed) {
+            // Si ya usamos la columna izquierda, usamos la derecha
+            yPos = startYPosAcabados
+          }
+          
+          const xPos = leftColumnUsed ? margin + 95 : margin
+          
+          pdf.setFont('Inter', 'bold')
+          pdf.text(`${dashboardData.data.acabados.paquete_nombre || 'Paquete Contratista Bolívar'}`, xPos, yPos)
+          yPos += 8
+          
+          pdf.setFont('Inter', 'normal')
+          const acabadosInfo = [
+            { label: 'Valor paquete:', value: formatCurrency(dashboardData.data.acabados.valor_paquete) },
+            { label: 'Valor por m²:', value: formatCurrency(dashboardData.data.acabados.valor_paquete_m2) }
+          ]
+          
+          acabadosInfo.forEach(info => {
+            pdf.setFont('Inter', 'bold')
+            const labelWidth = pdf.getTextWidth(info.label)
+            pdf.text(info.label, xPos, yPos)
+            pdf.setFont('Inter', 'normal')
+            pdf.text(` ${info.value}`, xPos + labelWidth, yPos)
+            yPos += 8
+          })
+        }
+      }
+
+      // Verificar si necesitamos nueva página para el análisis comparativo
+      if (yPos > pageHeight - 80) { // Mantener margen para evitar sobrelapamiento con footer
+        pdf.addPage()
+        yPos = margin + 10
+      } else {
+        yPos = drawSectionSeparator(yPos)
+      }
       
       // ANÁLISIS COMPARATIVO
-      pdf.setFontSize(17)
+      pdf.setFontSize(16)
       pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...primaryTextColor)
       pdf.text('Análisis comparativo', margin, yPos)
@@ -437,12 +567,16 @@ export function PropertyValuation() {
         }
       }
       
-      // NUEVA PÁGINA - PROYECCIÓN DE PAGOS
-      pdf.addPage()
-      await addPageHeader()
-      yPos = 60
+      // PROYECCIÓN DE PAGOS - Solo nueva página si es necesario
+      if (yPos > pageHeight - 30) { // Si no hay suficiente espacio para empezar la tabla
+        pdf.addPage()
+        await addPageHeader()
+        yPos = 60
+      } else {
+        yPos = drawSectionSeparator(yPos)
+      }
       
-      pdf.setFontSize(17)
+      pdf.setFontSize(16)
       pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...primaryTextColor)
       pdf.text('Proyección Completa De Pagos', margin, yPos)
@@ -468,7 +602,7 @@ export function PropertyValuation() {
           // Headers con formato consistente
           pdf.setFont('Inter', 'bold')
           pdf.setTextColor(...sectionTitleColor)
-          pdf.setFontSize(9)
+          pdf.setFontSize(10)
           pdf.text('Mes', margin, yPos)
           pdf.text('Arriendo', margin + 25, yPos)
           pdf.text('Abono', margin + 65, yPos)
@@ -482,7 +616,7 @@ export function PropertyValuation() {
           
           pdf.setFont('Inter', 'normal')
           pdf.setTextColor(...bodyTextColor)
-          pdf.setFontSize(8)
+          pdf.setFontSize(10)
           
           // Mostrar TODOS los meses disponibles en una sola columna, empezando desde mes 0
           for (let i = 0; i <= programMonths; i++) {
@@ -496,10 +630,10 @@ export function PropertyValuation() {
               pdf.setFontSize(15)
               pdf.setFont('Inter', 'bold')
               pdf.setTextColor(...primaryTextColor)
-              pdf.text('Proyección Completa De Pagos (Continuación)', margin, yPos)
+              pdf.text('Proyección Completa De Pagos', margin, yPos)
               yPos += 15
               
-              pdf.setFontSize(9)
+              pdf.setFontSize(10)
               pdf.setFont('Inter', 'bold')
               pdf.setTextColor(...sectionTitleColor)
               pdf.text('Mes', margin, yPos)
@@ -515,7 +649,7 @@ export function PropertyValuation() {
               
               pdf.setFont('Inter', 'normal')
               pdf.setTextColor(...bodyTextColor)
-              pdf.setFontSize(8)
+              pdf.setFontSize(10)
             }
             
             // Mostrar datos del mes actual
@@ -562,18 +696,23 @@ export function PropertyValuation() {
         }
       }
       
-      // NUEVA PÁGINA - GRÁFICAS Y ANÁLISIS
-      pdf.addPage()
-      await addPageHeader()
-      yPos = 60
+      // GRÁFICAS Y ANÁLISIS - Solo nueva página si es necesario
+      if (yPos > pageHeight - 60) {
+        pdf.addPage()
+        await addPageHeader()
+        yPos = 60
+      } else {
+        yPos += 6
+        yPos = drawSectionSeparator(yPos)
+      }
       
-      pdf.setFontSize(15)
+      pdf.setFontSize(14)
       pdf.setFont('Inter', 'bold')
       pdf.setTextColor(...sectionTitleColor)
       pdf.text('Gráficas y análisis', margin, yPos)
       
       yPos += 15
-      pdf.setFontSize(15)
+      pdf.setFontSize(14)
       pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       pdf.setTextColor(...primaryTextColor)
@@ -957,10 +1096,14 @@ export function PropertyValuation() {
         }
       }
       
-      // NUEVA PÁGINA - DESCARGO DE RESPONSABILIDAD
-      pdf.addPage()
-      await addPageHeader()
-      yPos = 60
+      // DESCARGO DE RESPONSABILIDAD - Solo nueva página si es necesario
+      if (yPos > pageHeight - 60) {
+        pdf.addPage()
+        await addPageHeader()
+        yPos = 60
+      } else {
+        yPos = drawSectionSeparator(yPos)
+      }
       
       pdf.setFontSize(14)
       pdf.setFont('Inter', 'bold')
@@ -975,16 +1118,44 @@ export function PropertyValuation() {
       // Texto introductorio
       const introText = `Toperty S.A.S. (en adelante "Toperty") pone a disposición el presente plan de pagos, el cual está sujeto a la negociación de Toperty con el actual propietario del inmueble. La obligación de Toperty con respecto a la adquisición del inmueble es de medio y no de resultado.`
       
+      // Combinar texto intro con primera sección para calcular espacio conjunto
+      const firstSection = {
+        titulo: 'Naturaleza proyectiva del plan:',
+        texto: 'El presente plan de pagos es una proyección elaborada con supuestos macroeconómicos para propósitos ilustrativos únicamente, y no constituye el plan de pagos final. Las cuotas mensuales están sujetas a incrementos anuales de acuerdo al Índice de Precios al Consumidor (IPC) certificado por el DANE, y el valor comercial del inmueble se actualizará en función de (i) la inflación certificada por el DANE o la tasa de incremento fija anual del 5,5% (la que sea mayor); y (ii) el tiempo que el usuario tarde en adquirir el porcentaje objetivo de participación. Por lo tanto, las cifras aquí presentadas podrán variar por factores externos que Toperty no controla, incluyendo la evolución de la inflación en Colombia y los aportes extraordinarios del usuario a modo de prepago, entre otros.'
+      }
+      
+      // Calcular altura necesaria para intro + primera sección
+      const lineasIntroPreview = pdf.splitTextToSize(introText, pageWidth - 2 * margin)
+      const lineasTituloPreview = pdf.splitTextToSize(firstSection.titulo, pageWidth - 2 * margin)
+      const lineasTextoPreview = pdf.splitTextToSize(firstSection.texto, pageWidth - 2 * margin)
+      const totalHeight = (lineasIntroPreview.length * 5 + 10) + (lineasTituloPreview.length * 5 + 2) + (lineasTextoPreview.length * 5 + 10)
+      
+      // Verificar si caben intro + primera sección juntas
+      if (yPos + totalHeight > pageHeight - 25) {
+        pdf.addPage()
+        await addPageHeader()
+        yPos = 60
+      }
+      
+      // Renderizar texto intro
       const lineasIntro = pdf.splitTextToSize(introText, pageWidth - 2 * margin)
       pdf.text(lineasIntro, margin, yPos, { maxWidth: pageWidth - 2 * margin })
       yPos += lineasIntro.length * 5 + 10
       
-      // Secciones con títulos en bold
+      // Renderizar primera sección
+      pdf.setFontSize(12)
+      pdf.setFont('Inter', 'bold')
+      const lineasTitulo = pdf.splitTextToSize(firstSection.titulo, pageWidth - 2 * margin)
+      pdf.text(lineasTitulo, margin, yPos, { maxWidth: pageWidth - 2 * margin })
+      yPos += lineasTitulo.length * 5 + 2
+      
+      pdf.setFont('Inter', 'normal')
+      const lineasTexto = pdf.splitTextToSize(firstSection.texto, pageWidth - 2 * margin)
+      pdf.text(lineasTexto, margin, yPos, { maxWidth: pageWidth - 2 * margin })
+      yPos += lineasTexto.length * 5 + 10
+      
+      // Secciones restantes con títulos en bold
       const disclaimerSections = [
-        {
-          titulo: 'Naturaleza proyectiva del plan:',
-          texto: 'El presente plan de pagos es una proyección elaborada con supuestos macroeconómicos para propósitos ilustrativos únicamente, y no constituye el plan de pagos final. Las cuotas mensuales están sujetas a incrementos anuales de acuerdo al Índice de Precios al Consumidor (IPC) certificado por el DANE, y el valor comercial del inmueble se actualizará en función de (i) la inflación certificada por el DANE o la tasa de incremento fija anual del 5,5% (la que sea mayor); y (ii) el tiempo que el usuario tarde en adquirir el porcentaje objetivo de participación. Por lo tanto, las cifras aquí presentadas podrán variar por factores externos que Toperty no controla, incluyendo la evolución de la inflación en Colombia y los aportes extraordinarios del usuario a modo de prepago, entre otros.'
-        },
         {
           titulo: 'Gastos adicionales a cargo del usuario:',
           texto: 'Los gastos asociados a la propiedad del inmueble tales como impuestos prediales, seguro todo riesgo, cuotas de administración (ordinarias y extraordinarias), reparaciones y mantenimiento general, entre otros, serán pagados por el usuario de conformidad con los contratos del modelo de negocio acordado. Toperty se encargará únicamente del pago del seguro de arrendamiento.'
@@ -1033,27 +1204,27 @@ export function PropertyValuation() {
       const finalTextHeight = lineasFinal.length * 5 + 10
       
       // Verificar si cabe antes del footer (40mm de margen)
-      if (yPos + finalTextHeight > pageHeight - 40) {
+      if (yPos + finalTextHeight > pageHeight - 25) {
         pdf.addPage()
         await addPageHeader()
         yPos = 60
       }
       
       pdf.text(lineasFinal, margin, yPos, { maxWidth: pageWidth - 2 * margin })
-      yPos += lineasFinal.length * 5 + 15
+      yPos += lineasFinal.length + 15
       
       // PRÓXIMOS PASOS - Continúa en la misma página si hay espacio
       // Calcular si cabe el título + al menos el primer paso
-      const firstStepHeight = 30 // Aproximado para título + primer paso
-      if (yPos + firstStepHeight > pageHeight - 40) {
+      const firstStepHeight = 10 // Aproximado para título + primer paso
+      if (yPos + firstStepHeight > pageHeight - 10) {
         pdf.addPage()
         await addPageHeader()
         yPos = 60
       }
       
       // Separador visual antes de próximos pasos
-      drawSectionSeparator(yPos - 5)
-      yPos += 5
+      drawSectionSeparator(yPos)
+      yPos += 10
       
       pdf.setFontSize(14)
       pdf.setFont('Inter', 'bold')
@@ -1107,7 +1278,7 @@ export function PropertyValuation() {
       }
       
       // FIRMAS al final de próximos pasos
-      yPos += 15
+      yPos += 25
       
       // Asegurar suficiente espacio para las firmas (necesitan ~60mm)
       if (yPos > pageHeight - 70) {
@@ -1192,7 +1363,7 @@ export function PropertyValuation() {
       console.error('Error generando PDF:', error)
       alert('Error al generar el PDF. Por favor, intente nuevamente.')
     } finally {
-      setShowToast(false)
+      setGeneratingPDF(false)
     }
   }
 
@@ -1315,6 +1486,9 @@ export function PropertyValuation() {
   }
 
   const handlePaymentPlan = async (valuation: Valuation) => {
+    // Mostrar loading inmediatamente
+    setLoadingPaymentPlanId(valuation.id)
+    
     // Preparar datos del formulario con información del avalúo
     setSelectedValuation(valuation)
     
@@ -1324,64 +1498,25 @@ export function PropertyValuation() {
       const dashboardCheck = await checkResponse.json()
       
       if (dashboardCheck.exists) {
-        // Dashboard exists, show confirm dialog with custom buttons
-        const result = await confirm(
-          `Ya existe un plan de pagos para "${valuation.valuation_name}".\n\nDashboard válido por ${dashboardCheck.days_remaining} días.`,
-          "Seleccione una acción",
-          {
-            buttons: [
-              { text: "Ver Dashboard Usuario", value: "user", variant: "outline" },
-              { text: "Ver Dashboard Inversionista", value: "investor", variant: "outline" },
-              { text: "Ver Excel", value: "excel", variant: "outline" },
-              { text: generatingPDF ? "🔄 Generando PDF..." : "Exportar PDF", value: "pdf", variant: "outline" },
-              { text: "Editar Plan", value: "edit", variant: "secondary" },
-              { text: "Cancelar", value: "cancel", variant: "ghost" }
-            ]
-          }
-        )
-        
-        if (result.confirmed) {
-          if (result.value === "user") {
-            window.open(`${dashboardCheck.dashboard_url}/user`, '_blank')
-            return
-          } else if (result.value === "investor") {
-            window.open(`${dashboardCheck.dashboard_url}/investor`, '_blank')
-            return
-          } else if (result.value === "excel") {
-            window.open(dashboardCheck.sheet_url, '_blank')
-            return
-          } else if (result.value === "pdf") {
-            setShowToast(true)
-            
-            // Generar PDF directamente desde aquí
-            try {
-              await generatePDFFromModal(dashboardCheck.dashboard_url)
-              // Mostrar mensaje de éxito global después
-              setSaveMessage({
-                type: 'success',
-                text: '✅ PDF generado exitosamente y descargado.'
-              })
-              // Limpiar mensaje después de 3 segundos
-              setTimeout(() => setSaveMessage(null), 3000)
-            } catch (error) {
-              setSaveMessage({
-                type: 'error',
-                text: '❌ Error al generar el PDF. Intente nuevamente.'
-              })
-              // Limpiar mensaje después de 5 segundos
-              setTimeout(() => setSaveMessage(null), 5000)
-            }
-            return
-          } else if (result.value === "cancel") {
-            return
-          }
-          // If "edit", continue with the form
-        } else {
-          return
-        }
+        setLoadingPaymentPlanId(null) // Quitar loading antes de mostrar el modal
+        // Dashboard exists, mostrar modal unificado
+        setDashboardActionsModal({
+          isOpen: true,
+          title: 'Seleccione una acción',
+          message: `Ya existe un plan de pagos para "${valuation.valuation_name}".\n\nDashboard válido por ${dashboardCheck.days_remaining} días.`,
+          dashboardUrl: dashboardCheck.dashboard_url,
+          sheetUrl: dashboardCheck.sheet_url,
+          showEditButton: true
+        })
+        return // El modal maneja las acciones
+      } else {
+        // Dashboard doesn't exist, it's a new plan
+        setIsEditingPaymentPlan(false)
       }
     } catch (error) {
       console.error('Error checking dashboard existence:', error)
+      setIsEditingPaymentPlan(false)
+      // Continuar para mostrar formulario de creación
     }
     
     // Obtener dirección y ciudad desde coordenadas si están disponibles
@@ -1403,6 +1538,13 @@ export function PropertyValuation() {
     }
     
     setPaymentPlanData({
+      // Configuración del Programa
+      programa: '',
+      valor_lanzamiento: 'descuento',
+      tipo_programa: 'gradiente',
+      tipo_vivienda: 'usada',
+      alistamiento_acabados: 'no',
+      financiacion_gastos: 'si',
       // Flujo Toperty Interno - algunos valores del avalúo
       area: valuation.area.toString(),
       commercial_value: valuation.final_price?.toString() || '',
@@ -1427,6 +1569,7 @@ export function PropertyValuation() {
       co_applicant_name: '',
       co_applicant_id: ''
     })
+    setLoadingPaymentPlanId(null) // Quitar loading antes de mostrar el formulario
     setShowPaymentPlanForm(true)
   }
 
@@ -1449,7 +1592,15 @@ export function PropertyValuation() {
   const handleClosePaymentPlanForm = () => {
     setShowPaymentPlanForm(false)
     setSelectedValuation(null)
+    setIsEditingPaymentPlan(false)
     setPaymentPlanData({
+      // Configuración del Programa
+      programa: '',
+      valor_lanzamiento: 'descuento',
+      tipo_programa: 'gradiente',
+      tipo_vivienda: 'usada',
+      alistamiento_acabados: 'no',
+      financiacion_gastos: 'si',
       // Flujo Toperty Interno
       area: '',
       commercial_value: '',
@@ -1468,8 +1619,72 @@ export function PropertyValuation() {
       construction_year: '',
       stratum: '',
       apartment_type: '',
-      private_parking: ''
+      private_parking: '',
+      // Co-aplicante
+      client_id: '',
+      co_applicant_name: '',
+      co_applicant_id: ''
     })
+  }
+
+  // Función para abrir el formulario de edición desde el modal de plan existente
+  const handleEditPlanFromModal = async () => {
+    if (!selectedValuation) return
+    
+    setDashboardActionsModal(prev => ({ ...prev, isOpen: false }))
+    setIsEditingPaymentPlan(true)
+    
+    // Obtener dirección y ciudad desde coordenadas si están disponibles
+    let resolvedAddress = address || ''
+    let resolvedCity = ''
+    let resolvedCountry = 'Colombia'
+    
+    if (selectedValuation.latitude && selectedValuation.longitude && !address) {
+      try {
+        const result = await reverseGeocode(selectedValuation.latitude, selectedValuation.longitude)
+        if (result.success) {
+          resolvedAddress = result.formatted_address
+          resolvedCity = result.city || ''
+          resolvedCountry = result.country || 'Colombia'
+        }
+      } catch (error) {
+        console.log('No se pudo obtener la dirección automáticamente')
+      }
+    }
+    
+    setPaymentPlanData({
+      // Configuración del Programa
+      programa: '',
+      valor_lanzamiento: 'descuento',
+      tipo_programa: 'gradiente',
+      tipo_vivienda: 'usada',
+      alistamiento_acabados: 'no',
+      financiacion_gastos: 'si',
+      // Flujo Toperty Interno
+      area: selectedValuation.area.toString(),
+      commercial_value: selectedValuation.final_price?.toString() || '',
+      average_purchase_value: '',
+      asking_price: '',
+      user_down_payment: '',
+      program_months: '',
+      potential_down_payment: '',
+      bank_mortgage_rate: '',
+      dupla_bank_rate: '',
+      // Para Envío Usuario
+      client_name: '',
+      address: resolvedAddress,
+      city: resolvedCity,
+      country: resolvedCountry,
+      construction_year: '',
+      stratum: selectedValuation.stratum?.toString() || '',
+      apartment_type: '',
+      private_parking: selectedValuation.garages?.toString() || '',
+      // Co-aplicante
+      client_id: '',
+      co_applicant_name: '',
+      co_applicant_id: ''
+    })
+    setShowPaymentPlanForm(true)
   }
 
   const handlePaymentPlanChange = (field: string, value: string) => {
@@ -1507,9 +1722,20 @@ export function PropertyValuation() {
   const handlePaymentPlanSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validar que el nombre del cliente esté presente
-    if (!paymentPlanData.client_name.trim()) {
-      alert('El nombre del cliente es requerido')
+    // Mapeo de programa a template_sheet_id de Google Sheets
+    const programaTemplates: Record<string, string> = {
+      'programa_1': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_GENERAL || '',
+      'programa_2': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_SOLE || '',
+      'programa_3': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_B75 || '',
+      'programa_4': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_D89 || '',
+      'programa_5': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_C84 || '',
+      'programa_6': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_A68 || '',
+      'programa_7': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_ALUNA || '',
+    }
+
+    const templateSheetId = programaTemplates[paymentPlanData.programa]
+    if (!templateSheetId) {
+      alert('No se encontró el template para el programa seleccionado. Verifique la configuración.')
       return
     }
     
@@ -1520,6 +1746,7 @@ export function PropertyValuation() {
       const dataToSend = {
         ...paymentPlanData,
         valuation_name: selectedValuation?.valuation_name || paymentPlanData.client_name, // Usar nombre del avalúo
+        template_sheet_id: templateSheetId, // ID del template de Google Sheets
         potential_down_payment: paymentPlanData.potential_down_payment ? `${paymentPlanData.potential_down_payment}%` : '',
         bank_mortgage_rate: paymentPlanData.bank_mortgage_rate ? `${paymentPlanData.bank_mortgage_rate}%` : '',
         dupla_bank_rate: paymentPlanData.dupla_bank_rate ? `${paymentPlanData.dupla_bank_rate}%` : ''
@@ -1537,64 +1764,29 @@ export function PropertyValuation() {
       const result = await response.json()
       
       if (response.ok && result.success) {
-        // Éxito - mostrar mensaje y URLs
-        setSaveMessage({
-          type: 'success',
-          text: result.message || '¡Plan de pagos creado exitosamente!'
+        // Éxito - mostrar modal persistente con opciones
+        const successTitle = isEditingPaymentPlan 
+          ? '¡Plan de Pagos Editado!' 
+          : '¡Plan de Pagos Creado!'
+        const successMessage = isEditingPaymentPlan 
+          ? '¡Plan de pagos editado exitosamente!' 
+          : '¡Plan de pagos creado exitosamente!'
+        setDashboardActionsModal({
+          isOpen: true,
+          title: successTitle,
+          message: result.message || successMessage,
+          dashboardUrl: result.dashboard_url || null,
+          sheetUrl: result.sheet_url || null,
+          showEditButton: false
         })
         
-        // Show options to open different dashboard views
-        const viewResult = await confirm(
-          result.message,
-          "¿Qué desea hacer ahora?",
-          {
-            buttons: [
-              { text: "Ver Dashboard Usuario", value: "user", variant: "outline" },
-              { text: "Ver Dashboard Inversionista", value: "investor", variant: "outline" },
-              { text: "Ver Excel", value: "excel", variant: "outline" },
-              { text: generatingPDF ? "🔄 Generando PDF..." : "Exportar PDF", value: "pdf", variant: "outline" },
-              { text: "Cerrar", value: "close", variant: "ghost" }
-            ]
-          }
-        )
+        // Recargar la tabla de valuations para actualizar el estado del botón
+        loadValuations()
         
-        if (viewResult.confirmed) {
-          if (viewResult.value === "user" && result.dashboard_url) {
-            window.open(`${result.dashboard_url}/user`, '_blank')
-          } else if (viewResult.value === "investor" && result.dashboard_url) {
-            window.open(`${result.dashboard_url}/investor`, '_blank')
-          } else if (viewResult.value === "excel" && result.sheet_url) {
-            window.open(result.sheet_url, '_blank')
-          } else if (viewResult.value === "pdf" && result.dashboard_url) {
-            setShowToast(true)
-            
-            // Generar PDF directamente desde aquí
-            try {
-              await generatePDFFromModal(result.dashboard_url)
-              // Mostrar mensaje de éxito global después
-              setSaveMessage({
-                type: 'success',
-                text: '✅ PDF generado exitosamente y descargado.'
-              })
-              // Limpiar mensaje después de 3 segundos
-              setTimeout(() => setSaveMessage(null), 3000)
-            } catch (error) {
-              setSaveMessage({
-                type: 'error',
-                text: '❌ Error al generar el PDF. Intente nuevamente.'
-              })
-              // Limpiar mensaje después de 5 segundos
-              setTimeout(() => setSaveMessage(null), 5000)
-            }
-          }
-        }
-        
-        // Cerrar el formulario después de un breve delay
-        setTimeout(() => {
-          setShowPaymentPlanForm(false)
-          setSelectedValuation(null)
-          setSaveMessage(null)
-        }, 3000)
+        // Cerrar el formulario de plan de pagos
+        setShowPaymentPlanForm(false)
+        setSelectedValuation(null)
+        // No resetear isEditingPaymentPlan aquí - se hace al cerrar el modal
         
       } else {
         // Error del servidor
@@ -2017,13 +2209,21 @@ export function PropertyValuation() {
         </div>
       )}
 
-      {/* Toast de generación de PDF */}
-      <Toast
-        message="Generando PDF... El archivo se descargará automáticamente"
-        type="loading"
-        isVisible={showToast}
-        onClose={() => setShowToast(false)}
-      />
+      {/* Overlay de generación de PDF - Bloquea toda la UI */}
+      {generatingPDF && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-sm mx-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-blue-200 rounded-full"></div>
+              <div className="absolute top-0 left-0 w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-gray-900">Generando PDF</h3>
+              <p className="text-sm text-gray-500 mt-1">Por favor espere, el archivo se descargará automáticamente...</p>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Formulario */}
@@ -2695,14 +2895,27 @@ export function PropertyValuation() {
                               variant="outline"
                               size="sm"
                               onClick={() => handlePaymentPlan(valuation)}
+                              disabled={loadingPaymentPlanId === valuation.id}
                               className={`w-36 flex items-center justify-center gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md ${
                                 valuation.has_payment_plan 
                                   ? 'border-blue-800 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-900' 
                                   : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
                               }`}
                             >
-                              <FileText className="h-3 w-3" />
-                              {valuation.has_payment_plan ? 'Ver plan' : 'Crear plan'}
+                              {loadingPaymentPlanId === valuation.id ? (
+                                <>
+                                  <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Cargando...
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="h-3 w-3" />
+                                  {valuation.has_payment_plan ? 'Ver plan' : 'Crear plan'}
+                                </>
+                              )}
                             </Button>
                             <Button
                               variant="outline"
@@ -2776,6 +2989,172 @@ export function PropertyValuation() {
           </DialogHeader>
           
           <form onSubmit={handlePaymentPlanSubmit} className="space-y-6">
+            {/* Subtítulo: Configuración del Programa */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Configuración del Programa</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="relative">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="programa" className="cursor-help">Programa *</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Seleccione el programa de financiación</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  {/* Input para validación nativa del formulario - posicionado detrás del Select */}
+                  <input
+                    type="text"
+                    value={paymentPlanData.programa}
+                    onChange={() => {}}
+                    required
+                    className="absolute inset-0 top-6 opacity-0 pointer-events-none"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
+                  <Select
+                    value={paymentPlanData.programa}
+                    onValueChange={(value) => handlePaymentPlanChange('programa', value)}
+                    required
+                  >
+                    <SelectTrigger id="programa">
+                      <SelectValue placeholder="Seleccione un programa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="programa_1">Programa Toperty General</SelectItem>
+                      <SelectItem value="programa_2">Solé (C. Bolivar)</SelectItem>
+                      <SelectItem value="programa_3">Austro (C. Bolivar) - B75</SelectItem>
+                      <SelectItem value="programa_4">Austro (C. Bolivar) - D89</SelectItem>
+                      <SelectItem value="programa_5">Austro (C. Bolivar) - C84</SelectItem>
+                      <SelectItem value="programa_6">Austro (C. Bolivar) - A68</SelectItem>
+                      <SelectItem value="programa_7">Aluna (Coninsa)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="valor_lanzamiento" className="cursor-help">Valor de Lanzamiento</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Tipo de valor para el lanzamiento</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Select
+                    value={paymentPlanData.valor_lanzamiento}
+                    onValueChange={(value) => handlePaymentPlanChange('valor_lanzamiento', value)}
+                  >
+                    <SelectTrigger id="valor_lanzamiento">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="descuento">Descuento</SelectItem>
+                      <SelectItem value="comercial">Comercial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="tipo_programa" className="cursor-help">Tipo de Programa</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Estructura del programa de pagos</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Select
+                    value={paymentPlanData.tipo_programa}
+                    onValueChange={(value) => handlePaymentPlanChange('tipo_programa', value)}
+                  >
+                    <SelectTrigger id="tipo_programa">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lineal">Lineal</SelectItem>
+                      <SelectItem value="gradiente">Gradiente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="tipo_vivienda" className="cursor-help">Tipo de Vivienda</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Condición de la vivienda</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Select
+                    value={paymentPlanData.tipo_vivienda}
+                    onValueChange={(value) => handlePaymentPlanChange('tipo_vivienda', value)}
+                  >
+                    <SelectTrigger id="tipo_vivienda">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nueva">Nueva</SelectItem>
+                      <SelectItem value="usada">Usada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="alistamiento_acabados" className="cursor-help">
+                        {paymentPlanData.programa === 'programa_1' || paymentPlanData.programa === 'programa_7' 
+                          ? 'Con Alistamiento en la Entrega' 
+                          : 'Con Acabados a la Entrega'}
+                      </Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>{paymentPlanData.programa === 'programa_1' || paymentPlanData.programa === 'programa_7'
+                        ? 'Si la propiedad incluye alistamiento en la entrega'
+                        : 'Si la propiedad incluye acabados a la entrega'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Select
+                    value={paymentPlanData.alistamiento_acabados}
+                    onValueChange={(value) => handlePaymentPlanChange('alistamiento_acabados', value)}
+                  >
+                    <SelectTrigger id="alistamiento_acabados">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="si">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="financiacion_gastos" className="cursor-help">Con Financiación de Gastos de Cierre</Label>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={5} align="center">
+                      <p>Si incluye financiación para los gastos de cierre</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Select
+                    value={paymentPlanData.financiacion_gastos}
+                    onValueChange={(value) => handlePaymentPlanChange('financiacion_gastos', value)}
+                  >
+                    <SelectTrigger id="financiacion_gastos">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="si">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
             {/* Subtítulo: Flujo Toperty Interno */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Flujo Toperty Interno</h3>
@@ -2897,10 +3276,10 @@ export function PropertyValuation() {
               <div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Label htmlFor="potential_down_payment" className="cursor-help">Cuota Inicial Potencial</Label>
+                    <Label htmlFor="potential_down_payment" className="cursor-help">Objetivo de Adquisición</Label>
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={5} align="center">
-                    <p>Cuota inicial potencial después del programa</p>
+                    <p>Objetivo de adquisición después del programa</p>
                   </TooltipContent>
                 </Tooltip>
                 <div className="relative">
@@ -3138,10 +3517,132 @@ export function PropertyValuation() {
                 className="flex items-center gap-2 transition-all duration-200 hover:scale-105 hover:shadow-lg"
               >
                 <FileText className="h-4 w-4" />
-                {saving ? 'Creando Plan...' : 'Generar Plan de Pagos'}
+                {saving 
+                  ? (isEditingPaymentPlan ? 'Editando Plan...' : 'Creando Plan...') 
+                  : (isEditingPaymentPlan ? 'Editar Plan de Pagos' : 'Generar Plan de Pagos')}
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal persistente para acciones del dashboard */}
+      <Dialog open={dashboardActionsModal.isOpen} onOpenChange={(open) => {
+        if (!open && !generatingPDFInModal) {
+          setDashboardActionsModal(prev => ({ ...prev, isOpen: false }))
+          setIsEditingPaymentPlan(false)
+        }
+      }}>
+        <DialogContent 
+          className="sm:max-w-md [&>button.absolute]:hidden"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          {/* Overlay de loading para PDF */}
+          {generatingPDFInModal && (
+            <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50 rounded-lg">
+              <div className="flex flex-col items-center gap-3">
+                <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-sm font-medium text-gray-700">Generando PDF...</span>
+              </div>
+            </div>
+          )}
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-600" />
+              {dashboardActionsModal.title || '¡Plan de Pagos Creado!'}
+            </DialogTitle>
+            <DialogDescription>
+              {dashboardActionsModal.message}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1 py-4">
+            <div className="text-sm text-gray-500 mb-2">Acciones disponibles:</div>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {dashboardActionsModal.dashboardUrl && (
+                <>
+                  <button
+                    onClick={() => window.open(`${dashboardActionsModal.dashboardUrl}/user`, '_blank')}
+                    disabled={generatingPDFInModal}
+                    className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="font-medium">Ver Dashboard Usuario</span>
+                    <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                  </button>
+                  <button
+                    onClick={() => window.open(`${dashboardActionsModal.dashboardUrl}/investor`, '_blank')}
+                    disabled={generatingPDFInModal}
+                    className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="font-medium">Ver Dashboard Inversionista</span>
+                    <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                  </button>
+                </>
+              )}
+              {dashboardActionsModal.sheetUrl && (
+                <button
+                  onClick={() => window.open(dashboardActionsModal.sheetUrl!, '_blank')}
+                  disabled={generatingPDFInModal}
+                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="font-medium">Ver Excel</span>
+                  <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                </button>
+              )}
+              {dashboardActionsModal.dashboardUrl && (
+                <button
+                  onClick={() => {
+                    setGeneratingPDFInModal(true)
+                    generatePDFFromModal(dashboardActionsModal.dashboardUrl!)
+                      .then(() => {
+                        setSaveMessage({
+                          type: 'success',
+                          text: '✅ PDF generado exitosamente y descargado.'
+                        })
+                        setTimeout(() => setSaveMessage(null), 3000)
+                      })
+                      .catch(() => {
+                        setSaveMessage({
+                          type: 'error',
+                          text: '❌ Error al generar el PDF. Intente nuevamente.'
+                        })
+                        setTimeout(() => setSaveMessage(null), 5000)
+                      })
+                      .finally(() => setGeneratingPDFInModal(false))
+                  }}
+                  disabled={generatingPDFInModal}
+                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="font-medium">Exportar PDF</span>
+                  <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                </button>
+              )}
+              {dashboardActionsModal.showEditButton && (
+                <button
+                  onClick={handleEditPlanFromModal}
+                  disabled={generatingPDFInModal}
+                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-amber-50 hover:bg-amber-100 text-amber-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="font-medium">Editar Plan</span>
+                  <span className="text-amber-400 group-hover:text-amber-600">→</span>
+                </button>
+              )}
+            </div>
+            {/* Botón de cerrar separado */}
+            <div className="mt-2 pt-2 border-t">
+              <button
+                onClick={() => setDashboardActionsModal(prev => ({ ...prev, isOpen: false }))}
+                disabled={generatingPDFInModal}
+                className="w-full px-4 py-2 rounded-md font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

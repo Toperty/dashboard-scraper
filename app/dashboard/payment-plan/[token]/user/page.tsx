@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Clock, RefreshCw, Home, User, ChevronLeft, ChevronRight, CheckCircle, ChevronDown, ChevronUp, FileText } from 'lucide-react'
+import { AlertCircle, Clock, RefreshCw, Home, User, ChevronLeft, ChevronRight, CheckCircle, ChevronDown, ChevronUp, FileText, DollarSign, Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -33,9 +33,15 @@ export default function UserDashboardPage() {
   const [expandedSteps, setExpandedSteps] = useState<number[]>([])
   const [disclaimerExpanded, setDisclaimerExpanded] = useState(false)
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (forceRefresh = false) => {
+    setLoading(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/user`)
+      // Add cache busting parameter to force refresh
+      const url = forceRefresh 
+        ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/user?t=${Date.now()}`
+        : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/user`
+      
+      const response = await fetch(url)
       
       if (response.status === 404) {
         setError('Dashboard no encontrado o el enlace ha expirado.')
@@ -64,7 +70,8 @@ export default function UserDashboardPage() {
 
 
   useEffect(() => {
-    fetchDashboard()
+    // Force refresh on initial load
+    fetchDashboard(true)
   }, [token])
 
 
@@ -103,7 +110,34 @@ export default function UserDashboardPage() {
     return `$${Math.round(numValue).toLocaleString('es-CO')}`
   }
 
+  // Crear array dinámico de métricas incluyendo acabados si aplican
   const userMetrics = [
+    // Ingresos a Certificar - Solo si no es programa_1 o programa_7 (independiente de alistamiento)
+    ...(dashboardData.data?.configuracion_programa?.programa !== 'programa_1' && 
+        dashboardData.data?.configuracion_programa?.programa !== 'programa_7' && 
+        (dashboardData.data?.acabados || dashboardData.data?.flujo_interno?.con_alistamiento) ? [{
+      title: 'Ingresos a Certificar',
+      value: formatCurrency(dashboardData.data?.acabados?.ingresos_certificar_pesos || dashboardData.data?.flujo_interno?.ingresos_certificar_pesos),
+      subValue: (dashboardData.data?.acabados?.ingresos_certificar_smmlv || dashboardData.data?.flujo_interno?.ingresos_certificar_smmlv) ? 
+        `${parseFloat(dashboardData.data?.acabados?.ingresos_certificar_smmlv || dashboardData.data?.flujo_interno?.ingresos_certificar_smmlv).toFixed(2)} SMMLV` : null,
+      icon: DollarSign,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50'
+    }] : []),
+    // Acabados Paquete - Solo si no es programa_1 o programa_7 Y con_alistamiento es "Si"
+    ...(dashboardData.data?.configuracion_programa?.programa !== 'programa_1' && 
+        dashboardData.data?.configuracion_programa?.programa !== 'programa_7' && 
+        (dashboardData.data?.flujo_interno?.con_alistamiento === 'si' || 
+         dashboardData.data?.flujo_interno?.con_alistamiento === 'Si') && 
+        dashboardData.data?.acabados ? [{
+      title: 'Paquete Acabados',
+      value: formatCurrency(dashboardData.data?.acabados?.valor_paquete),
+      subValue: dashboardData.data?.acabados?.valor_paquete_m2 ? 
+        `${formatCurrency(dashboardData.data.acabados.valor_paquete_m2)} por m²` : null,
+      icon: Receipt,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50'
+    }] : []),
     {
       title: 'Valor de la Propiedad',
       value: formatCurrency(dashboardData.data?.flujo_interno?.commercial_value),
@@ -219,18 +253,27 @@ export default function UserDashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Metrics cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Metrics cards - Grid dinámico según cantidad de cards */}
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${
+            userMetrics.length === 5 ? 'lg:grid-cols-5' : 
+            userMetrics.length === 4 ? 'lg:grid-cols-4' : 
+            'lg:grid-cols-3'
+          } gap-4`}>
             {userMetrics.map((metric, index) => (
               <Card key={index} className="hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-600 mb-1">{metric.title}</p>
-                      <p className="text-2xl font-bold">{metric.value}</p>
+                <CardContent className="p-4">
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className={`${metric.bgColor} p-2 rounded-lg`}>
+                        <metric.icon className={`w-4 h-4 ${metric.color}`} />
+                      </div>
                     </div>
-                    <div className={`${metric.bgColor} p-3 rounded-lg`}>
-                      <metric.icon className={`w-6 h-6 ${metric.color}`} />
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">{metric.title}</p>
+                      <p className="text-lg font-bold">{metric.value}</p>
+                      {metric.subValue && (
+                        <p className="text-xs text-gray-500 mt-1">{metric.subValue}</p>
+                      )}
                     </div>
                   </div>
                 </CardContent>

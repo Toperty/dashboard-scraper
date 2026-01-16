@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
+import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { TopertyLogo } from '@/components/toperty-logo'
 
 const MONTHS_PER_PAGE = 12
@@ -17,10 +18,18 @@ export default function InvestorDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cashFlowPage, setCashFlowPage] = useState(0)
+  const [investmentAmount, setInvestmentAmount] = useState<string>('')
+  const [disclaimerExpanded, setDisclaimerExpanded] = useState(false)
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (forceRefresh = false) => {
+    setLoading(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/investor`)
+      // Add cache busting parameter to force refresh
+      const url = forceRefresh 
+        ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/investor?t=${Date.now()}`
+        : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/investor`
+      
+      const response = await fetch(url)
       
       if (response.status === 404) {
         setError('Dashboard no encontrado o el enlace ha expirado.')
@@ -48,7 +57,8 @@ export default function InvestorDashboardPage() {
   }
 
   useEffect(() => {
-    fetchDashboard()
+    // Force refresh on initial load
+    fetchDashboard(true)
   }, [token])
 
   if (loading) {
@@ -269,7 +279,7 @@ export default function InvestorDashboardPage() {
                 </div>
                 <div className="text-center">
                   <span className="text-sm text-gray-500">Habitaciones</span>
-                  <p className="font-medium">{dashboardData.data?.resumen?.habitaciones || 'N/A'}</p>
+                  <p className="font-medium">{(dashboardData.data?.resumen?.habitaciones && dashboardData.data.resumen.habitaciones !== '') ? dashboardData.data.resumen.habitaciones : 'N/A'}</p>
                 </div>
                 <div className="text-center">
                   <span className="text-sm text-gray-500">Administración Mensual</span>
@@ -443,15 +453,31 @@ export default function InvestorDashboardPage() {
             const visibleHeaders = headers.slice(startIdx, endIdx)
             const visibleCount = visibleHeaders.length
 
+            // Calcular el factor de inversión
+            const inversionPorUnidad = dashboardData.data?.flujo_interno?.inversion_por_unidad || 1
+            // Parsear el valor removiendo $ y puntos de miles (formato colombiano)
+            let parsedInvestment = investmentAmount ? parseInt(investmentAmount.replace(/[$\.]/g, '')) : inversionPorUnidad
+            // Asegurar que nunca exceda el máximo (inversionPorUnidad = 1.0x)
+            const userInvestment = Math.min(parsedInvestment || inversionPorUnidad, inversionPorUnidad)
+            // El factor máximo debe ser 1.0
+            const investmentFactor = Math.min(userInvestment / inversionPorUnidad, 1.0)
+
             const getSlice = (arr: any[]) => arr ? arr.slice(startIdx, endIdx) : []
+
+            // Función para aplicar el factor de inversión
+            const applyFactor = (value: number | null): number | undefined => {
+              if (value === null || value === undefined) return undefined
+              return value * investmentFactor
+            }
 
             // Para cuota inicial M0, usar user_down_payment si el array no tiene valor
             const getCuotaInicialValue = (value: number | null, index: number) => {
               const actualMonth = allMonths[startIdx + index]
               if (actualMonth === 0 && !value) {
-                return dashboardData.data?.flujo_interno?.user_down_payment
+                const baseValue = dashboardData.data?.flujo_interno?.user_down_payment
+                return baseValue ? baseValue * investmentFactor : undefined
               }
-              return value
+              return applyFactor(value)
             }
 
             return (
@@ -459,17 +485,60 @@ export default function InvestorDashboardPage() {
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-center">
                     <CardTitle className="text-base">Proyección de Flujo de Caja</CardTitle>
-                    {totalPages > 1 && (
+                    <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.max(0, p - 1))} disabled={cashFlowPage === 0} className="h-7 px-2">
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <span className="text-xs text-gray-600">{cashFlowPage + 1}/{totalPages}</span>
-                        <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.min(totalPages - 1, p + 1))} disabled={cashFlowPage >= totalPages - 1} className="h-7 px-2">
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
+                        <label className="text-xs text-gray-600">Tu Inversión:</label>
+                        <Input
+                          type="text"
+                          placeholder={`Máx: ${formatCurrency(inversionPorUnidad)}`}
+                          value={investmentAmount}
+                          onChange={(e) => {
+                            const input = e.target.value
+                            // Si están borrando todo, permitir campo vacío
+                            if (input === '' || input === '$') {
+                              setInvestmentAmount('')
+                              return
+                            }
+                            
+                            // Parsear formato colombiano: "1.385.299.468,426" -> 1385299468
+                            let cleanInput = input.replace(/[$]/g, '') // Remover $
+                            
+                            // Si hay coma, tomar solo la parte antes (enteros)
+                            if (cleanInput.includes(',')) {
+                              cleanInput = cleanInput.split(',')[0]
+                            }
+                            
+                            // Remover puntos (separadores de miles) y obtener número
+                            const numValue = parseInt(cleanInput.replace(/\./g, '')) || 0
+                            
+                            if (numValue === 0) {
+                              setInvestmentAmount('')
+                              return
+                            }
+                            
+                            // El máximo es inversionPorUnidad para multiplicador 1.0x
+                            if (numValue > inversionPorUnidad) {
+                              setInvestmentAmount(`$${Math.round(inversionPorUnidad).toLocaleString('es-CO')}`)
+                            } else {
+                              setInvestmentAmount(`$${Math.round(numValue).toLocaleString('es-CO')}`)
+                            }
+                          }}
+                          className="w-32 h-6 text-xs"
+                        />
+                        <span className="text-xs text-gray-500">({investmentFactor.toFixed(2)}x)</span>
                       </div>
-                    )}
+                      {totalPages > 1 && (
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.max(0, p - 1))} disabled={cashFlowPage === 0} className="h-7 px-2">
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-xs text-gray-600">{cashFlowPage + 1}/{totalPages}</span>
+                          <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.min(totalPages - 1, p + 1))} disabled={cashFlowPage >= totalPages - 1} className="h-7 px-2">
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-2 md:p-4 pt-0">
@@ -479,7 +548,7 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b bg-gray-100">
                           <th className="px-2 py-1 text-left font-medium text-gray-700 sticky left-0 z-10 bg-gray-100 w-42">Concepto</th>
                           {visibleHeaders.map((header: string, index: number) => (
-                            <th key={index} className={`px-1 py-1 text-right font-medium text-gray-700 whitespace-nowrap ${cashFlowPage === 0 && index === 1 ? 'w-[95px]' : 'w-[85px]'} ${allMonths[startIdx + index] <= 1 ? 'bg-blue-50' : ''}`}>{header || '-'}</th>
+                            <th key={index} className={`px-1 py-1 text-right font-medium text-gray-700 whitespace-nowrap ${cashFlowPage === 0 && index === 1 ? 'w-[100px]' : 'w-[85px]'} ${allMonths[startIdx + index] <= 1 ? 'bg-blue-50' : ''}`}>{header || '-'}</th>
                           ))}
                           <th className="bg-gray-100"></th>
                         </tr>
@@ -498,50 +567,21 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Renta</td>
                           {getSlice(cashFlow.renta).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Compra Parcial</td>
                           {getSlice(cashFlow.compra_parcial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Venta</td>
                           {getSlice(cashFlow.venta).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
-                          ))}
-                          <td></td>
-                        </tr>
-                        <tr className="bg-orange-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-orange-800">A Cargo del Usuario</td></tr>
-                        <tr className="border-b hover:bg-gray-50">
-                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Impuesto Predial</td>
-                          {getSlice(cashFlow.impuesto_predial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
-                          ))}
-                          <td></td>
-                        </tr>
-                        <tr className="border-b hover:bg-gray-50">
-                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Administración</td>
-                          {getSlice(cashFlow.administracion).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
-                          ))}
-                          <td></td>
-                        </tr>
-                        <tr className="border-b hover:bg-gray-50">
-                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Todo Riesgo</td>
-                          {getSlice(cashFlow.seguro_todo_riesgo).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
-                          ))}
-                          <td></td>
-                        </tr>
-                        <tr className="border-b hover:bg-gray-50">
-                          <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Reparaciones</td>
-                          {getSlice(cashFlow.reparaciones_estimadas).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
@@ -549,42 +589,42 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Arrendamiento</td>
                           {getSlice(cashFlow.seguro_arrendamiento).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Ganancia Ocasional</td>
                           {getSlice(cashFlow.ganancia_ocasional).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) ICA</td>
                           {getSlice(cashFlow.ica).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) GMF</td>
                           {getSlice(cashFlow.gmf).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Comisión Gestión</td>
                           {getSlice(cashFlow.comision_toperty_gestion).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
                         <tr className="border-b hover:bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Comisión Exit</td>
                           {getSlice(cashFlow.comision_toperty_exit).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
@@ -592,8 +632,8 @@ export default function InvestorDashboardPage() {
                         <tr className="border-b hover:bg-gray-50 bg-gray-50">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white font-bold">(=) Flujo de Caja Operativo</td>
                           {getSlice(cashFlow.flujo_caja_operativo).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right font-bold whitespace-nowrap ${value >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {value ? formatCurrency(value) : '-'}
+                            <td key={i} className={`px-2 py-1 text-right font-bold whitespace-nowrap ${(applyFactor(value) || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              {applyFactor(value) ? formatCurrency(applyFactor(value)) : '-'}
                             </td>
                           ))}
                           <td></td>
@@ -606,50 +646,42 @@ export default function InvestorDashboardPage() {
             )
           })()}
 
-          {/* Investment Highlights */}
+          {/* Descargo de Responsabilidad */}
           <Card>
             <CardHeader>
-              <CardTitle>Highlights de la Inversión</CardTitle>
+              <button
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setDisclaimerExpanded(!disclaimerExpanded)}
+              >
+                <CardTitle>Descargo de Responsabilidad</CardTitle>
+                {disclaimerExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-semibold mb-3 text-green-700">Fortalezas</h4>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2"></div>
-                      <span>Programa estructurado de {dashboardData.data?.flujo_interno?.program_months} meses</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2"></div>
-                      <span>Cliente comprometido con cuota inicial de {formatCurrency(dashboardData.data?.flujo_interno?.user_down_payment)}</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2"></div>
-                      <span>Potencial de cuota inicial del {formatPercent(dashboardData.data?.flujo_interno?.potential_down_payment)}</span>
-                    </li>
-                  </ul>
+            {disclaimerExpanded && (
+              <CardContent>
+                <div className="space-y-4 text-sm text-gray-600">
+                  <p>
+                    La presente información es de carácter ilustrativo y no constituye una oferta vinculante para Toperty S.A.S. Las proyecciones financieras aquí presentadas están elaboradas con supuestos macroeconómicos y no representan rendimientos garantizados.
+                  </p>
+                  
+                  <div>
+                    Naturaleza de la inversión: El modelo de co-inversión opera bajo un contrato de cuentas en participación, donde Toperty actúa como titular del derecho real de dominio sobre el inmueble y se encarga de la administración y gestión del modelo rent to own. Los co-inversionistas tienen derecho a los beneficios económicos derivados del contrato, sujetos a la ejecución exitosa del programa.
+                  </div>
+                  
+                  <div>
+                    Factores de variabilidad: Las proyecciones podrán variar por factores externos que Toperty no controla, incluyendo: (i) la evolución de la inflación en Colombia y el IPC certificado por el DANE; (ii) cambios en las condiciones macroeconómicas del país; (iii) el comportamiento del mercado inmobiliario; (iv) el cumplimiento del usuario vinculado al programa rent to own; y (v) cambios regulatorios que impacten el modelo de negocio.
+                  </div>
+                  
+                  <div>
+                    Riesgos: Las partes reconocen que no tienen derecho a rendimientos garantizados ni pagos fijos. En caso de incumplimiento del usuario o circunstancias adversas, la rentabilidad estimada podría verse afectada materialmente, e incluso podrían presentarse pérdidas. Todas las obligaciones de Toperty son de medio y no de resultado, salvo la entrega del aporte en dinero acordado.
+                  </div>
+                  
+                  <p>
+                    Toperty S.A.S. se reserva el derecho a dar por terminado el proceso en cualquier momento y bajo su absoluta discreción.
+                  </p>
                 </div>
-                
-                <div>
-                  <h4 className="font-semibold mb-3 text-blue-700">Consideraciones</h4>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2"></div>
-                      <span>Sujeto a aprobación hipotecaria del cliente</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2"></div>
-                      <span>Fluctuaciones del mercado inmobiliario</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2"></div>
-                      <span>Tiempo de ejecución del programa</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
+              </CardContent>
+            )}
           </Card>
         </div>
       </div>

@@ -6,7 +6,7 @@ import { DashboardView } from "@/components/dashboard-view"
 import { PropertyDatabaseView } from "@/components/property-database-view"
 import { SimpleGoogleMap } from "@/components/simple-google-map"
 import { PropertyValuation } from "@/components/property-valuation"
-import { Activity, Database, MapPin, Calculator } from "lucide-react"
+import { Activity, Database, MapPin, Calculator, Users } from "lucide-react"
 
 export function MonitoringDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -73,6 +73,17 @@ export function MonitoringDashboard() {
               <Calculator className="h-4 w-4" />
               Avalúo
             </TabsTrigger>
+            <button
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2 hover:bg-muted text-foreground"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                window.open('https://leads.toperty.co/', '_blank')
+              }}
+            >
+              <Users className="h-4 w-4" />
+              Leads
+            </button>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">

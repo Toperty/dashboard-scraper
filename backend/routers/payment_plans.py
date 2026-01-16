@@ -10,7 +10,10 @@ from services.stats_service import get_local_now
 import os
 import requests
 from urllib.parse import urlencode
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Dict, Any
+import asyncio
+import aiohttp
 
 router = APIRouter(prefix="/api", tags=["payment-plans"])
 
@@ -18,6 +21,15 @@ router = APIRouter(prefix="/api", tags=["payment-plans"])
 class PaymentPlanRequest(BaseModel):
     """Request model for payment plan data"""
     valuation_name: str
+    # Configuración del Programa
+    programa: str  # ID del programa (programa_1 a programa_7)
+    template_sheet_id: str  # ID del template de Google Sheets
+    valor_lanzamiento: str  # descuento | comercial
+    tipo_programa: str  # lineal | gradiente
+    tipo_vivienda: str  # nueva | usada
+    alistamiento_acabados: str  # si | no
+    financiacion_gastos: str  # si | no
+    # Flujo Toperty Interno
     area: str
     commercial_value: str
     average_purchase_value: str
@@ -27,6 +39,7 @@ class PaymentPlanRequest(BaseModel):
     potential_down_payment: str
     bank_mortgage_rate: str
     dupla_bank_rate: str
+    # Para Envío Usuario
     client_name: str
     address: str
     city: str
@@ -35,6 +48,10 @@ class PaymentPlanRequest(BaseModel):
     stratum: str
     apartment_type: str
     private_parking: str
+    # Co-aplicante
+    client_id: str = ""
+    co_applicant_name: str = ""
+    co_applicant_id: str = ""
 
 
 class PaymentPlanResponse(BaseModel):
@@ -89,6 +106,15 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                         ).first()
                         
                         sheet_data = {
+                            'configuracion_programa': {
+                                'programa': payment_plan_data.programa,
+                                'template_sheet_id': payment_plan_data.template_sheet_id,
+                                'valor_lanzamiento': payment_plan_data.valor_lanzamiento,
+                                'tipo_programa': payment_plan_data.tipo_programa,
+                                'tipo_vivienda': payment_plan_data.tipo_vivienda,
+                                'alistamiento_acabados': payment_plan_data.alistamiento_acabados,
+                                'financiacion_gastos': payment_plan_data.financiacion_gastos
+                            },
                             'flujo_interno': {
                                 'area': payment_plan_data.area,
                                 'commercial_value': payment_plan_data.commercial_value,
@@ -101,13 +127,16 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             },
                             'para_usuario': {
                                 'client_name': payment_plan_data.client_name,
+                                'client_id': payment_plan_data.client_id,
                                 'address': payment_plan_data.address,
                                 'city': payment_plan_data.city,
                                 'country': payment_plan_data.country,
                                 'construction_year': payment_plan_data.construction_year,
                                 'stratum': payment_plan_data.stratum,
                                 'apartment_type': payment_plan_data.apartment_type,
-                                'private_parking': payment_plan_data.private_parking
+                                'private_parking': payment_plan_data.private_parking,
+                                'co_applicant_name': payment_plan_data.co_applicant_name,
+                                'co_applicant_id': payment_plan_data.co_applicant_id
                             }
                         }
                         
@@ -115,15 +144,18 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             existing_dashboard.sheet_id = sheet_id
                             existing_dashboard.sheet_url = sheet_url
                             existing_dashboard.sheet_data = sheet_data
-                            existing_dashboard.updated_at = datetime.utcnow()
                             
                             session.commit()
                             session.refresh(existing_dashboard)
                             
+                            # Construir URL completa para la respuesta
+                            base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
+                            full_dashboard_url = f"{base_url}{existing_dashboard.dashboard_url}"
+                            
                             return PaymentPlanResponse(
                                 success=True,
                                 sheet_url=sheet_url,
-                                dashboard_url=existing_dashboard.dashboard_url,
+                                dashboard_url=full_dashboard_url,
                                 message=f'Plan de pagos actualizado exitosamente. Dashboard válido por {existing_dashboard.days_remaining} días.'
                             )
                         else:
@@ -136,17 +168,21 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                                 sheet_data=sheet_data
                             )
                             
-                            base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
-                            dashboard.dashboard_url = f"{base_url}/dashboard/payment-plan/{dashboard.access_token}"
+                            # Guardar solo el path relativo (sin base URL)
+                            dashboard.dashboard_url = f"/dashboard/payment-plan/{dashboard.access_token}"
                             
                             session.add(dashboard)
                             session.commit()
                             session.refresh(dashboard)
                             
+                            # Construir URL completa para la respuesta
+                            base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
+                            full_dashboard_url = f"{base_url}{dashboard.dashboard_url}"
+                            
                             return PaymentPlanResponse(
                                 success=True,
                                 sheet_url=sheet_url,
-                                dashboard_url=dashboard.dashboard_url,
+                                dashboard_url=full_dashboard_url,
                                 message=f'Plan de pagos creado exitosamente. Dashboard válido por {dashboard.days_remaining} días.'
                             )
                 else:
@@ -175,9 +211,13 @@ async def check_dashboard_exists(valuation_name: str):
         ).first()
         
         if dashboard:
+            # Construir URL completa para la respuesta
+            base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
+            full_dashboard_url = f"{base_url}{dashboard.dashboard_url}"
+            
             return {
                 "exists": True,
-                "dashboard_url": dashboard.dashboard_url,
+                "dashboard_url": full_dashboard_url,
                 "sheet_url": dashboard.sheet_url,
                 "expires_at": dashboard.expires_at.isoformat(),
                 "days_remaining": dashboard.days_remaining
@@ -186,7 +226,7 @@ async def check_dashboard_exists(valuation_name: str):
         return {"exists": False}
 
 
-async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full"):
+async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full", t: Optional[str] = Query(None)):
     """Get payment plan dashboard by access token"""
     from models.payment_plan_dashboard import PaymentPlanDashboard
     
@@ -206,18 +246,48 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full")
         
         dashboard.view_count += 1
         
-        # Sync with Google Sheets
-        apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
-        if apps_script_url and dashboard.sheet_id:
-            try:
-                response = requests.get(f"{apps_script_url}?sheetId={dashboard.sheet_id}&type={dashboard_type}")
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get('success'):
-                        dashboard.sheet_data = result.get('data', {})
-                        dashboard.last_sync_at = datetime.utcnow()
-            except Exception as e:
-                print(f"Error syncing with Apps Script: {e}")
+        # Check if we need to sync (cache for 3 minutes for faster updates)
+        # Force sync if cache busting parameter is present
+        should_sync = False
+        if dashboard.sheet_id:
+            if t is not None:  # Cache busting parameter present, force refresh
+                should_sync = True
+            elif not dashboard.last_sync_at:
+                should_sync = True
+            else:
+                time_since_sync = datetime.utcnow() - dashboard.last_sync_at
+                if time_since_sync > timedelta(minutes=3):
+                    should_sync = True
+        
+        # Only sync if needed - use longer timeout with retries
+        if should_sync:
+            apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
+            if apps_script_url:
+                # Use async request with longer timeout and retry logic
+                max_retries = 2
+                for attempt in range(max_retries + 1):
+                    try:
+                        async with aiohttp.ClientSession() as http_session:
+                            async with http_session.get(
+                                f"{apps_script_url}?sheetId={dashboard.sheet_id}&type={dashboard_type}",
+                                timeout=aiohttp.ClientTimeout(total=30)  # 30 seconds timeout
+                            ) as response:
+                                if response.status == 200:
+                                    result = await response.json()
+                                    if result.get('success'):
+                                        dashboard.sheet_data = result.get('data', {})
+                                        dashboard.last_sync_at = datetime.utcnow()
+                                        break  # Success, exit retry loop
+                    except asyncio.TimeoutError:
+                        if attempt < max_retries:
+                            print(f"Timeout syncing with Apps Script for dashboard {dashboard.id}, attempt {attempt + 1}/{max_retries + 1}, retrying...")
+                            await asyncio.sleep(1)  # Wait 1 second before retry
+                        else:
+                            print(f"Timeout syncing with Apps Script for dashboard {dashboard.id} after {max_retries + 1} attempts, using cached data")
+                        # Continue with cached data if available
+                    except Exception as e:
+                        print(f"Error syncing with Apps Script: {e}")
+                        break  # Don't retry on non-timeout errors
         
         session.commit()
         session.refresh(dashboard)
