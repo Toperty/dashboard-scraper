@@ -8,9 +8,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Instalar dependencias del sistema
+# Instalar dependencias del sistema necesarias para el procesamiento de imágenes y mapas
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
+    wget \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libwebp-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libxcb1-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar y instalar dependencias de Python
@@ -19,6 +31,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código de la aplicación
 COPY backend/ .
+
+# Copiar archivos estáticos necesarios para el PDF (header/footer)
+COPY public/ ./public/
 
 # Cloud Run espera el puerto 8080
 EXPOSE 8080

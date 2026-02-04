@@ -56,6 +56,11 @@ class PaymentPlanDashboard(SQLModel, table=True):
     # Client information
     client_name: str = Field(max_length=255, description="Client name")
     
+    # Presentation information
+    presentation_id: Optional[str] = Field(default=None, max_length=255, description="Google Slides presentation ID")
+    presentation_url: Optional[str] = Field(default=None, description="Google Slides presentation URL")
+    presentation_created_at: Optional[datetime] = Field(default=None, description="Presentation creation timestamp")
+    
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
     expires_at: datetime = Field(

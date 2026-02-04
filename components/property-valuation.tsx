@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import jsPDF from 'jspdf'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2, FileText, X, Check, ExternalLink } from "lucide-react"
+import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2, FileText, X, Check, ExternalLink, Pin } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
@@ -16,7 +16,8 @@ import { Toast } from '@/components/ui/toast'
 import { addInterFont } from '@/lib/inter-font'
 import { useGeocoding } from "@/hooks/use-geocoding"
 import { useConfirm } from "@/hooks/use-confirm"
-import { fetchValuations, deleteValuation, type Valuation, type ValuationsResponse } from "@/lib/api"
+import { fetchValuations, deleteValuation, toggleValuationFavorite, type Valuation, type ValuationsResponse } from "@/lib/api"
+import { InvestorPresentationForm } from "@/components/investor-pdf-form"
 
 interface PropertyData {
   area: number | undefined;
@@ -124,11 +125,43 @@ export function PropertyValuation() {
   const [valuationsLoading, setValuationsLoading] = useState(true)
   const [currentValuationsPage, setCurrentValuationsPage] = useState(1)
   
+  // Estado para favoritos y filtros
+  const [favoriteValuations, setFavoriteValuations] = useState<number[]>([])
+  const [filters, setFilters] = useState({
+    propertyType: '',
+    dateFrom: '',
+    dateTo: '',
+    priceMin: '',
+    priceMax: '',
+    searchName: ''
+  })
+  const [showFilters, setShowFilters] = useState(false)
+  const [showFavoriteReplace, setShowFavoriteReplace] = useState<number | null>(null)
+  const [updatingFavorite, setUpdatingFavorite] = useState<number | null>(null) // ID del favorito que se está actualizando
+  
+  // Estados temporales para los inputs de precio (para mostrar mientras se escribe)
+  const [tempPriceMin, setTempPriceMin] = useState('')
+  const [tempPriceMax, setTempPriceMax] = useState('')
+  
+  // Funciones para formatear inputs de precio
+  const formatPriceInput = (value: string): string => {
+    const numbers = value.replace(/\D/g, '')
+    return numbers.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  }
+  
+  const getPriceValue = (value: string): string => {
+    return value.replace(/,/g, '')
+  }
+  
   // Estado para el formulario de plan de pagos
   const [showPaymentPlanForm, setShowPaymentPlanForm] = useState(false)
   const [isEditingPaymentPlan, setIsEditingPaymentPlan] = useState(false)
   const [loadingPaymentPlanId, setLoadingPaymentPlanId] = useState<number | null>(null)
   const [selectedValuation, setSelectedValuation] = useState<Valuation | null>(null)
+  
+  // Estado para PDF de inversionistas
+  const [showInvestorPresentationForm, setShowInvestorPresentationForm] = useState(false)
+  const [selectedInvestorValuation, setSelectedInvestorValuation] = useState<Valuation | null>(null)
   const [paymentPlanData, setPaymentPlanData] = useState({
     // Configuración del Programa
     programa: '' as string, // ID del template de Google Sheets (obligatorio)
@@ -183,7 +216,8 @@ export function PropertyValuation() {
   const loadValuations = useCallback(async () => {
     try {
       setValuationsLoading(true)
-      const data = await fetchValuations(currentValuationsPage, 10)
+      console.log('Loading valuations with filters:', filters) // Debug
+      const data = await fetchValuations(currentValuationsPage, 10, filters)
       setValuationsData(data)
     } catch (error) {
       console.error('Error loading valuations:', error)
@@ -201,7 +235,7 @@ export function PropertyValuation() {
     } finally {
       setValuationsLoading(false)
     }
-  }, [currentValuationsPage])
+  }, [currentValuationsPage, filters])
 
   // Función para generar PDF completo desde el modal
   const generatePDFFromModal = async (dashboardUrl: string) => {
@@ -1367,10 +1401,41 @@ export function PropertyValuation() {
     }
   }
 
-  // Cargar avalúos al montar el componente
+  // Cargar avalúos cuando cambien los filtros o la página
   useEffect(() => {
-    loadValuations()
-  }, [loadValuations])
+    const timeoutId = setTimeout(() => {
+      loadValuations()
+    }, 500) // Debounce de 500ms para evitar múltiples llamadas
+    
+    return () => clearTimeout(timeoutId)
+  }, [currentValuationsPage, filters, loadValuations]) // Incluir loadValuations
+  
+  // Resetear a página 1 cuando cambien los filtros (excepto en el montaje inicial)
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    setCurrentValuationsPage(1)
+  }, [filters])
+  
+  // Sincronizar favoritos desde los datos cargados
+  useEffect(() => {
+    if (valuationsData?.valuations) {
+      const favIds = valuationsData.valuations
+        .filter(v => v.is_favorite)
+        .sort((a, b) => (a.favorite_order || 0) - (b.favorite_order || 0))
+        .map(v => v.id)
+      setFavoriteValuations(favIds)
+    }
+  }, [valuationsData])
+  
+  // Sincronizar valores temporales de precio con los filtros
+  useEffect(() => {
+    setTempPriceMin(filters.priceMin)
+    setTempPriceMax(filters.priceMax)
+  }, [filters.priceMin, filters.priceMax])
 
   const handleValuationsPageChange = (newPage: number) => {
     setCurrentValuationsPage(newPage)
@@ -1808,6 +1873,18 @@ export function PropertyValuation() {
   }
 
 
+  const handleInvestorPDF = (valuation: Valuation) => {
+    setSelectedInvestorValuation(valuation)
+    setShowInvestorPresentationForm(true)
+  }
+
+  const handleInvestorPDFComplete = async () => {
+    // La presentación ya se genera dentro del formulario InvestorPresentationForm
+    // Solo cerramos el modal aquí
+    setShowInvestorPresentationForm(false)
+    setSelectedInvestorValuation(null)
+  }
+
   const handleDeleteValuation = async (valuation: Valuation) => {
     const result = await confirm(
       `Esta acción eliminará permanentemente el avalúo "${valuation.valuation_name}". Esta acción no se puede deshacer.`,
@@ -1933,6 +2010,53 @@ export function PropertyValuation() {
     }
   }
   
+  // Funciones para manejar favoritos
+  const toggleFavorite = async (valuationId: number, replaceId?: number) => {
+    // Prevenir múltiples clicks
+    if (updatingFavorite !== null) return
+    
+    setUpdatingFavorite(valuationId)
+    
+    try {
+      const wasInFavorites = favoriteValuations.includes(valuationId)
+      
+      if (!wasInFavorites) {
+        // Si hay 5 favoritos y no se especificó cuál reemplazar, mostrar modal
+        if (favoriteValuations.length >= 5 && !replaceId) {
+          setShowFavoriteReplace(valuationId)
+          setUpdatingFavorite(null)
+          return
+        }
+        
+        // Si hay un ID para reemplazar, primero remover ese
+        if (replaceId) {
+          await toggleValuationFavorite(replaceId) // Desmarcar el anterior
+        }
+      }
+      
+      // Llamar a la API para el favorito principal
+      const result = await toggleValuationFavorite(valuationId)
+      
+      if (result.status === 'error') {
+        setSaveMessage({
+          type: 'error',
+          text: result.message
+        })
+        setTimeout(() => setSaveMessage(null), 3000)
+      } else {
+        // Recargar todos los datos para asegurar sincronización
+        await loadValuations()
+      }
+      
+      // Cerrar el modal si estaba abierto
+      setShowFavoriteReplace(null)
+    } finally {
+      setUpdatingFavorite(null)
+    }
+  }
+
+  // Los filtros ahora se aplican en el backend, no necesitamos filtrar en frontend
+
   const propertyTypes = [
     { value: 1, label: "Apartamento" },
     { value: 2, label: "Casa" },
@@ -2822,20 +2946,171 @@ export function PropertyValuation() {
       {/* Tabla de Historial de Avalúos */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <History className="h-5 w-5" />
-            Historial de Avalúos
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Historial de Avalúos
+              {favoriteValuations.length > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  <Pin className="h-3 w-3 mr-1" />
+                  {favoriteValuations.length}/5
+                </Badge>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              {showFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
+            </Button>
           </CardTitle>
           <CardDescription>
             Lista de todos los avalúos realizados ordenados del más reciente al más antiguo
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Sección de filtros */}
+          {showFilters && (
+            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="filter-name">Buscar por nombre</Label>
+                  <Input
+                    id="filter-name"
+                    placeholder="Nombre del avalúo..."
+                    value={filters.searchName}
+                    onChange={(e) => setFilters(prev => ({ ...prev, searchName: e.target.value }))}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="filter-date-from">Fecha desde</Label>
+                  <Input
+                    id="filter-date-from"
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="filter-date-to">Fecha hasta</Label>
+                  <Input
+                    id="filter-date-to"
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="filter-type">Tipo de propiedad</Label>
+                  <Select 
+                    value={filters.propertyType || "all"} 
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, propertyType: value === "all" ? '' : value }))}
+                  >
+                    <SelectTrigger id="filter-type">
+                      <SelectValue placeholder="Todos los tipos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los tipos</SelectItem>
+                      {propertyTypes.map(type => (
+                        <SelectItem key={type.value} value={type.value.toString()}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="filter-price-min">Precio mínimo</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <Input
+                      id="filter-price-min"
+                      type="text"
+                      placeholder="0"
+                      className="pl-7"
+                      value={formatPriceInput(tempPriceMin || filters.priceMin)}
+                      onChange={(e) => {
+                        const numericValue = getPriceValue(e.target.value)
+                        if (/^\d*$/.test(numericValue)) {
+                          setTempPriceMin(numericValue)
+                        }
+                      }}
+                      onBlur={() => {
+                        setFilters(prev => ({ ...prev, priceMin: tempPriceMin }))
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setFilters(prev => ({ ...prev, priceMin: tempPriceMin }))
+                          e.currentTarget.blur()
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="filter-price-max">Precio máximo</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <Input
+                      id="filter-price-max"
+                      type="text"
+                      placeholder="Sin límite"
+                      className="pl-7"
+                      value={formatPriceInput(tempPriceMax || filters.priceMax)}
+                      onChange={(e) => {
+                        const numericValue = getPriceValue(e.target.value)
+                        if (/^\d*$/.test(numericValue)) {
+                          setTempPriceMax(numericValue)
+                        }
+                      }}
+                      onBlur={() => {
+                        setFilters(prev => ({ ...prev, priceMax: tempPriceMax }))
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setFilters(prev => ({ ...prev, priceMax: tempPriceMax }))
+                          e.currentTarget.blur()
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4 flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFilters({
+                      propertyType: '',
+                      dateFrom: '',
+                      dateTo: '',
+                      priceMin: '',
+                      priceMax: '',
+                      searchName: ''
+                    })
+                    setTempPriceMin('')
+                    setTempPriceMax('')
+                  }}
+                >
+                  Limpiar filtros
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="border rounded-lg w-full">
             <div className="overflow-x-auto w-full">
               <Table className="w-full">
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12"></TableHead>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Área (m²)</TableHead>
                     <TableHead>Tipo</TableHead>
@@ -2850,7 +3125,7 @@ export function PropertyValuation() {
                 <TableBody>
                   {valuationsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8">
+                      <TableCell colSpan={10} className="text-center py-8">
                         <div className="flex items-center justify-center gap-2">
                           <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
                           Cargando avalúos...
@@ -2859,13 +3134,46 @@ export function PropertyValuation() {
                     </TableRow>
                   ) : valuationsData?.valuations.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                        No hay avalúos guardados aún
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                        {filters.searchName || filters.propertyType || filters.dateFrom || filters.dateTo || filters.priceMin || filters.priceMax
+                          ? 'No se encontraron avalúos con los filtros aplicados'
+                          : 'No hay avalúos guardados aún'}
                       </TableCell>
                     </TableRow>
                   ) : (
                     valuationsData?.valuations.map((valuation) => (
-                      <TableRow key={valuation.id}>
+                      <TableRow key={valuation.id} className={favoriteValuations.includes(valuation.id) ? 'bg-yellow-50' : ''}>
+                        <TableCell className="text-center">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleFavorite(valuation.id)}
+                                disabled={updatingFavorite !== null}
+                                className={`p-1 hover:bg-transparent ${
+                                  favoriteValuations.includes(valuation.id)
+                                    ? 'text-yellow-600'
+                                    : 'text-gray-400 hover:text-gray-600'
+                                } ${
+                                  updatingFavorite === valuation.id ? 'opacity-50' : ''
+                                }`}
+                              >
+                                <Pin 
+                                  className="h-4 w-4" 
+                                  fill={favoriteValuations.includes(valuation.id) ? 'currentColor' : 'none'}
+                                />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {favoriteValuations.includes(valuation.id) 
+                                  ? 'Quitar de favoritos' 
+                                  : `Marcar como favorito (${favoriteValuations.length}/5)`}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
                         <TableCell className="font-medium">{valuation.valuation_name}</TableCell>
                         <TableCell>{valuation.area}</TableCell>
                         <TableCell>
@@ -2916,6 +3224,15 @@ export function PropertyValuation() {
                                   {valuation.has_payment_plan ? 'Ver plan' : 'Crear plan'}
                                 </>
                               )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleInvestorPDF(valuation)}
+                              className="w-32 flex items-center justify-center gap-1 text-green-600 hover:text-green-700 hover:bg-green-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                            >
+                              <FileText className="h-3 w-3" />
+                              PDF Inversionista
                             </Button>
                             <Button
                               variant="outline"
@@ -3617,7 +3934,7 @@ export function PropertyValuation() {
                   disabled={generatingPDFInModal}
                   className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span className="font-medium">Exportar PDF</span>
+                  <span className="font-medium">PDF Usuario</span>
                   <span className="text-gray-400 group-hover:text-gray-600">→</span>
                 </button>
               )}
@@ -3643,6 +3960,85 @@ export function PropertyValuation() {
               </button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de PDF para Inversionistas */}
+      {selectedInvestorValuation && (
+        <InvestorPresentationForm
+          valuationId={selectedInvestorValuation.id}
+          valuationName={selectedInvestorValuation.valuation_name}
+          isOpen={showInvestorPresentationForm}
+          onClose={() => {
+            setShowInvestorPresentationForm(false)
+            setSelectedInvestorValuation(null)
+          }}
+          onComplete={handleInvestorPDFComplete}
+        />
+      )}
+      
+      {/* Modal para reemplazar favorito */}
+      <Dialog open={showFavoriteReplace !== null} onOpenChange={() => setShowFavoriteReplace(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pin className="h-5 w-5 text-yellow-600" />
+              Límite de favoritos alcanzado
+            </DialogTitle>
+            <DialogDescription>
+              Ya tienes 5 favoritos marcados (máximo permitido). 
+              Selecciona cuál deseas reemplazar con el nuevo favorito.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-2 my-4">
+            <div className="text-sm font-medium text-gray-700 mb-2">
+              Favoritos actuales:
+            </div>
+            {valuationsData?.valuations
+              .filter(v => favoriteValuations.includes(v.id))
+              .sort((a, b) => (a.favorite_order || 0) - (b.favorite_order || 0))
+              .map(valuation => (
+                <div 
+                  key={valuation.id}
+                  className={`p-3 border rounded-lg transition-colors ${
+                    updatingFavorite === null ? 'hover:bg-gray-50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                  }`}
+                  onClick={() => {
+                    if (updatingFavorite === null) {
+                      toggleFavorite(showFavoriteReplace!, valuation.id)
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{valuation.valuation_name}</div>
+                      <div className="text-sm text-gray-500">
+                        {formatCurrency(valuation.final_price)} - {new Date(valuation.created_at).toLocaleDateString('es-CO')}
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      disabled={updatingFavorite !== null}
+                    >
+                      {updatingFavorite === showFavoriteReplace ? 'Actualizando...' : 'Reemplazar'}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowFavoriteReplace(null)}
+            >
+              Cancelar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

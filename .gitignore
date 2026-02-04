@@ -40,3 +40,30 @@ backend/.venv/
 backend/.env
 *.egg-info/
 .pytest_cache/
+
+# Google Cloud credentials and sensitive files
+backend/service-account.json
+**/service-account*.json
+*.pem
+*.p12
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads and temporary files
+backend/uploads/
+backend/temp/
+uploads/
+temp/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -21,6 +21,8 @@ app.add_middleware(
 # Importar y registrar modelos para SQLModel
 from models.valuation import Valuation
 from models.payment_plan_dashboard import PaymentPlanDashboard
+from models.investor_tenant import InvestorTenantInfo
+from models.property_images import PropertyImage
 
 # Inicializar base de datos al arrancar
 from config.db_connection import init_db
@@ -33,6 +35,9 @@ from routers.properties import router as properties_router
 from routers.valuations import router as valuations_router
 from routers.payment_plans import router as payment_plans_router
 from routers.zones import router as zones_router
+from routers.investor_form import router as investor_form_router
+from routers.investor_presentation import router as investor_presentation_router
+from routers.image_proxy import router as image_proxy_router
 
 # Registrar routers
 app.include_router(dashboard_router)
@@ -40,6 +45,9 @@ app.include_router(properties_router)
 app.include_router(valuations_router)
 app.include_router(payment_plans_router)
 app.include_router(zones_router)
+app.include_router(investor_form_router)
+app.include_router(investor_presentation_router)
+app.include_router(image_proxy_router)
 
 # Importar servicio de estadísticas para el root endpoint
 from services.stats_service import get_local_now

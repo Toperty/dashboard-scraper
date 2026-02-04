@@ -23,6 +23,8 @@ class Valuation(SQLModel, table=True):
     garages: int = Field(description="Number of garages")
     stratum: int = Field(description="Property stratum")
     antiquity: int = Field(description="Property age in years")
+    floor: Optional[int] = Field(default=None, description="Floor number of the property")
+    administration_fee: Optional[float] = Field(default=None, description="Monthly administration fee")
     
     # Location coordinates
     latitude: float = Field(description="Property latitude coordinate")
@@ -37,6 +39,13 @@ class Valuation(SQLModel, table=True):
     total_sell_price: Optional[float] = Field(default=None, description="Total sale price")
     total_rent_price: Optional[float] = Field(default=None, description="Total rental price")
     final_price: Optional[float] = Field(default=None, description="Final appraised value")
+    
+    # Campos adicionales para PDF de inversionistas
+    description: Optional[str] = Field(default=None, max_length=680, description="Descripción detallada del inmueble (máx. 680 caracteres)")
+    
+    # Campo de favorito
+    is_favorite: bool = Field(default=False, description="Marca el avalúo como favorito")
+    favorite_order: Optional[int] = Field(default=None, description="Orden del favorito (1-5)")
     
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")

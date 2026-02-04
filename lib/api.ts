@@ -180,6 +180,8 @@ export interface Valuation {
   total_rent_price?: number;
   final_price: number;
   has_payment_plan?: boolean;
+  is_favorite: boolean;
+  favorite_order?: number;
   created_at: string;
   updated_at: string;
 }
@@ -288,13 +290,31 @@ export async function fetchProperties(
 
 export async function fetchValuations(
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
+  filters?: {
+    searchName?: string;
+    propertyType?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    priceMin?: string;
+    priceMax?: string;
+  }
 ): Promise<ValuationsResponse> {
   try {
     const params = new URLSearchParams({
       page: page.toString(),
       limit: limit.toString(),
     });
+    
+    // Agregar filtros si existen
+    if (filters) {
+      if (filters.searchName) params.append('search_name', filters.searchName);
+      if (filters.propertyType) params.append('property_type', filters.propertyType);
+      if (filters.dateFrom) params.append('date_from', filters.dateFrom);
+      if (filters.dateTo) params.append('date_to', filters.dateTo);
+      if (filters.priceMin) params.append('price_min', filters.priceMin);
+      if (filters.priceMax) params.append('price_max', filters.priceMax);
+    }
 
     const response = await fetch(`${API_BASE_URL}/api/valuations?${params}`, {
       cache: 'no-store'
@@ -340,6 +360,58 @@ export async function deleteValuation(valuationId: number): Promise<{status: str
     return {
       status: 'error',
       message: 'Error de conexión al eliminar el avalúo'
+    };
+  }
+}
+
+export async function toggleValuationFavorite(
+  valuationId: number
+): Promise<{status: string, message: string, is_favorite?: boolean, favorite_order?: number}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/valuations/${valuationId}/favorite`, {
+      method: 'PUT',
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error toggling favorite:', error);
+    return {
+      status: 'error',
+      message: 'Error de conexión al actualizar favoritos'
+    };
+  }
+}
+
+export async function reorderFavorites(
+  order: Record<string, number>
+): Promise<{status: string, message: string}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/valuations/favorites/reorder`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(order),
+      cache: 'no-store'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error reordering favorites:', error);
+    return {
+      status: 'error',
+      message: 'Error de conexión al reordenar favoritos'
     };
   }
 }

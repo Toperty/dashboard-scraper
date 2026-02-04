@@ -233,17 +233,71 @@ async def save_valuation(data: SaveValuationRequest):
 
 
 @router.get("/valuations")
-async def get_valuations(page: int = 1, limit: int = 10):
-    """Obtener lista de avalúos con paginación"""
+async def get_valuations(
+    page: int = 1, 
+    limit: int = 10,
+    search_name: Optional[str] = None,
+    property_type: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None
+):
+    """Obtener lista de avalúos con paginación y filtros"""
     try:
         with Session(engine) as session:
-            # Contar total
-            from sqlmodel import func
-            total_count = session.exec(select(func.count(Valuation.id))).first() or 0
+            from sqlmodel import func, and_
+            from datetime import datetime
             
-            # Obtener avalúos paginados
+            # Construir query base con filtros
+            conditions = []
+            
+            if search_name:
+                # Usar ilike para búsqueda insensible a mayúsculas/minúsculas
+                conditions.append(Valuation.valuation_name.ilike(f'%{search_name}%'))
+            
+            if property_type is not None:
+                conditions.append(Valuation.property_type == property_type)
+            
+            if date_from:
+                try:
+                    date_from_obj = datetime.fromisoformat(date_from)
+                    conditions.append(Valuation.created_at >= date_from_obj)
+                except:
+                    pass
+            
+            if date_to:
+                try:
+                    date_to_obj = datetime.fromisoformat(date_to + 'T23:59:59')
+                    conditions.append(Valuation.created_at <= date_to_obj)
+                except:
+                    pass
+            
+            if price_min is not None:
+                conditions.append(Valuation.final_price >= price_min)
+            
+            if price_max is not None:
+                conditions.append(Valuation.final_price <= price_max)
+            
+            # Aplicar filtros
+            base_query = select(Valuation)
+            if conditions:
+                base_query = base_query.where(and_(*conditions))
+            
+            # Contar total con filtros
+            count_query = select(func.count(Valuation.id))
+            if conditions:
+                count_query = count_query.where(and_(*conditions))
+            total_count = session.exec(count_query).first() or 0
+            
+            # Obtener avalúos paginados con orden: favoritos primero, luego por fecha
             offset = (page - 1) * limit
-            valuations_query = select(Valuation).order_by(Valuation.created_at.desc()).offset(offset).limit(limit)
+            from sqlmodel import desc, asc, nullslast
+            valuations_query = base_query.order_by(
+                desc(Valuation.is_favorite),  # Favoritos primero (True=1, False=0)
+                nullslast(asc(Valuation.favorite_order)),  # Orden de favoritos (nulls al final)
+                desc(Valuation.created_at)  # Más recientes primero
+            ).offset(offset).limit(limit)
             valuations = session.exec(valuations_query).all()
             
             # Obtener IDs de avalúos que tienen plan de pagos
@@ -263,6 +317,8 @@ async def get_valuations(page: int = 1, limit: int = 10):
                     {
                         "id": v.id,
                         "valuation_name": v.valuation_name,
+                        "is_favorite": v.is_favorite,
+                        "favorite_order": v.favorite_order,
                         "area": v.area,
                         "property_type": v.property_type,
                         "rooms": v.rooms,
@@ -313,6 +369,102 @@ async def delete_valuation(valuation_id: int):
             return {
                 "status": "success",
                 "message": f"Avalúo '{valuation.valuation_name}' eliminado exitosamente"
+            }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.put("/valuations/{valuation_id}/favorite")
+async def toggle_favorite(valuation_id: int):
+    """Marcar/desmarcar un avalúo como favorito"""
+    try:
+        with Session(engine) as session:
+            valuation = session.get(Valuation, valuation_id)
+            
+            if not valuation:
+                return {"status": "error", "message": "Avalúo no encontrado"}
+            
+            if valuation.is_favorite:
+                # Desmarcar como favorito y reorganizar los demás
+                old_order = valuation.favorite_order
+                valuation.is_favorite = False
+                valuation.favorite_order = None
+                
+                # Reorganizar los favoritos restantes
+                if old_order:
+                    remaining_favorites = session.exec(
+                        select(Valuation).where(
+                            Valuation.is_favorite == True,
+                            Valuation.favorite_order > old_order
+                        ).order_by(Valuation.favorite_order)
+                    ).all()
+                    
+                    for fav in remaining_favorites:
+                        fav.favorite_order = fav.favorite_order - 1
+                        session.add(fav)
+                
+                message = f"Avalúo '{valuation.valuation_name}' removido de favoritos"
+            else:
+                # Verificar si ya hay 5 favoritos
+                from sqlmodel import func
+                favorites_count = session.exec(
+                    select(func.count(Valuation.id)).where(Valuation.is_favorite == True)
+                ).first() or 0
+                
+                if favorites_count >= 5:
+                    return {
+                        "status": "error", 
+                        "message": "Solo puedes tener un máximo de 5 favoritos"
+                    }
+                
+                # Obtener el próximo orden disponible
+                max_order = session.exec(
+                    select(func.max(Valuation.favorite_order)).where(Valuation.is_favorite == True)
+                ).first() or 0
+                
+                # Marcar como favorito con el siguiente orden
+                valuation.is_favorite = True
+                valuation.favorite_order = max_order + 1
+                message = f"Avalúo '{valuation.valuation_name}' agregado a favoritos"
+            
+            valuation.updated_at = get_local_now()
+            session.add(valuation)
+            session.commit()
+            
+            return {
+                "status": "success",
+                "message": message,
+                "is_favorite": valuation.is_favorite,
+                "favorite_order": valuation.favorite_order
+            }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.put("/valuations/favorites/reorder")
+async def reorder_favorites(order: dict):
+    """Reordenar los avalúos favoritos
+    
+    Args:
+        order: Diccionario con IDs de valuaciones como keys y orden como values
+               Ejemplo: {"12": 1, "5": 2, "8": 3}
+    """
+    try:
+        with Session(engine) as session:
+            for valuation_id_str, new_order in order.items():
+                valuation_id = int(valuation_id_str)
+                valuation = session.get(Valuation, valuation_id)
+                
+                if valuation and valuation.is_favorite:
+                    valuation.favorite_order = new_order
+                    valuation.updated_at = get_local_now()
+                    session.add(valuation)
+            
+            session.commit()
+            
+            return {
+                "status": "success",
+                "message": "Orden de favoritos actualizado exitosamente"
             }
     except Exception as e:
         return {"status": "error", "message": str(e)}
