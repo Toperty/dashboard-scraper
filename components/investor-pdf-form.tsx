@@ -152,7 +152,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
     
     // Verificar si ya tenemos 6 imágenes
     if (images.length >= 6) {
-      alert('Ya has alcanzado el límite máximo de 6 imágenes')
+      showToast("Ya has alcanzado el límite máximo de 6 imágenes", "info")
       return
     }
     
@@ -161,7 +161,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
     const filesToAdd = files.slice(0, remainingSlots)
     
     if (files.length > remainingSlots) {
-      alert(`Solo se pueden agregar ${remainingSlots} imagen(es) más. Límite máximo: 6 imágenes`)
+      showToast(`Solo se pueden agregar ${remainingSlots} imagen${remainingSlots === 1 ? '' : 'es'} más. Límite máximo: 6 imágenes`, "info")
     }
     
     const newImages = filesToAdd.map(file => ({
