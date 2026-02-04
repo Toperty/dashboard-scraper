@@ -96,6 +96,20 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
     }
   }, [isOpen, valuationId])
 
+  // Bloquear scroll del body cuando se está generando
+  useEffect(() => {
+    if (generatingPresentation) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+
+    // Cleanup al desmontar
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [generatingPresentation])
+
   const loadExistingData = async () => {
     try {
       const response = await fetch(
@@ -385,8 +399,9 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+    <>
+      <Dialog open={isOpen} onOpenChange={generatingPresentation ? undefined : onClose}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Generar Presentación para Inversionistas</DialogTitle>
           <DialogDescription>
@@ -403,7 +418,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
           </Alert>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className={`w-full ${generatingPresentation ? 'pointer-events-none' : ''}`}>
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="description">
               <Home className="h-4 w-4 mr-2" />
@@ -719,16 +734,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
           </TabsContent>
         </Tabs>
 
-        {/* Overlay de carga durante generación */}
-        {generatingPresentation && (
-          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center z-[100]">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-lg font-medium">Generando presentación...</p>
-            <p className="text-sm text-muted-foreground mt-2">Esto puede tomar unos segundos</p>
-          </div>
-        )}
-
-        <DialogFooter>
+        <DialogFooter className={generatingPresentation ? 'pointer-events-none' : ''}>
           <Button variant="outline" onClick={onClose} disabled={generatingPresentation}>
             Cancelar
           </Button>
@@ -751,5 +757,17 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Overlay de carga durante generación - Fuera del Dialog para cubrir toda la pantalla */}
+    {generatingPresentation && (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-[9999]" style={{ overflow: 'hidden' }}>
+        <div className="bg-background rounded-lg p-8 shadow-2xl border flex flex-col items-center max-w-md mx-4">
+          <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
+          <p className="text-xl font-semibold text-center">Generando presentación...</p>
+          <p className="text-sm text-muted-foreground mt-3 text-center">Esto puede tomar unos segundos, por favor no cierre esta ventana</p>
+        </div>
+      </div>
+    )}
+  </>
   )
 }
