@@ -203,14 +203,144 @@ export function PropertyValuation() {
     dashboardUrl: string | null
     sheetUrl: string | null
     showEditButton: boolean // true para "Ver plan existente", false para después de crear/editar
+    paymentPlanId?: number | null // ID del plan de pagos para carta de aprobación
   }>({
     isOpen: false,
     title: '',
     message: '',
     dashboardUrl: null,
     sheetUrl: null,
-    showEditButton: false
+    showEditButton: false,
+    paymentPlanId: null
   })
+
+  // Estado para el modal de carta de aprobación
+  const [approvalLetterModal, setApprovalLetterModal] = useState<{
+    isOpen: boolean
+    paymentPlanId: number | null
+  }>({
+    isOpen: false,
+    paymentPlanId: null
+  })
+
+  // Estado para el formulario de carta de aprobación
+  const [approvalLetterForm, setApprovalLetterForm] = useState({
+    // Cliente principal
+    fullName: '',
+    idType: '',
+    idNumber: '',
+    maxApprovedAmount: '',
+    minInitialPayment: '',
+    // Cliente secundario (opcional)
+    hasSecondaryClient: false,
+    secondaryFullName: '',
+    secondaryIdType: '',
+    secondaryIdNumber: ''
+  })
+
+  const [generatingApprovalLetter, setGeneratingApprovalLetter] = useState(false)
+
+  // Función para formatear números con separador de miles
+  const formatNumberWithThousands = (value: string) => {
+    // Remover todo lo que no sea dígito
+    const numbers = value.replace(/\D/g, '')
+    // Formatear con separador de miles
+    return numbers.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  }
+
+  // Función para desformatear números (quitar separadores)
+  const unformatNumber = (value: string) => {
+    return value.replace(/\./g, '')
+  }
+
+  // Función para generar carta de aprobación
+  const handleGenerateApprovalLetter = async () => {
+    if (!approvalLetterForm.fullName || !approvalLetterForm.idType || !approvalLetterForm.idNumber || 
+        !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment) {
+      setSaveMessage({
+        type: 'error',
+        text: 'Por favor complete todos los campos requeridos'
+      })
+      return
+    }
+
+    // Validar cliente secundario si está marcado
+    if (approvalLetterForm.hasSecondaryClient && (!approvalLetterForm.secondaryFullName || 
+        !approvalLetterForm.secondaryIdType || !approvalLetterForm.secondaryIdNumber)) {
+      setSaveMessage({
+        type: 'error',
+        text: 'Por favor complete todos los campos del cliente secundario'
+      })
+      return
+    }
+
+    setGeneratingApprovalLetter(true)
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/approval-letter/generate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: approvalLetterForm.fullName,
+            id_type: approvalLetterForm.idType,
+            id_number: approvalLetterForm.idNumber,
+            max_approved_amount: parseFloat(unformatNumber(approvalLetterForm.maxApprovedAmount)),
+            min_initial_payment: parseFloat(unformatNumber(approvalLetterForm.minInitialPayment)),
+            has_secondary_client: approvalLetterForm.hasSecondaryClient,
+            secondary_full_name: approvalLetterForm.hasSecondaryClient ? approvalLetterForm.secondaryFullName : null,
+            secondary_id_type: approvalLetterForm.hasSecondaryClient ? approvalLetterForm.secondaryIdType : null,
+            secondary_id_number: approvalLetterForm.hasSecondaryClient ? approvalLetterForm.secondaryIdNumber : null,
+            payment_plan_id: approvalLetterModal.paymentPlanId
+          })
+        }
+      )
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.approval_letter_url) {
+          // Abrir la carta en una nueva pestaña
+          window.open(result.approval_letter_url, '_blank')
+          setSaveMessage({
+            type: 'success',
+            text: 'Carta de aprobación generada exitosamente'
+          })
+          // Cerrar modal
+          setApprovalLetterModal({ isOpen: false, paymentPlanId: null })
+          setApprovalLetterForm({
+            fullName: '',
+            idType: '',
+            idNumber: '',
+            maxApprovedAmount: '',
+            minInitialPayment: '',
+            hasSecondaryClient: false,
+            secondaryFullName: '',
+            secondaryIdType: '',
+            secondaryIdNumber: ''
+          })
+        } else {
+          setSaveMessage({
+            type: 'error',
+            text: result.message || 'Error al generar la carta de aprobación'
+          })
+        }
+      } else {
+        const error = await response.text()
+        setSaveMessage({
+          type: 'error',
+          text: `Error del servidor: ${error}`
+        })
+      }
+    } catch (error) {
+      console.error('Error generating approval letter:', error)
+      setSaveMessage({
+        type: 'error',
+        text: 'Error al generar la carta de aprobación. Por favor, inténtelo nuevamente.'
+      })
+    } finally {
+      setGeneratingApprovalLetter(false)
+    }
+  }
   const [generatingPDFInModal, setGeneratingPDFInModal] = useState(false)
 
   const loadValuations = useCallback(async () => {
@@ -1571,7 +1701,8 @@ export function PropertyValuation() {
           message: `Ya existe un plan de pagos para "${valuation.valuation_name}".\n\nDashboard válido por ${dashboardCheck.days_remaining} días.`,
           dashboardUrl: dashboardCheck.dashboard_url,
           sheetUrl: dashboardCheck.sheet_url,
-          showEditButton: true
+          showEditButton: true,
+          paymentPlanId: dashboardCheck.payment_plan_id || valuation.id
         })
         return // El modal maneja las acciones
       } else {
@@ -1842,7 +1973,8 @@ export function PropertyValuation() {
           message: result.message || successMessage,
           dashboardUrl: result.dashboard_url || null,
           sheetUrl: result.sheet_url || null,
-          showEditButton: false
+          showEditButton: false,
+          paymentPlanId: result.payment_plan_id || null
         })
         
         // Recargar la tabla de valuations para actualizar el estado del botón
@@ -3851,7 +3983,7 @@ export function PropertyValuation() {
         }
       }}>
         <DialogContent 
-          className="sm:max-w-md [&>button.absolute]:hidden"
+          className="sm:max-w-lg [&>button.absolute]:hidden"
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
@@ -3879,7 +4011,7 @@ export function PropertyValuation() {
           </DialogHeader>
           <div className="flex flex-col gap-1 py-4">
             <div className="text-sm text-gray-500 mb-2">Acciones disponibles:</div>
-            <div className="space-y-1 max-h-64 overflow-y-auto">
+            <div className="space-y-1">
               {dashboardActionsModal.dashboardUrl && (
                 <>
                   <button
@@ -3948,6 +4080,14 @@ export function PropertyValuation() {
                   <span className="text-amber-400 group-hover:text-amber-600">→</span>
                 </button>
               )}
+              <button
+                onClick={() => setApprovalLetterModal({ isOpen: true, paymentPlanId: dashboardActionsModal.paymentPlanId })}
+                disabled={generatingPDFInModal}
+                className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-green-50 hover:bg-green-100 text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="font-medium">Generar Carta de Aprobación</span>
+                <span className="text-green-400 group-hover:text-green-600">→</span>
+              </button>
             </div>
             {/* Botón de cerrar separado */}
             <div className="mt-2 pt-2 border-t">
@@ -3960,6 +4100,225 @@ export function PropertyValuation() {
               </button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Carta de Aprobación */}
+      <Dialog open={approvalLetterModal.isOpen} onOpenChange={(open) => {
+        if (!open && !generatingApprovalLetter) {
+          setApprovalLetterModal({ isOpen: false, paymentPlanId: null })
+          setApprovalLetterForm({
+            fullName: '',
+            idType: '',
+            idNumber: '',
+            maxApprovedAmount: '',
+            minInitialPayment: '',
+            hasSecondaryClient: false,
+            secondaryFullName: '',
+            secondaryIdType: '',
+            secondaryIdNumber: ''
+          })
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {/* Overlay de loading para generar carta - igual que PDF */}
+          {generatingApprovalLetter && (
+            <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-sm mx-4">
+                <div className="relative">
+                  <div className="w-16 h-16 border-4 border-blue-200 rounded-full"></div>
+                  <div className="absolute top-0 left-0 w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-gray-900">Generando carta de aprobación</h3>
+                  <p className="text-sm text-gray-500 mt-1">Por favor espere, se abrirá en una nueva pestaña...</p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogHeader>
+            <DialogTitle>Generar Carta de Aprobación</DialogTitle>
+            <DialogDescription>
+              Complete la información necesaria para generar la carta de aprobación del crédito
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Cliente Principal */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Cliente Principal</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="fullName">Nombre Completo *</Label>
+                  <Input
+                    id="fullName"
+                    value={approvalLetterForm.fullName}
+                    onChange={(e) => setApprovalLetterForm(prev => ({ ...prev, fullName: e.target.value }))}
+                    placeholder="Nombre completo del cliente"
+                    required
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="idType">Tipo de Identificación *</Label>
+                    <Select 
+                      value={approvalLetterForm.idType} 
+                      onValueChange={(value) => setApprovalLetterForm(prev => ({ ...prev, idType: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
+                        <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
+                        <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
+                        <SelectItem value="PA">Pasaporte</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="idNumber">Número de Identificación *</Label>
+                    <Input
+                      id="idNumber"
+                      value={approvalLetterForm.idNumber}
+                      onChange={(e) => setApprovalLetterForm(prev => ({ ...prev, idNumber: e.target.value }))}
+                      placeholder="Número de identificación"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="maxApprovedAmount">Cupo Máximo Aprobado *</Label>
+                    <Input
+                      id="maxApprovedAmount"
+                      value={approvalLetterForm.maxApprovedAmount}
+                      onChange={(e) => {
+                        const formatted = formatNumberWithThousands(e.target.value)
+                        setApprovalLetterForm(prev => ({ ...prev, maxApprovedAmount: formatted }))
+                      }}
+                      placeholder="Ej: 500.000.000"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="minInitialPayment">Cuota Inicial Mínima *</Label>
+                    <Input
+                      id="minInitialPayment"
+                      value={approvalLetterForm.minInitialPayment}
+                      onChange={(e) => {
+                        const formatted = formatNumberWithThousands(e.target.value)
+                        setApprovalLetterForm(prev => ({ ...prev, minInitialPayment: formatted }))
+                      }}
+                      placeholder="Ej: 150.000.000"
+                      required
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Cliente Secundario */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={approvalLetterForm.hasSecondaryClient}
+                    onChange={(e) => setApprovalLetterForm(prev => ({ 
+                      ...prev, 
+                      hasSecondaryClient: e.target.checked,
+                      secondaryFullName: e.target.checked ? prev.secondaryFullName : '',
+                      secondaryIdType: e.target.checked ? prev.secondaryIdType : '',
+                      secondaryIdNumber: e.target.checked ? prev.secondaryIdNumber : ''
+                    }))}
+                    className="rounded border-gray-300"
+                  />
+                  Cliente Secundario
+                </CardTitle>
+                <CardDescription>
+                  Marque la casilla si existe un cliente secundario
+                </CardDescription>
+              </CardHeader>
+              
+              {approvalLetterForm.hasSecondaryClient && (
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="secondaryFullName">Nombre Completo *</Label>
+                    <Input
+                      id="secondaryFullName"
+                      value={approvalLetterForm.secondaryFullName}
+                      onChange={(e) => setApprovalLetterForm(prev => ({ ...prev, secondaryFullName: e.target.value }))}
+                      placeholder="Nombre completo del cliente secundario"
+                      required={approvalLetterForm.hasSecondaryClient}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="secondaryIdType">Tipo de Identificación *</Label>
+                      <Select 
+                        value={approvalLetterForm.secondaryIdType} 
+                        onValueChange={(value) => setApprovalLetterForm(prev => ({ ...prev, secondaryIdType: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
+                          <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
+                          <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
+                          <SelectItem value="PA">Pasaporte</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="secondaryIdNumber">Número de Identificación *</Label>
+                      <Input
+                        id="secondaryIdNumber"
+                        value={approvalLetterForm.secondaryIdNumber}
+                        onChange={(e) => setApprovalLetterForm(prev => ({ ...prev, secondaryIdNumber: e.target.value }))}
+                        placeholder="Número de identificación"
+                        required={approvalLetterForm.hasSecondaryClient}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setApprovalLetterModal({ isOpen: false, paymentPlanId: null })}
+              disabled={generatingApprovalLetter}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleGenerateApprovalLetter}
+              disabled={generatingApprovalLetter || !approvalLetterForm.fullName || !approvalLetterForm.idType || !approvalLetterForm.idNumber || !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {generatingApprovalLetter ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Generando...
+                </>
+              ) : (
+                'Generar Carta'
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

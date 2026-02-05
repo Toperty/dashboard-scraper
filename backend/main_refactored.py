@@ -38,6 +38,7 @@ from routers.zones import router as zones_router
 from routers.investor_form import router as investor_form_router
 from routers.investor_presentation import router as investor_presentation_router
 from routers.image_proxy import router as image_proxy_router
+from routers.approval_letter import router as approval_letter_router
 
 # Registrar routers
 app.include_router(dashboard_router)
@@ -48,6 +49,7 @@ app.include_router(zones_router)
 app.include_router(investor_form_router)
 app.include_router(investor_presentation_router)
 app.include_router(image_proxy_router)
+app.include_router(approval_letter_router, prefix="/api/approval-letter")
 
 # Importar servicio de estadísticas para el root endpoint
 from services.stats_service import get_local_now
