@@ -58,18 +58,27 @@ async def generate_approval_letter(request: ApprovalLetterRequest):
         logger.info(f"Generando carta de aprobación para: {request.full_name}")
         
         # Preparar datos para el Apps Script
+        # Combinar nombres según la cantidad de clientes
+        if request.has_secondary_client and request.secondary_full_name:
+            # Con dos clientes: "Juan y Sara"
+            primer_nombre = f"{extract_first_name(request.full_name)} y {extract_first_name(request.secondary_full_name)}"
+        else:
+            # Con un cliente: "Juan"
+            primer_nombre = extract_first_name(request.full_name)
+        
         script_data = {
             "action": "generate_approval_letter",
             "template_id": "1EqtfWm1jpAWhh9DRalak9kbwBAkzUQDLiOD58QKbQdw",
+            "previous_approval_id": request.payment_plan_id,  # Usar payment_plan_id como referencia para eliminar carta anterior
             "data": {
-                "primer_nombre": extract_first_name(request.full_name),
+                "primer_nombre": primer_nombre,
                 "cupo_maximo": format_currency(request.max_approved_amount),
                 "cuota_inicial_min": format_currency(request.min_initial_payment),
                 "cuota_cupo": calculate_payment_percentage(request.min_initial_payment, request.max_approved_amount),
                 "tipo_id": request.id_type,
                 "numero_id": request.id_number,
                 "nombre_completo": capitalize_name(request.full_name),
-                # Datos del cliente secundario si existe
+                # Datos del cliente secundario para la firma
                 "has_secondary_client": request.has_secondary_client,
                 "secondary_nombre_completo": capitalize_name(request.secondary_full_name) if request.secondary_full_name else "",
                 "secondary_tipo_id": request.secondary_id_type if request.secondary_id_type else "",
@@ -99,11 +108,19 @@ async def generate_approval_letter(request: ApprovalLetterRequest):
                 logger.info(f"Resultado: {result}")
                 
                 if result.get('success'):
+                    # Log de los detalles del Apps Script
+                    if result.get('logs'):
+                        logger.info("=== LOGS DEL APPS SCRIPT ===")
+                        for log_line in result.get('logs', []):
+                            logger.info(f"Apps Script: {log_line}")
+                        logger.info("=== FIN LOGS APPS SCRIPT ===")
+                    
                     return {
                         "success": True,
                         "message": "Carta de aprobación generada exitosamente",
                         "approval_letter_url": result.get('presentation_url'),
-                        "data": script_data["data"]
+                        "data": script_data["data"],
+                        "logs": result.get('logs', [])  # Incluir logs en la respuesta
                     }
                 else:
                     raise HTTPException(

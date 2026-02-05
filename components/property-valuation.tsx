@@ -4304,20 +4304,37 @@ export function PropertyValuation() {
             >
               Cancelar
             </Button>
-            <Button 
-              onClick={handleGenerateApprovalLetter}
-              disabled={generatingApprovalLetter || !approvalLetterForm.fullName || !approvalLetterForm.idType || !approvalLetterForm.idNumber || !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              {generatingApprovalLetter ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Generando...
-                </>
-              ) : (
-                'Generar Carta'
-              )}
-            </Button>
+            <div className="flex items-center">
+              <Button 
+                onClick={handleGenerateApprovalLetter}
+                disabled={
+                  generatingApprovalLetter || 
+                  !approvalLetterForm.fullName || 
+                  !approvalLetterForm.idType || 
+                  !approvalLetterForm.idNumber || 
+                  !approvalLetterForm.maxApprovedAmount || 
+                  !approvalLetterForm.minInitialPayment ||
+                  (approvalLetterForm.hasSecondaryClient && (!approvalLetterForm.secondaryFullName || !approvalLetterForm.secondaryIdType || !approvalLetterForm.secondaryIdNumber))
+                }
+                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  (!approvalLetterForm.fullName || !approvalLetterForm.idType || !approvalLetterForm.idNumber || !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment) ?
+                  'Complete todos los campos del cliente principal' :
+                  (approvalLetterForm.hasSecondaryClient && (!approvalLetterForm.secondaryFullName || !approvalLetterForm.secondaryIdType || !approvalLetterForm.secondaryIdNumber)) ?
+                  'Complete todos los campos del cliente secundario' : 
+                  ''
+                }
+              >
+                {generatingApprovalLetter ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Generando...
+                  </>
+                ) : (
+                  'Generar Carta de Aprobación'
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
