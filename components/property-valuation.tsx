@@ -164,12 +164,12 @@ export function PropertyValuation() {
   const [selectedInvestorValuation, setSelectedInvestorValuation] = useState<Valuation | null>(null)
   const [paymentPlanData, setPaymentPlanData] = useState({
     // Configuración del Programa
-    programa: '' as string, // ID del template de Google Sheets (obligatorio)
+    programa: '' as string | undefined, // ID del template de Google Sheets (obligatorio)
     valor_lanzamiento: 'descuento' as 'descuento' | 'comercial',
     tipo_programa: 'gradiente' as 'lineal' | 'gradiente',
     tipo_vivienda: 'usada' as 'nueva' | 'usada',
-    alistamiento_acabados: 'no' as 'si' | 'no',
-    financiacion_gastos: 'si' as 'si' | 'no',
+    alistamiento_acabados: 'No' as 'Si' | 'No',
+    financiacion_gastos: 'Si' as 'Si' | 'No',
     // Flujo Toperty Interno
     area: '',
     commercial_value: '',
@@ -346,7 +346,6 @@ export function PropertyValuation() {
   const loadValuations = useCallback(async () => {
     try {
       setValuationsLoading(true)
-      console.log('Loading valuations with filters:', filters) // Debug
       const data = await fetchValuations(currentValuationsPage, 10, filters)
       setValuationsData(data)
     } catch (error) {
@@ -1739,8 +1738,8 @@ export function PropertyValuation() {
       valor_lanzamiento: 'descuento',
       tipo_programa: 'gradiente',
       tipo_vivienda: 'usada',
-      alistamiento_acabados: 'no',
-      financiacion_gastos: 'si',
+      alistamiento_acabados: 'No',
+      financiacion_gastos: 'Si',
       // Flujo Toperty Interno - algunos valores del avalúo
       area: valuation.area.toString(),
       commercial_value: valuation.final_price?.toString() || '',
@@ -1777,10 +1776,12 @@ export function PropertyValuation() {
   }
 
   // Función para formatear valores de entrada como moneda (redondeado)
-  const formatInputValue = (value: string) => {
+  const formatInputValue = (value: string | number) => {
     if (!value) return ''
+    // Convertir a string si es número
+    const stringValue = typeof value === 'number' ? value.toString() : value
     // Solo limpiar y formatear lo que ya está guardado, no lo que se está escribiendo
-    const numericValue = parseInt(value.replace(/[^0-9]/g, ''))
+    const numericValue = parseInt(stringValue.replace(/[^0-9]/g, ''))
     if (isNaN(numericValue)) return ''
     return numericValue.toLocaleString('es-CO')
   }
@@ -1795,8 +1796,8 @@ export function PropertyValuation() {
       valor_lanzamiento: 'descuento',
       tipo_programa: 'gradiente',
       tipo_vivienda: 'usada',
-      alistamiento_acabados: 'no',
-      financiacion_gastos: 'si',
+      alistamiento_acabados: 'No',
+      financiacion_gastos: 'Si',
       // Flujo Toperty Interno
       area: '',
       commercial_value: '',
@@ -1830,6 +1831,65 @@ export function PropertyValuation() {
     setDashboardActionsModal(prev => ({ ...prev, isOpen: false }))
     setIsEditingPaymentPlan(true)
     
+    // Intentar obtener datos existentes del plan
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/dashboard/data/${encodeURIComponent(selectedValuation.valuation_name)}`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.data) {
+          const configPrograma = result.data.configuracion_programa || {}
+          const flujoInterno = result.data.flujo_interno || {}
+          const paraUsuario = result.data.para_usuario || {}
+          
+          const planData = {
+            // Configuración del Programa - buscar en todas las secciones
+            programa: (configPrograma.programa === 'Plan de Pagos' || flujoInterno.programa === 'Plan de Pagos') ? undefined : (configPrograma.programa || flujoInterno.programa || undefined),  // undefined para mostrar placeholder
+            valor_lanzamiento: (configPrograma.valor_lanzamiento || flujoInterno.valor_lanzamiento || 'descuento') as 'descuento' | 'comercial',
+            tipo_programa: (configPrograma.tipo_programa || flujoInterno.tipo_programa || 'gradiente') as 'gradiente' | 'lineal',
+            tipo_vivienda: (configPrograma.tipo_vivienda || flujoInterno.tipo_vivienda || 'usada') as 'usada' | 'nueva',
+            // Normalizar valores Si/No con mayúscula inicial para que coincida con SelectItem
+            alistamiento_acabados: ((configPrograma.alistamiento_acabados || flujoInterno.con_alistamiento || flujoInterno.alistamiento_acabados || 'No').toString().toLowerCase() === 'si' ? 'Si' : 'No') as 'Si' | 'No',
+            financiacion_gastos: ((configPrograma.financiacion_gastos || flujoInterno.con_financiacion_gastos || flujoInterno.financiacion_gastos || 'Si').toString().toLowerCase() === 'si' ? 'Si' : 'No') as 'Si' | 'No',
+            // Flujo Toperty Interno - usar datos existentes
+            area: flujoInterno.area || selectedValuation.area.toString(),
+            commercial_value: flujoInterno.commercial_value || '',
+            average_purchase_value: flujoInterno.average_purchase_value || '',
+            asking_price: flujoInterno.asking_price || '',
+            user_down_payment: flujoInterno.user_down_payment || '',
+            program_months: flujoInterno.program_months || '',
+            // Limpiar símbolo % y convertir a número
+            potential_down_payment: flujoInterno.potential_down_payment ? 
+              flujoInterno.potential_down_payment.toString().replace('%', '') : '',
+            bank_mortgage_rate: flujoInterno.bank_mortgage_rate ? 
+              flujoInterno.bank_mortgage_rate.toString().replace('%', '') : '',
+            dupla_bank_rate: flujoInterno.dupla_bank_rate ? 
+              flujoInterno.dupla_bank_rate.toString().replace('%', '') : '',
+            // Para Envío Usuario - usar datos existentes
+            client_name: paraUsuario.client_name || '',
+            address: paraUsuario.address || '',
+            city: paraUsuario.city || '',
+            country: paraUsuario.country || 'Colombia',
+            construction_year: paraUsuario.construction_year || '',
+            stratum: paraUsuario.stratum || selectedValuation.stratum?.toString() || '',
+            apartment_type: paraUsuario.apartment_type || '',
+            private_parking: paraUsuario.private_parking || selectedValuation.garages?.toString() || '',
+            // Co-aplicante
+            client_id: paraUsuario.client_id || '',
+            co_applicant_name: paraUsuario.co_applicant_name || '',
+            co_applicant_id: paraUsuario.co_applicant_id || ''
+          }
+          
+          setPaymentPlanData(planData)
+          setShowPaymentPlanForm(true)
+          return
+        }
+      }
+    } catch (error) {
+      console.error('Error obteniendo datos del plan:', error)
+    }
+    
+    // Si no se pudieron obtener datos, usar valores por defecto
     // Obtener dirección y ciudad desde coordenadas si están disponibles
     let resolvedAddress = address || ''
     let resolvedCity = ''
@@ -1854,8 +1914,8 @@ export function PropertyValuation() {
       valor_lanzamiento: 'descuento',
       tipo_programa: 'gradiente',
       tipo_vivienda: 'usada',
-      alistamiento_acabados: 'no',
-      financiacion_gastos: 'si',
+      alistamiento_acabados: 'No',
+      financiacion_gastos: 'Si',
       // Flujo Toperty Interno
       area: selectedValuation.area.toString(),
       commercial_value: selectedValuation.final_price?.toString() || '',
@@ -1929,24 +1989,39 @@ export function PropertyValuation() {
       'programa_7': process.env.NEXT_PUBLIC_TEMPLATE_PROGRAMA_ALUNA || '',
     }
 
-    const templateSheetId = programaTemplates[paymentPlanData.programa]
+    const templateSheetId = paymentPlanData.programa ? programaTemplates[paymentPlanData.programa] : undefined
     if (!templateSheetId) {
-      alert('No se encontró el template para el programa seleccionado. Verifique la configuración.')
+      await confirm(
+        'No se encontró el template para el programa seleccionado. Verifique la configuración.',
+        'Error de Configuración'
+      )
       return
     }
     
     try {
       setSaving(true) // Usar estado existente
       
-      // Preparar datos para envío, agregando % a los campos de porcentaje
+      // Preparar datos para envío, convirtiendo números a strings y agregando % a campos de porcentaje
       const dataToSend = {
         ...paymentPlanData,
         valuation_name: selectedValuation?.valuation_name || paymentPlanData.client_name, // Usar nombre del avalúo
         template_sheet_id: templateSheetId, // ID del template de Google Sheets
+        // Convertir números a strings
+        area: String(paymentPlanData.area),
+        commercial_value: String(paymentPlanData.commercial_value),
+        average_purchase_value: String(paymentPlanData.average_purchase_value),
+        asking_price: String(paymentPlanData.asking_price),
+        user_down_payment: String(paymentPlanData.user_down_payment),
+        program_months: String(paymentPlanData.program_months),
+        construction_year: String(paymentPlanData.construction_year),
+        stratum: String(paymentPlanData.stratum),
+        private_parking: String(paymentPlanData.private_parking),
+        // Campos con porcentajes
         potential_down_payment: paymentPlanData.potential_down_payment ? `${paymentPlanData.potential_down_payment}%` : '',
         bank_mortgage_rate: paymentPlanData.bank_mortgage_rate ? `${paymentPlanData.bank_mortgage_rate}%` : '',
         dupla_bank_rate: paymentPlanData.dupla_bank_rate ? `${paymentPlanData.dupla_bank_rate}%` : ''
       }
+      
       
       // Llamar al endpoint de Google Sheets
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/google-sheets`, {
@@ -1987,9 +2062,22 @@ export function PropertyValuation() {
         
       } else {
         // Error del servidor
+        let errorMessage = 'Error al crear el plan de pagos'
+        if (result.detail) {
+          // Si detail es un string, usarlo directamente
+          if (typeof result.detail === 'string') {
+            errorMessage = result.detail
+          } else if (Array.isArray(result.detail)) {
+            // Si es un array de errores de validación, tomar el primer mensaje
+            errorMessage = result.detail[0]?.msg || result.detail[0]?.message || errorMessage
+          } else if (typeof result.detail === 'object') {
+            // Si es un objeto, intentar obtener el mensaje
+            errorMessage = result.detail.msg || result.detail.message || JSON.stringify(result.detail)
+          }
+        }
         setSaveMessage({
           type: 'error',
-          text: result.detail || 'Error al crear el plan de pagos'
+          text: errorMessage
         })
       }
       

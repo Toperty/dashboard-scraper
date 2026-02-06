@@ -118,6 +118,7 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             'flujo_interno': {
                                 'area': payment_plan_data.area,
                                 'commercial_value': payment_plan_data.commercial_value,
+                                'average_purchase_value': payment_plan_data.average_purchase_value,
                                 'asking_price': payment_plan_data.asking_price,
                                 'user_down_payment': payment_plan_data.user_down_payment,
                                 'program_months': payment_plan_data.program_months,
@@ -224,6 +225,40 @@ async def check_dashboard_exists(valuation_name: str):
             }
         
         return {"exists": False}
+
+
+@router.get("/dashboard/data/{valuation_name}")
+async def get_dashboard_data(valuation_name: str):
+    """Get payment plan data for editing"""
+    from models.payment_plan_dashboard import PaymentPlanDashboard
+    
+    with Session(engine) as session:
+        dashboard = session.query(PaymentPlanDashboard).filter(
+            PaymentPlanDashboard.valuation_name == valuation_name,
+            PaymentPlanDashboard.is_active == True
+        ).first()
+        
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+        # Simplemente devolver los datos tal como están guardados
+        if dashboard.sheet_data:
+            return {
+                "success": True,
+                "data": dashboard.sheet_data,
+                "client_name": dashboard.client_name
+            }
+        
+        # Si no hay datos almacenados, devolver estructura vacía
+        return {
+            "success": True,
+            "data": {
+                "configuracion_programa": {},
+                "flujo_interno": {},
+                "para_usuario": {}
+            },
+            "client_name": dashboard.client_name
+        }
 
 
 async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full", t: Optional[str] = Query(None)):
