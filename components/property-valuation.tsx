@@ -1858,13 +1858,13 @@ export function PropertyValuation() {
             asking_price: flujoInterno.asking_price || '',
             user_down_payment: flujoInterno.user_down_payment || '',
             program_months: flujoInterno.program_months || '',
-            // Limpiar símbolo % y convertir a número
+            // Limpiar símbolo % si viene del backend
             potential_down_payment: flujoInterno.potential_down_payment ? 
-              flujoInterno.potential_down_payment.toString().replace('%', '') : '',
+              flujoInterno.potential_down_payment.toString().replace('%', '').trim() : '',
             bank_mortgage_rate: flujoInterno.bank_mortgage_rate ? 
-              flujoInterno.bank_mortgage_rate.toString().replace('%', '') : '',
+              flujoInterno.bank_mortgage_rate.toString().replace('%', '').trim() : '',
             dupla_bank_rate: flujoInterno.dupla_bank_rate ? 
-              flujoInterno.dupla_bank_rate.toString().replace('%', '') : '',
+              flujoInterno.dupla_bank_rate.toString().replace('%', '').trim() : '',
             // Para Envío Usuario - usar datos existentes
             client_name: paraUsuario.client_name || '',
             address: paraUsuario.address || '',
@@ -2001,25 +2001,28 @@ export function PropertyValuation() {
     try {
       setSaving(true) // Usar estado existente
       
-      // Preparar datos para envío, convirtiendo números a strings y agregando % a campos de porcentaje
+      // Preparar datos para envío - formatear valores numéricos correctamente
       const dataToSend = {
         ...paymentPlanData,
         valuation_name: selectedValuation?.valuation_name || paymentPlanData.client_name, // Usar nombre del avalúo
         template_sheet_id: templateSheetId, // ID del template de Google Sheets
-        // Convertir números a strings
-        area: String(paymentPlanData.area),
-        commercial_value: String(paymentPlanData.commercial_value),
-        average_purchase_value: String(paymentPlanData.average_purchase_value),
-        asking_price: String(paymentPlanData.asking_price),
-        user_down_payment: String(paymentPlanData.user_down_payment),
-        program_months: String(paymentPlanData.program_months),
-        construction_year: String(paymentPlanData.construction_year),
-        stratum: String(paymentPlanData.stratum),
-        private_parking: String(paymentPlanData.private_parking),
-        // Campos con porcentajes
-        potential_down_payment: paymentPlanData.potential_down_payment ? `${paymentPlanData.potential_down_payment}%` : '',
-        bank_mortgage_rate: paymentPlanData.bank_mortgage_rate ? `${paymentPlanData.bank_mortgage_rate}%` : '',
-        dupla_bank_rate: paymentPlanData.dupla_bank_rate ? `${paymentPlanData.dupla_bank_rate}%` : ''
+        // Asegurar que todos los campos sean strings y remover formato de miles
+        area: paymentPlanData.area ? String(paymentPlanData.area).replace(/[,.]/g, '') : '',
+        commercial_value: paymentPlanData.commercial_value ? String(paymentPlanData.commercial_value).replace(/[,.]/g, '') : '',
+        average_purchase_value: paymentPlanData.average_purchase_value ? String(paymentPlanData.average_purchase_value).replace(/[,.]/g, '') : '',
+        asking_price: paymentPlanData.asking_price ? String(paymentPlanData.asking_price).replace(/[,.]/g, '') : '',
+        user_down_payment: paymentPlanData.user_down_payment ? String(paymentPlanData.user_down_payment).replace(/[,.]/g, '') : '',
+        program_months: paymentPlanData.program_months ? String(paymentPlanData.program_months).replace(/[,.]/g, '') : '',
+        construction_year: paymentPlanData.construction_year ? String(paymentPlanData.construction_year).replace(/[,.]/g, '') : '',
+        stratum: paymentPlanData.stratum ? String(paymentPlanData.stratum).replace(/[,.]/g, '') : '',
+        private_parking: paymentPlanData.private_parking ? String(paymentPlanData.private_parking).replace(/[,.]/g, '') : '',
+        // Campos con porcentajes - agregar % al final
+        potential_down_payment: paymentPlanData.potential_down_payment ? 
+          `${String(paymentPlanData.potential_down_payment).replace('%', '')}%` : '',
+        bank_mortgage_rate: paymentPlanData.bank_mortgage_rate ? 
+          `${String(paymentPlanData.bank_mortgage_rate).replace('%', '')}%` : '',
+        dupla_bank_rate: paymentPlanData.dupla_bank_rate ? 
+          `${String(paymentPlanData.dupla_bank_rate).replace('%', '')}%` : ''
       }
       
       
@@ -4169,7 +4172,7 @@ export function PropertyValuation() {
                 </button>
               )}
               <button
-                onClick={() => setApprovalLetterModal({ isOpen: true, paymentPlanId: dashboardActionsModal.paymentPlanId })}
+                onClick={() => setApprovalLetterModal({ isOpen: true, paymentPlanId: dashboardActionsModal.paymentPlanId || null })}
                 disabled={generatingPDFInModal}
                 className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-green-50 hover:bg-green-100 text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >

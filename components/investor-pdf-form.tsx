@@ -86,6 +86,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
   })
   
   const [images, setImages] = useState<PropertyImage[]>([])
+  const [facadeImage, setFacadeImage] = useState<PropertyImage | null>(null) // Imagen de Fachada
   const [validationErrors, setValidationErrors] = useState<string[]>([])
 
   // Cargar datos existentes al abrir
@@ -134,7 +135,12 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
           })
         }
         if (data.data.images) {
-          setImages(data.data.images.map((img: any) => {
+          // Separar imagen de fachada de las demás
+          const facadeImg = data.data.images.find((img: any) => img.is_facade === true)
+          const regularImages = data.data.images.filter((img: any) => !img.is_facade)
+          
+          // Cargar imágenes regulares (máximo 6)
+          setImages(regularImages.slice(0, 6).map((img: any) => {
             // Si es una URL de GCS, usar el proxy
             let displayUrl = img.image_path
             if (img.image_path && (img.image_path.startsWith('http') || img.image_path.startsWith('/uploads'))) {
@@ -149,6 +155,22 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
               uploaded: true  // Las imágenes existentes ya están subidas
             }
           }))
+          
+          // Cargar imagen de fachada si existe
+          if (facadeImg) {
+            let displayUrl = facadeImg.image_path
+            if (facadeImg.image_path && (facadeImg.image_path.startsWith('http') || facadeImg.image_path.startsWith('/uploads'))) {
+              displayUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/images/proxy?url=${encodeURIComponent(facadeImg.image_path)}`
+            }
+            
+            setFacadeImage({
+              id: facadeImg.id,
+              caption: "Fachada",
+              preview: displayUrl,
+              image_path: facadeImg.image_path,
+              uploaded: true
+            })
+          }
         }
       }
     } catch (error) {
@@ -184,6 +206,44 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
       preview: URL.createObjectURL(file)
     }))
     setImages(prev => [...prev, ...newImages].slice(0, 6)) // Máximo 6 imágenes
+  }
+
+  const handleFacadeImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setFacadeImage({
+      file,
+      caption: "Fachada",
+      preview: URL.createObjectURL(file)
+    })
+  }
+
+  const removeFacadeImage = async () => {
+    const imageToRemove = facadeImage
+    
+    // Si la imagen tiene ID, significa que está en el backend y debe eliminarse
+    if (imageToRemove?.id) {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/images/${imageToRemove.id}`,
+          { method: 'DELETE' }
+        )
+        
+        if (!response.ok) {
+          console.error('Error al eliminar la imagen de fachada del backend')
+        }
+      } catch (error) {
+        console.error('Error al eliminar la imagen de fachada:', error)
+      }
+    }
+    
+    // Limpiar el preview si existe
+    if (imageToRemove?.preview && imageToRemove.preview.startsWith('blob:')) {
+      URL.revokeObjectURL(imageToRemove.preview)
+    }
+    
+    setFacadeImage(null)
   }
 
   const removeImage = async (index: number) => {
@@ -314,6 +374,31 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
           )
         }
       }
+      
+      // Subir imagen de fachada si es nueva
+      if (facadeImage?.file && !facadeImage.uploaded) {
+        const facadeFormData = new FormData()
+        facadeFormData.append('images', facadeImage.file)
+        facadeFormData.append('captions', 'Fachada')  // El backend espera una lista pero FormData lo maneja
+        facadeFormData.append('is_facade', 'true') // Indicador especial para la imagen de fachada
+        
+        const facadeUploadResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/images/${valuationId}`,
+          {
+            method: 'POST',
+            body: facadeFormData
+          }
+        )
+        
+        if (!facadeUploadResponse.ok) {
+          const errorData = await facadeUploadResponse.json()
+          console.error('Error uploading facade image:', errorData)
+          showToast("Error al subir la imagen de fachada", "error")
+        } else {
+          // Marcar la imagen de fachada como subida
+          setFacadeImage(prev => prev ? { ...prev, uploaded: true } : null)
+        }
+      }
 
       showToast("La información se guardó correctamente", "success")
 
@@ -352,7 +437,15 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
   }
 
   const handleGeneratePresentation = async () => {
-    // Primero validar
+    // Validar que haya imagen de fachada
+    if (!facadeImage) {
+      showToast("La imagen de fachada es obligatoria para generar el PDF", "error")
+      // Cambiar a la pestaña de imágenes para que el usuario vea el problema
+      setActiveTab("images")
+      return
+    }
+    
+    // Luego validar el resto del formulario
     const isValid = await validateForm()
     if (!isValid) {
       showToast("Por favor completa todos los campos requeridos", "error")
@@ -642,9 +735,76 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
           </TabsContent>
 
           <TabsContent value="images" className="space-y-4">
+            {/* Imagen de Fachada - OBLIGATORIA - Se muestra primero */}
+            <Card className={!facadeImage ? "border-orange-500" : ""}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Imagen de Fachada
+                  <Badge variant={facadeImage ? "default" : "destructive"}>
+                    {facadeImage ? "✓ Cargada" : "Obligatoria para PDF"}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Esta imagen es <span className="font-semibold">obligatoria</span> para generar el PDF. Se mostrará como la imagen principal del inmueble
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!facadeImage ? (
+                  <div className="border-2 border-dashed border-orange-500 rounded-lg p-6 text-center hover:border-orange-600 transition-colors bg-orange-50">
+                    <Input
+                      id="facade-image-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFacadeImageUpload}
+                      className="hidden"
+                    />
+                    <Label
+                      htmlFor="facade-image-upload"
+                      className="cursor-pointer flex flex-col items-center gap-2"
+                    >
+                      <Upload className="h-12 w-12 text-orange-500" />
+                      <span className="text-sm font-medium text-gray-700">
+                        Subir imagen de fachada (Obligatoria)
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        PNG, JPG hasta 5MB
+                      </span>
+                    </Label>
+                  </div>
+                ) : (
+                  <div className="relative border rounded-lg p-2">
+                    {(facadeImage.preview || facadeImage.image_path) && (
+                      <img
+                        src={facadeImage.preview || facadeImage.image_path || ''}
+                        alt="Imagen de Fachada"
+                        className="w-full h-48 object-cover rounded"
+                        onError={(e) => {
+                          // Si la imagen falla al cargar, mostrar placeholder
+                          (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%23ddd"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3EFachada%3C/text%3E%3C/svg%3E'
+                        }}
+                      />
+                    )}
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-sm font-medium">Fachada</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={removeFacadeImage}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Eliminar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Imágenes adicionales del inmueble */}
             <Card>
               <CardHeader>
-                <CardTitle>Registro Fotográfico</CardTitle>
+                <CardTitle>Imágenes del Inmueble</CardTitle>
                 <CardDescription>
                   <span className={images.length >= 6 ? "text-orange-600 font-semibold" : ""}>
                     {images.length} de 6 imágenes

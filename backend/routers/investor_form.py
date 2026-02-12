@@ -99,14 +99,24 @@ async def get_tenant_info(valuation_id: int):
         
         return {"success": True, "data": tenant_info}
 
+from typing import Union
+
 @router.post("/images/{valuation_id}")
 async def upload_property_images(
     valuation_id: int,
     images: List[UploadFile] = File(...),
-    captions: Optional[List[str]] = Form(default=None)
+    captions: Optional[Union[str, List[str]]] = Form(default=None),  # Puede ser string o lista
+    is_facade: Optional[str] = Form(default=None)  # Indicador si es imagen de fachada
 ):
     """Subir imágenes del inmueble"""
     logger.info(f"Uploading {len(images)} images for valuation {valuation_id}")
+    
+    # Normalizar captions a lista para manejo consistente
+    if isinstance(captions, str):
+        captions = [captions]
+    elif captions is None:
+        captions = []
+    
     try:
         with Session(engine) as session:
             # Verificar que la valuación existe
@@ -167,14 +177,18 @@ async def upload_property_images(
                     logger.info(f"Image saved locally: {image_path}")
                 
                 # Crear registro en BD
+                # Si is_facade está presente y es "true", marcar la imagen como fachada
+                is_facade_image = is_facade == "true" and i == 0  # Solo la primera imagen puede ser fachada
+                
                 property_image = PropertyImage(
                     valuation_id=valuation_id,
                     image_path=image_path,
-                    image_order=len(current_images) + i,
+                    image_order=7 if is_facade_image else len(current_images) + i,  # Fachada siempre es imagen #7
                     caption=captions[i] if captions and i < len(captions) else None,
                     original_filename=image.filename,
                     file_size=len(contents),
-                    mime_type=image.content_type
+                    mime_type=image.content_type,
+                    is_facade=is_facade_image
                 )
                 
                 session.add(property_image)

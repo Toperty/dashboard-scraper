@@ -23,6 +23,7 @@ class PropertyImage(SQLModel, table=True):
     image_path: str = Field(description="Ruta relativa de la imagen almacenada")
     image_order: int = Field(default=0, description="Orden de aparición en el PDF")
     caption: Optional[str] = Field(max_length=255, default=None, description="Descripción de la imagen")
+    is_facade: Optional[bool] = Field(default=False, description="Indica si es la imagen de fachada")
     
     # Metadata
     original_filename: Optional[str] = Field(max_length=255, default=None, description="Nombre original del archivo")

@@ -50,19 +50,29 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 )
             ).first()
             
-            # Obtener imágenes
-            images = session.exec(
+            # Obtener imágenes regulares (no fachada)
+            from sqlalchemy import or_
+            regular_images = session.exec(
                 select(PropertyImage)
                 .where(PropertyImage.valuation_id == request.valuation_id)
+                .where(or_(PropertyImage.is_facade == False, PropertyImage.is_facade == None))
                 .order_by(PropertyImage.image_order)
-                .limit(6)  # Limitar a 6 imágenes para la presentación
+                .limit(6)  # Limitar a 6 imágenes regulares
             ).all()
+            
+            # Obtener imagen de fachada
+            facade_image = session.exec(
+                select(PropertyImage)
+                .where(PropertyImage.valuation_id == request.valuation_id)
+                .where(PropertyImage.is_facade == True)
+            ).first()
             
             # Preparar URLs de las imágenes para el AppScript (URLs directas de Google Cloud Storage)
             image_urls = {}
+            # Imágenes regulares: foto_1 a foto_6
             for i in range(1, 7):  # foto_1 a foto_6
-                if i <= len(images) and images[i-1].image_path:
-                    image_path = images[i-1].image_path
+                if i <= len(regular_images) and regular_images[i-1].image_path:
+                    image_path = regular_images[i-1].image_path
                     
                     # Si image_path ya es una URL completa de Google Cloud Storage, usarla directamente
                     if image_path.startswith('https://storage.googleapis.com/'):
@@ -79,6 +89,23 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                     logger.info(f"Foto {i} URL: {image_urls[f'foto_{i}']}")
                 else:
                     image_urls[f"foto_{i}"] = ""  # Vacío si no hay imagen
+            
+            # Agregar imagen de fachada como foto_7
+            if facade_image and facade_image.image_path:
+                image_path = facade_image.image_path
+                
+                # Si image_path ya es una URL completa de Google Cloud Storage, usarla directamente
+                if image_path.startswith('https://storage.googleapis.com/'):
+                    image_urls["foto_7"] = image_path
+                    logger.info(f"URL ya es de GCS: {image_path[:100]}...")  # Log first 100 chars
+                else:
+                    # Es una ruta relativa, construir URL completa de GCS
+                    bucket_name = os.getenv('GCS_BUCKET_NAME', 'toperty-appraisals')
+                    image_urls["foto_7"] = f"https://storage.googleapis.com/{bucket_name}/{image_path}"
+                
+                logger.info(f"Foto 7 (Fachada) URL: {image_urls['foto_7']}")
+            else:
+                image_urls["foto_7"] = ""  # Vacío si no hay imagen de fachada
             
             # Obtener datos del dashboard
             dashboard = session.exec(
@@ -311,8 +338,8 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
             
             # Preparar URLs de imágenes (solo si hay)
             imagenes = []
-            if images:
-                for img in images:
+            if regular_images:
+                for img in regular_images:
                     if img.image_path and img.image_path.startswith('http'):
                         imagenes.append(img.image_path)
             
