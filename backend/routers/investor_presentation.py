@@ -17,6 +17,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Try to import GCS client, but make it optional
+try:
+    from config.gcs_config import gcs_client
+except ImportError:
+    logger.warning("Google Cloud Storage not available for presentation generation.")
+    gcs_client = None
+
 router = APIRouter(prefix="/api/investor-presentation", tags=["investor-presentation"])
 
 class PresentationRequest(BaseModel):
@@ -67,45 +74,71 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 .where(PropertyImage.is_facade == True)
             ).first()
             
-            # Preparar URLs de las imágenes para el AppScript (URLs directas de Google Cloud Storage)
-            image_urls = {}
-            # Imágenes regulares: foto_1 a foto_6
-            for i in range(1, 7):  # foto_1 a foto_6
-                if i <= len(regular_images) and regular_images[i-1].image_path:
-                    image_path = regular_images[i-1].image_path
+            # Función helper para verificar/generar URL firmada
+            def ensure_signed_url(image_path: str) -> str:
+                """Asegura que la URL esté firmada, usa la existente o genera una nueva"""
+                if not image_path:
+                    return ""
                     
-                    # Si image_path ya es una URL completa de Google Cloud Storage, usarla directamente
-                    if image_path.startswith('https://storage.googleapis.com/'):
-                        image_urls[f"foto_{i}"] = image_path
-                    # Si es una ruta relativa, construir la URL completa de Google Cloud Storage
-                    elif image_path.startswith('http'):
-                        # Ya es una URL completa, usarla directamente
-                        image_urls[f"foto_{i}"] = image_path  
-                    else:
-                        # Es una ruta relativa, construir URL de Google Cloud Storage
-                        bucket_name = os.getenv('GCS_BUCKET_NAME', 'toperty-appraisals')
-                        image_urls[f"foto_{i}"] = f"https://storage.googleapis.com/{bucket_name}/{image_path}"
+                # Si ya tiene parámetros de firma, devolverla tal cual
+                if 'X-Goog-Algorithm' in image_path:
+                    return image_path
                     
-                    logger.info(f"Foto {i} URL: {image_urls[f'foto_{i}']}")
-                else:
-                    image_urls[f"foto_{i}"] = ""  # Vacío si no hay imagen
-            
-            # Agregar imagen de fachada como foto_7
-            if facade_image and facade_image.image_path:
-                image_path = facade_image.image_path
-                
-                # Si image_path ya es una URL completa de Google Cloud Storage, usarla directamente
+                # Si es una URL de GCS simple, generar URL firmada
                 if image_path.startswith('https://storage.googleapis.com/'):
-                    image_urls["foto_7"] = image_path
-                    logger.info(f"URL ya es de GCS: {image_path[:100]}...")  # Log first 100 chars
+                    logger.warning(f"Image without signed URL found, this shouldn't happen: {image_path[:80]}...")
+                    # Generar URL firmada de emergencia
+                    if gcs_client and gcs_client.client:
+                        try:
+                            path_parts = image_path.replace('https://storage.googleapis.com/', '').split('/', 1)
+                            if len(path_parts) == 2:
+                                bucket_name = path_parts[0]
+                                blob_path = path_parts[1]
+                                
+                                bucket = gcs_client.client.bucket(bucket_name)
+                                blob = bucket.blob(blob_path)
+                                
+                                from datetime import timedelta
+                                signed_url = blob.generate_signed_url(
+                                    version="v4",
+                                    expiration=timedelta(days=7),  # 7 days max allowed by GCS
+                                    method="GET"
+                                )
+                                logger.info(f"Emergency signed URL generated for {blob_path}")
+                                return signed_url
+                        except Exception as e:
+                            logger.error(f"Could not generate emergency signed URL: {e}")
+                            return image_path
+                    return image_path
+                        
+                # Si es otra URL o ruta relativa
+                elif image_path.startswith('http'):
+                    return image_path
                 else:
-                    # Es una ruta relativa, construir URL completa de GCS
-                    bucket_name = os.getenv('GCS_BUCKET_NAME', 'toperty-appraisals')
-                    image_urls["foto_7"] = f"https://storage.googleapis.com/{bucket_name}/{image_path}"
-                
-                logger.info(f"Foto 7 (Fachada) URL: {image_urls['foto_7']}")
+                    # Ruta relativa, esto no debería pasar con el nuevo código
+                    logger.error(f"Relative path found, this shouldn't happen: {image_path}")
+                    bucket_name = os.getenv('GCS_BUCKET_NAME', 'appraisals-images')
+                    return f"https://storage.googleapis.com/{bucket_name}/{image_path}"
+            
+            # Preparar URLs de las imágenes para el AppScript
+            image_urls = {}
+            
+            # Imágenes regulares: foto_1 a foto_6
+            for i in range(1, 7):
+                if i <= len(regular_images) and regular_images[i-1].image_path:
+                    signed_url = ensure_signed_url(regular_images[i-1].image_path)
+                    image_urls[f"foto_{i}"] = signed_url
+                    logger.info(f"Foto {i} URL: {signed_url[:100]}...")
+                else:
+                    image_urls[f"foto_{i}"] = ""
+            
+            # Imagen de fachada: foto_7
+            if facade_image and facade_image.image_path:
+                signed_url = ensure_signed_url(facade_image.image_path)
+                image_urls["foto_7"] = signed_url
+                logger.info(f"Foto 7 (Fachada) URL: {signed_url[:100]}...")
             else:
-                image_urls["foto_7"] = ""  # Vacío si no hay imagen de fachada
+                image_urls["foto_7"] = ""
             
             # Obtener datos del dashboard
             dashboard = session.exec(

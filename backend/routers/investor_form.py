@@ -420,6 +420,43 @@ async def get_investor_pdf_data(valuation_id: int):
                 .order_by(PropertyImage.image_order)
             ).all()
             
+            # Las imágenes ya deberían tener URLs firmadas guardadas en la BD
+            # Solo regenerar si no tienen firma o si la URL es simple
+            for img in images:
+                if img.image_path and img.image_path.startswith('https://storage.googleapis.com/'):
+                    # Si ya tiene parámetros de firma, usar tal cual
+                    if 'X-Goog-Algorithm' in img.image_path:
+                        continue  # Ya tiene URL firmada
+                    
+                    # Si no tiene firma y tenemos GCS client, generar URL firmada
+                    if gcs_client and gcs_client.client:
+                        try:
+                            # Extraer el path del blob desde la URL
+                            path_parts = img.image_path.replace('https://storage.googleapis.com/', '').split('/', 1)
+                            if len(path_parts) == 2:
+                                bucket_name = path_parts[0]
+                                blob_path = path_parts[1]
+                                
+                                # Generar URL firmada con 7 días de validez (máximo permitido)
+                                bucket = gcs_client.client.bucket(bucket_name)
+                                blob = bucket.blob(blob_path)
+                                
+                                from datetime import timedelta
+                                signed_url = blob.generate_signed_url(
+                                    version="v4",
+                                    expiration=timedelta(days=7),  # URL válida por 7 días (máximo)
+                                    method="GET"
+                                )
+                                img.image_path = signed_url
+                                
+                                # Actualizar en la BD para no regenerar cada vez
+                                session.add(img)
+                                session.commit()
+                                logger.info(f"Updated image {img.id} with signed URL")
+                        except Exception as e:
+                            logger.warning(f"Could not generate signed URL for image {img.id}: {e}")
+                            # Keep the original URL if signing fails
+            
             # Nota: La inversión total ahora se calcula dinámicamente desde el dashboard
             
             return {

@@ -18,11 +18,11 @@ except ImportError as e:
     storage = None
     logger.warning(f"Google Cloud Storage not available: {e}")
 
-# GCS Configuration
-BUCKET_NAME = "appraisals-images"  # Using hyphens as underscores are not allowed in bucket names
-BUCKET_REGION = "us-east1"
+# GCS Configuration - usa variables de entorno para mayor seguridad
+BUCKET_NAME = os.getenv('GCS_BUCKET_NAME', 'appraisals-images')  # Using hyphens as underscores are not allowed in bucket names
+BUCKET_REGION = os.getenv('GCS_BUCKET_REGION', 'us-east1')
 GCS_PUBLIC_URL = f"https://storage.googleapis.com/{BUCKET_NAME}"
-PROJECT_ID = "alpine-shade-475114-r1"  # Project where the bucket is created
+PROJECT_ID = os.getenv('GCP_PROJECT_ID', os.getenv('GOOGLE_CLOUD_PROJECT'))  # Project where the bucket is created
 
 class GCSClient:
     """Google Cloud Storage client for image uploads"""
@@ -47,9 +47,12 @@ class GCSClient:
             logger.info(f"File exists: {os.path.exists(creds_path) if creds_path else 'No path set'}")
             
             if creds_path and os.path.exists(creds_path):
-                logger.info(f"Using service account from: {creds_path}")
-                # Use the project where the bucket exists, not the service account's project
-                self.client = storage.Client.from_service_account_json(creds_path, project=PROJECT_ID)
+                logger.info(f"Using service account credentials")
+                # Use the project where the bucket exists if specified
+                if PROJECT_ID:
+                    self.client = storage.Client.from_service_account_json(creds_path, project=PROJECT_ID)
+                else:
+                    self.client = storage.Client.from_service_account_json(creds_path)
             else:
                 # 2. Try Application Default Credentials (gcloud auth)
                 # This will work if user has run 'gcloud auth application-default login'
@@ -93,17 +96,14 @@ class GCSClient:
             blob = self.bucket.blob(f"property-images/{filename}")
             blob.upload_from_string(file_content, content_type=content_type)
             
-            # Generate a signed URL valid for 7 days
+            # Always generate a signed URL with 7 days expiration (max allowed)
             from datetime import timedelta
             signed_url = blob.generate_signed_url(
                 version="v4",
-                expiration=timedelta(days=7),
+                expiration=timedelta(days=7),  # 7 days max expiration allowed by GCS
                 method="GET"
             )
-            
-            # Store the GCS path for reference
-            # Return the signed URL for immediate access
-            logger.info(f"Image uploaded to GCS: gs://{BUCKET_NAME}/property-images/{filename}")
+            logger.info(f"Image uploaded to GCS with signed URL: gs://{BUCKET_NAME}/property-images/{filename}")
             return signed_url
         except Exception as e:
             logger.error(f"Failed to upload image to GCS: {e}")
