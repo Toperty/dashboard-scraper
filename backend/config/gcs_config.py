@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 try:
     from google.cloud import storage
     GCS_AVAILABLE = True
-    logger.info("Google Cloud Storage module loaded successfully")
+    # Module loaded
 except ImportError as e:
     GCS_AVAILABLE = False
     storage = None
@@ -43,11 +43,10 @@ class GCSClient:
             
             # 1. Check for explicit service account credentials
             creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            logger.info(f"GOOGLE_APPLICATION_CREDENTIALS env var: {creds_path}")
-            logger.info(f"File exists: {os.path.exists(creds_path) if creds_path else 'No path set'}")
+            # Check for service account credentials
             
             if creds_path and os.path.exists(creds_path):
-                logger.info(f"Using service account credentials")
+                # Using service account credentials
                 # Use the project where the bucket exists if specified
                 if PROJECT_ID:
                     self.client = storage.Client.from_service_account_json(creds_path, project=PROJECT_ID)
@@ -58,7 +57,7 @@ class GCSClient:
                 # This will work if user has run 'gcloud auth application-default login'
                 try:
                     self.client = storage.Client()
-                    logger.info("Using Application Default Credentials")
+                    # Using Application Default Credentials
                 except Exception as adc_error:
                     # 3. Try to use gcloud config credentials directly
                     try:
@@ -68,12 +67,12 @@ class GCSClient:
                             self.client = storage.Client(project=project)
                         else:
                             self.client = storage.Client()
-                        logger.info("Using gcloud default credentials")
+                        # Using gcloud default credentials
                     except Exception as gcloud_error:
                         raise Exception(f"No valid credentials found. ADC: {adc_error}, gcloud: {gcloud_error}")
             
             self.bucket = self.client.bucket(BUCKET_NAME)
-            logger.info(f"GCS client initialized for bucket: {BUCKET_NAME}")
+            # GCS client initialized
         except Exception as e:
             logger.warning(f"Could not initialize GCS client: {e}. Will use local storage.")
     
@@ -95,47 +94,106 @@ class GCSClient:
         try:
             blob = self.bucket.blob(f"property-images/{filename}")
             blob.upload_from_string(file_content, content_type=content_type)
-            
-            # Always generate a signed URL with 7 days expiration (max allowed)
+            # Image uploaded successfully
+        except Exception as upload_error:
+            logger.error(f"Failed to upload image: {upload_error}")
+            return None
+        
+        # Now try to generate signed URL
+        try:
             from datetime import timedelta
             signed_url = blob.generate_signed_url(
                 version="v4",
                 expiration=timedelta(days=7),  # 7 days max expiration allowed by GCS
                 method="GET"
             )
-            logger.info(f"Image uploaded to GCS with signed URL: gs://{BUCKET_NAME}/property-images/{filename}")
+            # Signed URL generated
             return signed_url
-        except Exception as e:
-            logger.error(f"Failed to upload image to GCS: {e}")
-            # Try without signed URL if that fails (for public buckets)
+        except Exception as sign_error:
+            logger.error(f"Failed to generate signed URL: {sign_error}")
+            logger.error(f"Error type: {type(sign_error).__name__}")
+            logger.error(f"This usually means permission issues with serviceAccountTokenCreator role")
+            
+            # As fallback, return the public URL (file is uploaded but not signed)
+            public_url = f"https://storage.googleapis.com/{BUCKET_NAME}/property-images/{filename}"
+            logger.warning(f"Returning unsigned URL as fallback: {public_url}")
+            
+            # Try to make it public if possible
             try:
-                return f"https://storage.googleapis.com/{BUCKET_NAME}/property-images/{filename}"
-            except:
-                return None
+                blob.make_public()
+                # Made blob public as fallback
+            except Exception as public_error:
+                logger.warning(f"Could not make blob public: {public_error}")
+            
+            return public_url
     
-    def delete_image(self, gcs_path: str) -> bool:
+    def delete_image(self, gcs_url: str) -> bool:
         """
         Delete image from GCS
         
         Args:
-            gcs_path: Path in GCS (e.g., 'property-images/uuid.jpg')
+            gcs_url: Full URL or path in GCS
             
         Returns:
             True if deleted successfully, False otherwise
         """
         if not self.client or not self.bucket:
+            logger.error("GCS client or bucket not initialized")
             return False
         
         try:
-            # Extract path from full URL if necessary
-            if gcs_path.startswith("http"):
-                gcs_path = gcs_path.replace(f"{GCS_PUBLIC_URL}/", "")
+            # Extract the blob path from the URL
+            blob_path = None
             
-            blob = self.bucket.blob(gcs_path)
-            blob.delete()
-            return True
+            if gcs_url.startswith("https://storage.googleapis.com/"):
+                # Remove the base URL and any query parameters (for signed URLs)
+                # Example: https://storage.googleapis.com/bucket/path/file.jpg?X-Goog-Algorithm=...
+                # We want: path/file.jpg
+                
+                # Remove query parameters if present
+                url_without_params = gcs_url.split('?')[0]
+                
+                # Extract bucket and path
+                # Format: https://storage.googleapis.com/bucket-name/path/to/file.jpg
+                parts = url_without_params.replace("https://storage.googleapis.com/", "").split('/', 1)
+                
+                if len(parts) == 2:
+                    bucket_name = parts[0]
+                    blob_path = parts[1]
+                    
+                    # Verify we're deleting from the correct bucket
+                    if bucket_name != BUCKET_NAME:
+                        logger.warning(f"Attempting to delete from different bucket: {bucket_name} (expected: {BUCKET_NAME})")
+                        # Try anyway if it's one of our buckets
+                        if bucket_name not in ['appraisals-images', 'toperty-appraisals', 'toperty-public-images']:
+                            logger.error(f"Refusing to delete from unknown bucket: {bucket_name}")
+                            return False
+                else:
+                    logger.error(f"Could not parse GCS URL: {gcs_url}")
+                    return False
+            else:
+                # Assume it's already a blob path
+                blob_path = gcs_url
+            
+            if not blob_path:
+                logger.error(f"Could not extract blob path from: {gcs_url}")
+                return False
+            
+            # Delete the blob
+            blob = self.bucket.blob(blob_path)
+            
+            # Check if blob exists before trying to delete
+            if blob.exists():
+                blob.delete()
+                # Successfully deleted image from GCS
+                return True
+            else:
+                logger.warning(f"Blob does not exist in GCS: {blob_path}")
+                return True  # Return True since the file doesn't exist anyway
+                
         except Exception as e:
             logger.error(f"Failed to delete image from GCS: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
             return False
 
 # Initialize GCS client

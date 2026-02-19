@@ -35,6 +35,9 @@ COPY backend/ .
 # Copiar archivos estáticos necesarios para el PDF (header/footer)
 COPY public/ ./public/
 
+# Configurar credenciales de GCS para URLs firmadas
+ENV GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-gcs.json
+
 # Cloud Run espera el puerto 8080
 EXPOSE 8080
 

@@ -16,6 +16,7 @@ import uuid
 import shutil
 from pathlib import Path
 import logging
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,22 @@ async def upload_property_images(
             
             session.commit()
             
+            # Ejecutar script para actualizar URLs a firmadas
+            try:
+                logger.info("Running update_image_urls.py script to generate signed URLs...")
+                result = subprocess.run(
+                    ["python", "scripts/update_image_urls.py"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode != 0:
+                    logger.warning(f"Update script failed: {result.stderr}")
+                else:
+                    logger.info("Update script completed successfully")
+            except Exception as e:
+                logger.warning(f"Could not run update script: {e}")
+            
             return {
                 "success": True,
                 "uploaded": len(saved_images),
@@ -226,34 +243,63 @@ async def get_property_images(valuation_id: int):
 
 @router.delete("/images/{image_id}")
 async def delete_property_image(image_id: int):
-    """Eliminar una imagen"""
+    """Eliminar una imagen y su archivo asociado"""
     try:
         with Session(engine) as session:
             image = session.get(PropertyImage, image_id)
             if not image:
                 raise HTTPException(status_code=404, detail="Imagen no encontrada")
             
+            deletion_status = {
+                "database": False,
+                "storage": False,
+                "storage_message": ""
+            }
+            
             # Delete from GCS or local storage
             if image.image_path.startswith("http"):
                 # Delete from GCS
-                if gcs_client:
+                logger.info(f"Attempting to delete from GCS: {image.image_path[:100]}...")
+                
+                if gcs_client and gcs_client.client:
                     success = gcs_client.delete_image(image.image_path)
-                    if not success:
-                        logger.warning(f"Failed to delete image from GCS: {image.image_path}")
+                    if success:
+                        deletion_status["storage"] = True
+                        deletion_status["storage_message"] = "Imagen eliminada de GCS"
+                        logger.info(f"Successfully deleted image from GCS")
+                    else:
+                        deletion_status["storage_message"] = "No se pudo eliminar de GCS (puede que ya no exista)"
+                        logger.warning(f"Failed to delete image from GCS, but continuing with DB deletion")
                 else:
-                    logger.warning(f"GCS client not available to delete: {image.image_path}")
+                    deletion_status["storage_message"] = "Cliente GCS no disponible"
+                    logger.warning(f"GCS client not available to delete: {image.image_path[:100]}...")
             else:
                 # Delete from local storage
-                file_path = Path(image.image_path.lstrip('/'))
-                if file_path.exists():
-                    file_path.unlink()
+                try:
+                    file_path = Path(image.image_path.lstrip('/'))
+                    if file_path.exists():
+                        file_path.unlink()
+                        deletion_status["storage"] = True
+                        deletion_status["storage_message"] = "Imagen eliminada del almacenamiento local"
+                    else:
+                        deletion_status["storage_message"] = "Archivo no encontrado en almacenamiento local"
+                except Exception as e:
+                    deletion_status["storage_message"] = f"Error eliminando archivo local: {str(e)}"
             
-            # Eliminar registro de BD
+            # Always delete from database, even if storage deletion failed
             session.delete(image)
             session.commit()
+            deletion_status["database"] = True
             
-            return {"success": True, "message": "Imagen eliminada"}
+            logger.info(f"Image {image_id} deleted - DB: {deletion_status['database']}, Storage: {deletion_status['storage']}")
+            
+            return {
+                "success": True, 
+                "message": "Imagen eliminada de la base de datos",
+                "details": deletion_status
+            }
     except Exception as e:
+        logger.error(f"Error deleting image {image_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/valuation/{valuation_id}")
