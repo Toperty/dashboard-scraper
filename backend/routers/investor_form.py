@@ -16,7 +16,6 @@ import uuid
 import shutil
 from pathlib import Path
 import logging
-import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -153,29 +152,31 @@ async def upload_property_images(
                 # Generar nombre único
                 unique_filename = f"{uuid.uuid4()}{file_ext}"
                 
-                # Try to upload to GCS first if available
-                gcs_url = None
-                if gcs_client and gcs_client.client:
-                    logger.info(f"Attempting GCS upload for {unique_filename}")
-                    gcs_url = gcs_client.upload_image(
-                        file_content=contents,
-                        filename=unique_filename,
-                        content_type=image.content_type or "image/jpeg"
+                # ONLY upload to GCS - no local storage option
+                if not gcs_client or not gcs_client.client:
+                    logger.error("GCS client not available - cannot upload images")
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Google Cloud Storage is not configured. Images cannot be uploaded."
                     )
-                else:
-                    logger.info("GCS client not available, using local storage")
                 
-                if gcs_url:
-                    # Successfully uploaded to GCS
-                    image_path = gcs_url
-                    logger.info(f"Image uploaded to GCS: {gcs_url[:100]}...")  # Log first 100 chars of URL
-                else:
-                    # Fallback to local storage
-                    file_path = UPLOAD_DIR / unique_filename
-                    with open(file_path, "wb") as f:
-                        f.write(contents)
-                    image_path = f"/uploads/property-images/{unique_filename}"
-                    logger.info(f"Image saved locally: {image_path}")
+                logger.info(f"Uploading to GCS: {unique_filename}")
+                gcs_url = gcs_client.upload_image(
+                    file_content=contents,
+                    filename=unique_filename,
+                    content_type=image.content_type or "image/jpeg"
+                )
+                
+                if not gcs_url:
+                    logger.error(f"Failed to upload {unique_filename} to GCS")
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to upload image to Google Cloud Storage"
+                    )
+                
+                # Use the GCS URL (signed or public)
+                image_path = gcs_url
+                logger.info(f"Image uploaded to GCS successfully")
                 
                 # Crear registro en BD
                 # Si is_facade está presente y es "true", marcar la imagen como fachada
@@ -199,21 +200,9 @@ async def upload_property_images(
             
             session.commit()
             
-            # Ejecutar script para actualizar URLs a firmadas
-            try:
-                logger.info("Running update_image_urls.py script to generate signed URLs...")
-                result = subprocess.run(
-                    ["python", "scripts/update_image_urls.py"],
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-                if result.returncode != 0:
-                    logger.warning(f"Update script failed: {result.stderr}")
-                else:
-                    logger.info("Update script completed successfully")
-            except Exception as e:
-                logger.warning(f"Could not run update script: {e}")
+            # Refresh saved images to get the updated signed URLs from GCS
+            for img in saved_images:
+                session.refresh(img)
             
             return {
                 "success": True,

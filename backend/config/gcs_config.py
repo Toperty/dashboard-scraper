@@ -39,37 +39,30 @@ class GCSClient:
             return
             
         try:
-            # Try multiple authentication methods in order
+            # Detect if running in Google Cloud environment
+            is_gcp = os.getenv("K_SERVICE") or os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
             
-            # 1. Check for explicit service account credentials
-            creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            # Check for service account credentials
-            
-            if creds_path and os.path.exists(creds_path):
-                # Using service account credentials
-                # Use the project where the bucket exists if specified
-                if PROJECT_ID:
-                    self.client = storage.Client.from_service_account_json(creds_path, project=PROJECT_ID)
-                else:
-                    self.client = storage.Client.from_service_account_json(creds_path)
+            if is_gcp:
+                # Running in GCP (Cloud Run, App Engine, etc.) - use automatic credentials
+                logger.info("Detected GCP environment, using automatic credentials")
+                self.client = storage.Client()
             else:
-                # 2. Try Application Default Credentials (gcloud auth)
-                # This will work if user has run 'gcloud auth application-default login'
-                try:
-                    self.client = storage.Client()
-                    # Using Application Default Credentials
-                except Exception as adc_error:
-                    # 3. Try to use gcloud config credentials directly
+                # Local development - try service account file
+                creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+                
+                if creds_path and os.path.exists(creds_path):
+                    logger.info("Using service account file for local development")
+                    if PROJECT_ID:
+                        self.client = storage.Client.from_service_account_json(creds_path, project=PROJECT_ID)
+                    else:
+                        self.client = storage.Client.from_service_account_json(creds_path)
+                else:
+                    # Try Application Default Credentials (gcloud auth)
                     try:
-                        # Set project explicitly if available
-                        project = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
-                        if project:
-                            self.client = storage.Client(project=project)
-                        else:
-                            self.client = storage.Client()
-                        # Using gcloud default credentials
-                    except Exception as gcloud_error:
-                        raise Exception(f"No valid credentials found. ADC: {adc_error}, gcloud: {gcloud_error}")
+                        logger.info("Trying Application Default Credentials")
+                        self.client = storage.Client()
+                    except Exception as e:
+                        raise Exception(f"No valid credentials found for local development: {e}")
             
             self.bucket = self.client.bucket(BUCKET_NAME)
             # GCS client initialized
@@ -99,7 +92,7 @@ class GCSClient:
             logger.error(f"Failed to upload image: {upload_error}")
             return None
         
-        # Now try to generate signed URL
+        # Generate signed URL - REQUIRED
         try:
             from datetime import timedelta
             signed_url = blob.generate_signed_url(
@@ -107,25 +100,15 @@ class GCSClient:
                 expiration=timedelta(days=7),  # 7 days max expiration allowed by GCS
                 method="GET"
             )
-            # Signed URL generated
+            # Signed URL generated successfully
             return signed_url
         except Exception as sign_error:
             logger.error(f"Failed to generate signed URL: {sign_error}")
             logger.error(f"Error type: {type(sign_error).__name__}")
-            logger.error(f"This usually means permission issues with serviceAccountTokenCreator role")
+            logger.error(f"This usually means missing service account key file or permissions")
             
-            # As fallback, return the public URL (file is uploaded but not signed)
-            public_url = f"https://storage.googleapis.com/{BUCKET_NAME}/property-images/{filename}"
-            logger.warning(f"Returning unsigned URL as fallback: {public_url}")
-            
-            # Try to make it public if possible
-            try:
-                blob.make_public()
-                # Made blob public as fallback
-            except Exception as public_error:
-                logger.warning(f"Could not make blob public: {public_error}")
-            
-            return public_url
+            # No fallback - signed URL is required
+            return None
     
     def delete_image(self, gcs_url: str) -> bool:
         """

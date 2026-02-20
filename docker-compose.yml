@@ -29,7 +29,6 @@ services:
       - API_PORT=8000
       - DEBUG=true
       - LOG_LEVEL=DEBUG
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
     networks:
       - dashboard_network
