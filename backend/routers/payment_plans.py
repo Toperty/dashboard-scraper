@@ -52,6 +52,9 @@ class PaymentPlanRequest(BaseModel):
     client_id: str = ""
     co_applicant_name: str = ""
     co_applicant_id: str = ""
+    # Campos para hoja Resumen
+    rooms: str = ""
+    garages: str = ""
 
 
 class PaymentPlanResponse(BaseModel):

@@ -44,6 +44,8 @@ backend/.env
 # Google Cloud credentials and sensitive files
 backend/service-account.json
 **/service-account*.json
+gcs-credentials.json
+**/gcs-credentials*.json
 *.pem
 *.p12
 

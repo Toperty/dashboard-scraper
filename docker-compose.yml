@@ -30,6 +30,7 @@ services:
       - DEBUG=true
       - LOG_LEVEL=DEBUG
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
     networks:
       - dashboard_network
     volumes:

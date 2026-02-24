@@ -2022,7 +2022,10 @@ export function PropertyValuation() {
         bank_mortgage_rate: paymentPlanData.bank_mortgage_rate ? 
           `${String(paymentPlanData.bank_mortgage_rate).replace('%', '')}%` : '',
         dupla_bank_rate: paymentPlanData.dupla_bank_rate ? 
-          `${String(paymentPlanData.dupla_bank_rate).replace('%', '')}%` : ''
+          `${String(paymentPlanData.dupla_bank_rate).replace('%', '')}%` : '',
+        // Campos para hoja Resumen
+        rooms: selectedValuation?.rooms ? String(selectedValuation.rooms) : '',
+        garages: selectedValuation?.garages ? String(selectedValuation.garages) : ''
       }
       
       

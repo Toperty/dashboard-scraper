@@ -93,21 +93,107 @@ class GCSClient:
             return None
         
         # Generate signed URL - REQUIRED
+        return self._generate_signed_url(blob)
+    
+    def _generate_signed_url(self, blob) -> Optional[str]:
+        """
+        Generate signed URL using the most appropriate method
+        """
+        from datetime import timedelta
+        
         try:
-            from datetime import timedelta
+            # First try with direct signing (works with service account JSON)
             signed_url = blob.generate_signed_url(
                 version="v4",
-                expiration=timedelta(days=7),  # 7 days max expiration allowed by GCS
+                expiration=timedelta(days=7),
                 method="GET"
             )
-            # Signed URL generated successfully
+            logger.info("Generated signed URL using direct blob signing")
             return signed_url
-        except Exception as sign_error:
-            logger.error(f"Failed to generate signed URL: {sign_error}")
-            logger.error(f"Error type: {type(sign_error).__name__}")
-            logger.error(f"This usually means missing service account key file or permissions")
             
-            # No fallback - signed URL is required
+        except Exception as direct_error:
+            logger.warning(f"Direct signing failed: {direct_error}")
+            
+            # Try using IAM Credentials API (works in Cloud Run with service account)
+            try:
+                return self._generate_signed_url_with_iam(blob)
+            except Exception as iam_error:
+                logger.error(f"IAM signing also failed: {iam_error}")
+                return None
+    
+    def _generate_signed_url_with_iam(self, blob) -> Optional[str]:
+        """
+        Generate signed URL using IAM Service Account Credentials API
+        This works in Cloud Run without needing private key files
+        """
+        try:
+            from google.auth import default
+            from google.auth.transport import requests
+            from google.cloud import iam_credentials
+            from datetime import timedelta, datetime
+            import base64
+            import hashlib
+            from urllib.parse import quote
+            
+            # Get current credentials and project
+            credentials, project_id = default()
+            
+            # Get service account email
+            service_account = f"dashboard-scraper@{project_id}.iam.gserviceaccount.com"
+            
+            # Create IAM Credentials client
+            iam_client = iam_credentials_v1.IAMCredentialsServiceClient(credentials=credentials)
+            
+            # Prepare the string to sign
+            expiration = datetime.utcnow() + timedelta(days=7)
+            expiration_timestamp = int(expiration.timestamp())
+            
+            # Build the canonical request
+            algorithm = "GOOG4-RSA-SHA256"
+            credential_scope = f"{expiration.strftime('%Y%m%d')}/{BUCKET_REGION}/storage/goog4_request"
+            credential = f"{service_account}/{credential_scope}"
+            
+            # Build query parameters
+            query_params = {
+                'X-Goog-Algorithm': algorithm,
+                'X-Goog-Credential': credential,
+                'X-Goog-Date': expiration.strftime('%Y%m%dT%H%M%SZ'),
+                'X-Goog-Expires': '604800',  # 7 days in seconds
+                'X-Goog-SignedHeaders': 'host'
+            }
+            
+            # Build canonical request
+            canonical_uri = f"/{blob.name}"
+            canonical_query_string = "&".join([f"{k}={quote(str(v), safe='')}" for k, v in sorted(query_params.items())])
+            canonical_headers = f"host:{blob.bucket.name}.storage.googleapis.com\n"
+            signed_headers = "host"
+            payload_hash = "UNSIGNED-PAYLOAD"
+            
+            canonical_request = f"GET\n{canonical_uri}\n{canonical_query_string}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+            
+            # Create string to sign
+            string_to_sign = f"{algorithm}\n{query_params['X-Goog-Date']}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode()).hexdigest()}"
+            
+            # Sign using IAM API
+            request = iam_credentials_v1.SignBlobRequest(
+                name=f"projects/-/serviceAccounts/{service_account}",
+                payload=string_to_sign.encode('utf-8')
+            )
+            
+            response = iam_client.sign_blob(request=request)
+            signature = base64.b64encode(response.signed_blob).decode('utf-8')
+            
+            # Build final URL
+            query_params['X-Goog-Signature'] = signature
+            query_string = "&".join([f"{k}={quote(str(v), safe='')}" for k, v in query_params.items()])
+            
+            signed_url = f"https://storage.googleapis.com/{BUCKET_NAME}/{blob.name}?{query_string}"
+            
+            logger.info("Generated signed URL using IAM Credentials API")
+            return signed_url
+            
+        except Exception as e:
+            logger.error(f"Failed to generate signed URL with IAM API: {e}")
             return None
     
     def delete_image(self, gcs_url: str) -> bool:

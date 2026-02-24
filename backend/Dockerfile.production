@@ -4,7 +4,8 @@ FROM python:3.11-slim
 # Variables de entorno para Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8080
+    PORT=8080 \
+    GOOGLE_APPLICATION_CREDENTIALS=/app/gcs-credentials.json
 
 WORKDIR /app
 
