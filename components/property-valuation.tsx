@@ -1844,7 +1844,7 @@ export function PropertyValuation() {
           
           const planData = {
             // Configuración del Programa - buscar en todas las secciones
-            programa: (configPrograma.programa === 'Plan de Pagos' || flujoInterno.programa === 'Plan de Pagos') ? undefined : (configPrograma.programa || flujoInterno.programa || undefined),  // undefined para mostrar placeholder
+            programa: (configPrograma.programa === 'Plan de Pagos' || flujoInterno.programa === 'Plan de Pagos') ? '' : (configPrograma.programa || flujoInterno.programa || ''),  // empty string en lugar de undefined
             valor_lanzamiento: (configPrograma.valor_lanzamiento || flujoInterno.valor_lanzamiento || 'descuento') as 'descuento' | 'comercial',
             tipo_programa: (configPrograma.tipo_programa || flujoInterno.tipo_programa || 'gradiente') as 'gradiente' | 'lineal',
             tipo_vivienda: (configPrograma.tipo_vivienda || flujoInterno.tipo_vivienda || 'usada') as 'usada' | 'nueva',
@@ -1852,12 +1852,12 @@ export function PropertyValuation() {
             alistamiento_acabados: ((configPrograma.alistamiento_acabados || flujoInterno.con_alistamiento || flujoInterno.alistamiento_acabados || 'No').toString().toLowerCase() === 'si' ? 'Si' : 'No') as 'Si' | 'No',
             financiacion_gastos: ((configPrograma.financiacion_gastos || flujoInterno.con_financiacion_gastos || flujoInterno.financiacion_gastos || 'Si').toString().toLowerCase() === 'si' ? 'Si' : 'No') as 'Si' | 'No',
             // Flujo Toperty Interno - usar datos existentes
-            area: flujoInterno.area || selectedValuation.area.toString(),
-            commercial_value: flujoInterno.commercial_value || '',
-            average_purchase_value: flujoInterno.average_purchase_value || '',
-            asking_price: flujoInterno.asking_price || '',
-            user_down_payment: flujoInterno.user_down_payment || '',
-            program_months: flujoInterno.program_months || '',
+            area: flujoInterno.area?.toString() || selectedValuation.area?.toString() || '',
+            commercial_value: flujoInterno.commercial_value?.toString() || '',
+            average_purchase_value: flujoInterno.average_purchase_value?.toString() || '',
+            asking_price: flujoInterno.asking_price?.toString() || '',
+            user_down_payment: flujoInterno.user_down_payment?.toString() || '',
+            program_months: flujoInterno.program_months?.toString() || '',
             // Limpiar símbolo % si viene del backend
             potential_down_payment: flujoInterno.potential_down_payment ? 
               flujoInterno.potential_down_payment.toString().replace('%', '').trim() : '',
@@ -1866,18 +1866,18 @@ export function PropertyValuation() {
             dupla_bank_rate: flujoInterno.dupla_bank_rate ? 
               flujoInterno.dupla_bank_rate.toString().replace('%', '').trim() : '',
             // Para Envío Usuario - usar datos existentes
-            client_name: paraUsuario.client_name || '',
-            address: paraUsuario.address || '',
-            city: paraUsuario.city || '',
-            country: paraUsuario.country || 'Colombia',
-            construction_year: paraUsuario.construction_year || '',
-            stratum: paraUsuario.stratum || selectedValuation.stratum?.toString() || '',
-            apartment_type: paraUsuario.apartment_type || '',
-            private_parking: paraUsuario.private_parking || selectedValuation.garages?.toString() || '',
+            client_name: paraUsuario.client_name?.toString() || '',
+            address: paraUsuario.address?.toString() || '',
+            city: paraUsuario.city?.toString() || '',
+            country: paraUsuario.country?.toString() || 'Colombia',
+            construction_year: paraUsuario.construction_year?.toString() || '',
+            stratum: paraUsuario.stratum?.toString() || selectedValuation.stratum?.toString() || '',
+            apartment_type: paraUsuario.apartment_type?.toString() || '',
+            private_parking: paraUsuario.private_parking?.toString() || selectedValuation.garages?.toString() || '',
             // Co-aplicante
-            client_id: paraUsuario.client_id || '',
-            co_applicant_name: paraUsuario.co_applicant_name || '',
-            co_applicant_id: paraUsuario.co_applicant_id || ''
+            client_id: paraUsuario.client_id?.toString() || '',
+            co_applicant_name: paraUsuario.co_applicant_name?.toString() || '',
+            co_applicant_id: paraUsuario.co_applicant_id?.toString() || ''
           }
           
           setPaymentPlanData(planData)

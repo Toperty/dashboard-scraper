@@ -212,7 +212,7 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 # nombre_usuario: Prioridad 1: dashboard.client_name (Excel), 2: request.investor_name, 3: "Inversionista"
                 "nombre_usuario": (dashboard.client_name if dashboard else None) or request.investor_name or "Inversionista",
                 "descripcion": valuation.description or "Sin descripción",
-                "direccion": valuation.valuation_name,
+                "direccion": "",  # Se llenará desde el dashboard si existe
                 
                 # Información detallada de la propiedad (convertir a string para asegurar que se envían)
                 "tipo_propiedad": get_property_type_text(valuation.property_type),
@@ -221,7 +221,7 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 "banos": str(valuation.baths) if valuation.baths else "0",
                 "parqueadero": str(valuation.garages) if valuation.garages else "0",
                 "estrato": str(valuation.stratum) if valuation.stratum else "0",
-                "antiguedad": str(valuation.antiquity) if valuation.antiquity is not None else "N/A",
+                "antiguedad": "N/A",  # Se llenará con el año de construcción desde el dashboard
                 "piso": str(valuation.floor) if valuation.floor is not None else "N/A",
                 
                 # Información del inquilino (si existe)
@@ -239,8 +239,20 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 flujo_interno = dashboard.sheet_data.get('flujo_interno', {})
                 resumen = dashboard.sheet_data.get('resumen', {})
                 investor_cash_flow = dashboard.sheet_data.get('investor_cash_flow', {})
+                para_usuario = dashboard.sheet_data.get('para_usuario', {})
                 
                 # SOBRESCRIBIR datos de la propiedad con los del sheet si existen (son más actualizados)
+                # Prioridad para dirección: 1. para_usuario, 2. resumen, 3. flujo_interno, 4. valuation_name
+                if para_usuario.get('address'):
+                    presentation_data["direccion"] = str(para_usuario.get('address'))
+                elif resumen.get('direccion'):
+                    presentation_data["direccion"] = str(resumen.get('direccion'))
+                elif flujo_interno.get('direccion'):
+                    presentation_data["direccion"] = str(flujo_interno.get('direccion'))
+                else:
+                    # Si no hay dirección en el dashboard, usar el nombre de la valuación como fallback
+                    presentation_data["direccion"] = valuation.valuation_name
+                    
                 if resumen.get('area_construida'):
                     presentation_data["area"] = str(resumen.get('area_construida'))
                 if resumen.get('habitaciones'):
@@ -248,20 +260,15 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 if resumen.get('parqueadero'):
                     presentation_data["parqueadero"] = str(resumen.get('parqueadero'))
                 if resumen.get('ano_construccion'):
-                    # Calcular antigüedad desde año de construcción
-                    try:
-                        ano = int(resumen.get('ano_construccion'))
-                        antiguedad = 2026 - ano  # Año actual
-                        presentation_data["antiguedad"] = str(antiguedad)
-                    except:
-                        pass
+                    # Enviar el AÑO DE CONSTRUCCIÓN directamente, no la antigüedad
+                    presentation_data["antiguedad"] = str(resumen.get('ano_construccion'))
                 
                 # PRIORIDAD: Usar datos de 'resumen' si existen, son los correctos del dashboard de inversionista
                 # Valores financieros principales - primero intentar desde resumen
                 commercial_value = clean_currency(resumen.get('valor_comercial_toperty', 0)) or clean_currency(flujo_interno.get('commercial_value', 0))
                 purchase_price = clean_currency(resumen.get('valor_compra', 0)) or clean_currency(flujo_interno.get('average_purchase_value', 0))
                 user_down_payment = clean_currency(resumen.get('cuota_inicial_usuario', 0)) or clean_currency(flujo_interno.get('user_down_payment', 0))
-                closing_costs = clean_currency(resumen.get('gastos_cierre', 0)) or (purchase_price * 0.0323 if purchase_price > 0 else 0)
+                closing_costs = clean_currency(resumen.get('gastos_cierre', 0)) 
                 total_investment = clean_currency(resumen.get('monto_total_inversion', 0)) or (purchase_price + closing_costs - user_down_payment)
                 
                 # Calcular descuento

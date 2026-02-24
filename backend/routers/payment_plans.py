@@ -264,6 +264,37 @@ async def get_dashboard_data(valuation_name: str):
         }
 
 
+def process_percentage_values(data: dict) -> dict:
+    """
+    Procesa valores de porcentaje que vienen como decimales (0.17) y los convierte a porcentajes (17)
+    """
+    if not isinstance(data, dict):
+        return data
+    
+    processed = {}
+    percentage_fields = ['tir', 'retornos_estimados', 'cash_on_cash_yield', 'descuento', 'bank_mortgage_rate', 
+                        'dupla_bank_rate', 'projected_roi', 'inflacion_anual', 'inflacion_mensual', 
+                        'tasa_valorizacion_usuario', 'estimated_return']
+    
+    for key, value in data.items():
+        if isinstance(value, dict):
+            # Recursivamente procesar diccionarios anidados
+            processed[key] = process_percentage_values(value)
+        elif key in percentage_fields and value is not None:
+            # Si es un campo de porcentaje y el valor es menor a 1, multiplicar por 100
+            try:
+                num_value = float(value) if isinstance(value, str) else value
+                if 0 < num_value < 1:
+                    processed[key] = num_value * 100
+                else:
+                    processed[key] = num_value
+            except (ValueError, TypeError):
+                processed[key] = value
+        else:
+            processed[key] = value
+    
+    return processed
+
 async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full", t: Optional[str] = Query(None)):
     """Get payment plan dashboard by access token"""
     from models.payment_plan_dashboard import PaymentPlanDashboard
@@ -313,7 +344,9 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
                                 if response.status == 200:
                                     result = await response.json()
                                     if result.get('success'):
-                                        dashboard.sheet_data = result.get('data', {})
+                                        # Procesar porcentajes antes de guardar
+                                        raw_data = result.get('data', {})
+                                        dashboard.sheet_data = process_percentage_values(raw_data)
                                         dashboard.last_sync_at = datetime.utcnow()
                                         break  # Success, exit retry loop
                     except asyncio.TimeoutError:
@@ -393,7 +426,7 @@ async def sync_dashboard_data(access_token: str):
             raise HTTPException(status_code=500, detail="Apps Script URL not configured")
         
         try:
-            response = requests.get(f"{apps_script_url}?sheetId={dashboard.sheet_id}&type=full")
+            response = requests.get(f"{apps_script_url}?sheetId={dashboard.sheet_id}")
             if response.status_code != 200:
                 raise HTTPException(status_code=500, detail="Failed to connect to Google Sheets")
             

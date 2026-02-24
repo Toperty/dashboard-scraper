@@ -339,15 +339,56 @@ async def get_financial_data_from_dashboard(valuation_id: int):
                 )
             ).first()
             
-            if not dashboard or not dashboard.sheet_data:
+            if not dashboard:
+                return {
+                    "success": True,
+                    "data": {
+                        "purchase_price": 0,
+                        "closing_costs": 0,
+                        "user_down_payment": 0,
+                        "total_investment": 0
+                    },
+                    "source": "calculated"
+                }
+            
+            # Sincronizar con Google Apps Script usando type=investor para obtener datos específicos
+            import aiohttp
+            import os
+            from datetime import datetime, timedelta
+            
+            should_sync = True  # Siempre sincronizar para obtener datos de inversionista actualizados
+            logger.info(f"Attempting to sync dashboard {dashboard.id} with sheet_id: {dashboard.sheet_id}")
+            
+            if should_sync and dashboard.sheet_id:
+                apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
+                if apps_script_url:
+                    try:
+                        async with aiohttp.ClientSession() as http_session:
+                            async with http_session.get(
+                                f"{apps_script_url}?sheetId={dashboard.sheet_id}",
+                                timeout=aiohttp.ClientTimeout(total=30)
+                            ) as response:
+                                if response.status == 200:
+                                    result = await response.json()
+                                    if result.get('success'):
+                                        # Actualizar sheet_data con datos específicos de inversionista
+                                        dashboard.sheet_data = result.get('data', {})
+                                        dashboard.last_sync_at = datetime.utcnow()
+                                        session.add(dashboard)
+                                        session.commit()
+                                        logger.info(f"Dashboard synced with investor data for {valuation.valuation_name}")
+                    except Exception as sync_error:
+                        logger.warning(f"Could not sync dashboard with investor data: {sync_error}")
+            
+            if not dashboard.sheet_data:
                 # Si no hay dashboard, usar valores por defecto del avalúo
                 return {
                     "success": True,
                     "data": {
-                        "purchase_price": valuation.final_price or 0,
-                        "closing_costs": (valuation.final_price or 0) * 0.0323,  # 3.23% basado en datos reales
-                        "user_down_payment": (valuation.final_price or 0) * 0.10,  # 10% típico
-                        "total_investment": 0  # Se calculará en frontend
+                        "purchase_price": 0,
+                        "closing_costs": 0,
+                        "user_down_payment": 0,
+                        "total_investment": 0
                     },
                     "source": "calculated"
                 }
@@ -356,14 +397,23 @@ async def get_financial_data_from_dashboard(valuation_id: int):
             flujo_interno = dashboard.sheet_data.get('flujo_interno', {})
             resumen = dashboard.sheet_data.get('resumen', {})
             
+            # Obtener datos del dashboard después de la sincronización
+            logger.info(f"Available sheet keys after sync: {list(dashboard.sheet_data.keys()) if dashboard.sheet_data else 'None'}")
+            if dashboard.sheet_data and 'resumen' in dashboard.sheet_data:
+                resumen_data = dashboard.sheet_data['resumen']
+                logger.info(f"Resumen sheet keys: {list(resumen_data.keys()) if isinstance(resumen_data, dict) else 'Not a dict'}")
+                if isinstance(resumen_data, dict) and 'gastos_cierre' in resumen_data:
+                    logger.info(f"gastos_cierre value: {resumen_data['gastos_cierre']} (type: {type(resumen_data['gastos_cierre'])})")
+            
             # Función auxiliar para limpiar valores monetarios
-            def clean_currency(value_str: str) -> float:
+            def clean_currency(value_str) -> float:  # Removed type hint to allow any type
                 if not value_str:
                     return 0
                 clean_str = str(value_str).replace(',', '').replace('$', '').strip()
                 try:
                     return float(clean_str)
                 except ValueError:
+                    logger.warning(f"Could not convert to float: {value_str} (type: {type(value_str)})")
                     return 0
             
             # Obtener valores del dashboard - PRIORIDAD: resumen, fallback: flujo_interno
@@ -371,8 +421,13 @@ async def get_financial_data_from_dashboard(valuation_id: int):
             purchase_price = clean_currency(resumen.get('valor_compra', 0)) or clean_currency(flujo_interno.get('average_purchase_value', 0))
             user_down_payment = clean_currency(resumen.get('cuota_inicial_usuario', 0)) or clean_currency(flujo_interno.get('user_down_payment', 0))
             
-            # Obtener gastos de cierre del dashboard, con fallback al 3.23%
-            closing_costs = clean_currency(resumen.get('gastos_cierre', 0)) or (purchase_price * 0.0323 if purchase_price > 0 else 0)
+            # Obtener gastos de cierre SOLO del dashboard (sin cálculos automáticos)
+            # Verificar primero en resumen, luego en flujo_interno
+            gastos_cierre_raw = resumen.get('gastos_cierre', 0) if resumen else 0
+            if not gastos_cierre_raw:
+                gastos_cierre_raw = flujo_interno.get('gastos_cierre', 0)
+                
+            closing_costs = clean_currency(gastos_cierre_raw)
             
             # Calcular inversión total
             # Monto Total Inversión = Valor de Compra + Gastos de Cierre - Cuota Inicial
@@ -429,8 +484,10 @@ async def get_financial_data_from_dashboard(valuation_id: int):
                 "source": "dashboard"
             }
             
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting financial data: {e}")
+        logger.error(f"Error getting financial data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/data/{valuation_id}")
