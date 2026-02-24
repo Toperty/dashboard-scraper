@@ -352,8 +352,9 @@ async def get_financial_data_from_dashboard(valuation_id: int):
                     "source": "calculated"
                 }
             
-            # Obtener datos del dashboard
+            # Obtener datos del dashboard - usar misma estrategia que investor_presentation.py
             flujo_interno = dashboard.sheet_data.get('flujo_interno', {})
+            resumen = dashboard.sheet_data.get('resumen', {})
             
             # Función auxiliar para limpiar valores monetarios
             def clean_currency(value_str: str) -> float:
@@ -365,14 +366,13 @@ async def get_financial_data_from_dashboard(valuation_id: int):
                 except ValueError:
                     return 0
             
-            # Obtener valores del dashboard
-            commercial_value = clean_currency(flujo_interno.get('commercial_value', 0))
-            purchase_price = clean_currency(flujo_interno.get('average_purchase_value', 0))
-            user_down_payment = clean_currency(flujo_interno.get('user_down_payment', 0))
+            # Obtener valores del dashboard - PRIORIDAD: resumen, fallback: flujo_interno
+            commercial_value = clean_currency(resumen.get('valor_comercial_toperty', 0)) or clean_currency(flujo_interno.get('commercial_value', 0))
+            purchase_price = clean_currency(resumen.get('valor_compra', 0)) or clean_currency(flujo_interno.get('average_purchase_value', 0))
+            user_down_payment = clean_currency(resumen.get('cuota_inicial_usuario', 0)) or clean_currency(flujo_interno.get('user_down_payment', 0))
             
-            # Calcular gastos de cierre
-            # Basado en ejemplo real: $48.132.396 / $1.490.167.072 = 3.23%
-            closing_costs = purchase_price * 0.0323 if purchase_price > 0 else 0
+            # Obtener gastos de cierre del dashboard, con fallback al 3.23%
+            closing_costs = clean_currency(resumen.get('gastos_cierre', 0)) or (purchase_price * 0.0323 if purchase_price > 0 else 0)
             
             # Calcular inversión total
             # Monto Total Inversión = Valor de Compra + Gastos de Cierre - Cuota Inicial
