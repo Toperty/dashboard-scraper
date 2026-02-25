@@ -92,8 +92,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
   // Cargar datos existentes al abrir
   useEffect(() => {
     if (isOpen && valuationId) {
-      loadExistingData()
-      loadFinancialDataFromExcel()
+      loadAllData()
     }
   }, [isOpen, valuationId])
 
@@ -111,58 +110,65 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
     }
   }, [generatingPresentation])
 
-  const loadExistingData = async () => {
+  // Función combinada que carga todos los datos de una vez
+  const loadAllData = async () => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/data/${valuationId}`
-      )
-      if (response.ok) {
-        const data = await response.json()
-        if (data.data.valuation) {
-          setValuationData({
-            description: data.data.valuation.description || "",
-            floor: data.data.valuation.floor || undefined,
-            administration_fee: data.data.valuation.administration_fee || undefined
-          })
+      // Hacer ambos fetches en paralelo
+      const [existingDataResponse, financialDataResponse] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/data/${valuationId}`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/financial-data-fast/${valuationId}`)
+      ])
+
+      let valuationDataToSet: any = {}
+      
+      // Procesar datos existentes (de la BD)
+      if (existingDataResponse.ok) {
+        const existingData = await existingDataResponse.json()
+        
+        // Datos de valuación desde la BD
+        if (existingData.data.valuation) {
+          valuationDataToSet = {
+            description: existingData.data.valuation.description || "",
+            floor: existingData.data.valuation.floor || undefined,
+            administration_fee: existingData.data.valuation.administration_fee || undefined
+          }
         }
-        if (data.data.tenant_info) {
+        
+        // Información del inquilino
+        if (existingData.data.tenant_info) {
           setTenantInfo({
-            monthly_income: data.data.tenant_info.monthly_income || 0,
-            monthly_payment: data.data.tenant_info.monthly_payment || 0,
-            employer: data.data.tenant_info.employer || "",
-            credit_score: data.data.tenant_info.credit_score || 0,
-            score_date: data.data.tenant_info.score_date?.split('T')[0] || new Date().toISOString().split('T')[0]
+            monthly_income: existingData.data.tenant_info.monthly_income || 0,
+            monthly_payment: existingData.data.tenant_info.monthly_payment || 0,
+            employer: existingData.data.tenant_info.employer || "",
+            credit_score: existingData.data.tenant_info.credit_score || 0,
+            score_date: existingData.data.tenant_info.score_date?.split('T')[0] || new Date().toISOString().split('T')[0]
           })
         }
-        if (data.data.images) {
-          // Separar imagen de fachada de las demás
-          const facadeImg = data.data.images.find((img: any) => img.is_facade === true)
-          const regularImages = data.data.images.filter((img: any) => !img.is_facade)
+        
+        // Imágenes
+        if (existingData.data.images) {
+          const facadeImg = existingData.data.images.find((img: any) => img.is_facade === true)
+          const regularImages = existingData.data.images.filter((img: any) => !img.is_facade)
           
-          // Cargar imágenes regulares (máximo 6)
           setImages(regularImages.slice(0, 6).map((img: any) => {
-            // Si es una URL de GCS, usar el proxy
             let displayUrl = img.image_path
             if (img.image_path && (img.image_path.startsWith('http') || img.image_path.startsWith('/uploads'))) {
               displayUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/images/proxy?url=${encodeURIComponent(img.image_path)}`
             }
-            
             return {
               id: img.id,
               caption: img.caption || "",
               preview: displayUrl,
               image_path: img.image_path,
-              uploaded: true  // Las imágenes existentes ya están subidas
+              uploaded: true
             }
           }))
           
-          // Cargar imagen de fachada si existe
           if (facadeImg) {
             let displayUrl = facadeImg.image_path
             if (facadeImg.image_path && (facadeImg.image_path.startsWith('http') || facadeImg.image_path.startsWith('/uploads'))) {
               displayUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/images/proxy?url=${encodeURIComponent(facadeImg.image_path)}`
             }
-            
             setFacadeImage({
               id: facadeImg.id,
               caption: "Fachada",
@@ -173,6 +179,28 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
           }
         }
       }
+      
+      // Procesar datos financieros (del dashboard/Google Sheets)
+      if (financialDataResponse.ok) {
+        const financialData = await financialDataResponse.json()
+        if (financialData.success && financialData.data) {
+          // Combinar con los datos existentes, priorizando los valores de la BD para floor y administration_fee
+          valuationDataToSet = {
+            ...valuationDataToSet,
+            purchase_price: financialData.data.precio_compra || 0,
+            closing_costs: financialData.data.gastos_cierre || 0,
+            user_down_payment: financialData.data.cuota_inicial_usuario || 0,
+            total_investment: financialData.data.total_investment || 0,
+            // Solo usar valores del dashboard si no hay valores en la BD
+            administration_fee: valuationDataToSet.administration_fee || financialData.data.cuota_administracion || 0,
+            floor: valuationDataToSet.floor || financialData.data.piso || 0
+          }
+        }
+      }
+      
+      // Actualizar el estado una sola vez con todos los datos combinados
+      setValuationData(valuationDataToSet)
+      
     } catch (error) {
       console.error("Error loading data:", error)
     }
@@ -412,31 +440,6 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
     }
   }
 
-  // Cargar datos financieros del Excel (solo lectura, no se guardan)
-  const loadFinancialDataFromExcel = async () => {
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/financial-data-fast/${valuationId}`
-      )
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success && data.data) {
-          setValuationData(prev => ({
-            ...prev,
-            purchase_price: data.data.precio_compra || 0,
-            closing_costs: data.data.gastos_cierre || 0,
-            user_down_payment: data.data.cuota_inicial_usuario || 0,
-            total_investment: data.data.total_investment || 0,
-            administration_fee: data.data.cuota_administracion || 0,
-            floor: data.data.piso || 0
-          }))
-        }
-      }
-    } catch (error) {
-      console.warn("No se pudieron cargar datos financieros del dashboard:", error)
-    }
-  }
 
   const handleGeneratePresentation = async () => {
     // Validar que haya imagen de fachada
