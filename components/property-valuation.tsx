@@ -239,6 +239,29 @@ export function PropertyValuation() {
   })
 
   const [generatingApprovalLetter, setGeneratingApprovalLetter] = useState(false)
+  const [generatingUserPdf, setGeneratingUserPdf] = useState(false)
+  
+  // Estado para el modal de generación de PDF usuario
+  const [userPdfModal, setUserPdfModal] = useState<{
+    isOpen: boolean
+    dashboardUrl: string | null
+  }>({
+    isOpen: false,
+    dashboardUrl: null
+  })
+  
+  // Estado para el formulario de PDF usuario
+  const [userPdfForm, setUserPdfForm] = useState({
+    // Cliente Principal
+    fullName: '',
+    idType: '',
+    idNumber: '',
+    // Cliente Secundario (Co-aplicante)
+    hasSecondaryClient: false,
+    secondaryFullName: '',
+    secondaryIdType: '',
+    secondaryIdNumber: ''
+  })
 
   // Función para formatear números con separador de miles
   const formatNumberWithThousands = (value: string) => {
@@ -251,6 +274,54 @@ export function PropertyValuation() {
   // Función para desformatear números (quitar separadores)
   const unformatNumber = (value: string) => {
     return value.replace(/\./g, '')
+  }
+
+  // Función para generar PDF de usuario desde el modal
+  const handleGenerateUserPdf = async () => {
+    if (!userPdfModal.dashboardUrl) return
+
+    setGeneratingUserPdf(true)
+    try {
+      const applicantData = {
+        name: userPdfForm.fullName,
+        id: userPdfForm.idNumber,
+        idType: userPdfForm.idType
+      }
+      
+      const coApplicantData = userPdfForm.hasSecondaryClient ? {
+        name: userPdfForm.secondaryFullName,
+        id: userPdfForm.secondaryIdNumber,
+        idType: userPdfForm.secondaryIdType
+      } : undefined
+
+      await generatePDFFromModal(userPdfModal.dashboardUrl, coApplicantData, applicantData)
+      
+      setSaveMessage({
+        type: 'success',
+        text: '✅ PDF generado exitosamente y descargado.'
+      })
+      setTimeout(() => setSaveMessage(null), 3000)
+      
+      // Cerrar modal
+      setUserPdfModal({ isOpen: false, dashboardUrl: null })
+      setUserPdfForm({
+        fullName: '',
+        idType: '',
+        idNumber: '',
+        hasSecondaryClient: false,
+        secondaryFullName: '',
+        secondaryIdType: '',
+        secondaryIdNumber: ''
+      })
+    } catch (error) {
+      setSaveMessage({
+        type: 'error',
+        text: '❌ Error al generar el PDF. Intente nuevamente.'
+      })
+      setTimeout(() => setSaveMessage(null), 3000)
+    } finally {
+      setGeneratingUserPdf(false)
+    }
   }
 
   // Función para generar carta de aprobación
@@ -367,7 +438,7 @@ export function PropertyValuation() {
   }, [currentValuationsPage, filters])
 
   // Función para generar PDF completo desde el modal
-  const generatePDFFromModal = async (dashboardUrl: string) => {
+  const generatePDFFromModal = async (dashboardUrl: string, coApplicantData?: { name: string, id: string }, applicantData?: { name: string, id: string }) => {
     try {
       setGeneratingPDF(true)
       
@@ -472,16 +543,28 @@ export function PropertyValuation() {
       pdf.setFont('Inter', 'normal')
       pdf.setTextColor(...bodyTextColor)
       
+      // Usar datos del parámetro si se proporcionan, sino los del dashboard
+      const finalApplicantName = applicantData?.name || dashboardData.data?.para_usuario?.client_name || 'N/A'
+      const finalApplicantId = applicantData?.id || dashboardData.data?.para_usuario?.client_id || ''
+      
+      // Usar datos del parámetro si se proporcionan, sino los del dashboard
+      const finalCoApplicantName = coApplicantData?.name || dashboardData.data?.para_usuario?.co_applicant_name
+      const finalCoApplicantId = coApplicantData?.id || dashboardData.data?.para_usuario?.co_applicant_id
+      
+      // Si hay co-aplicante, mostrar ambos nombres y cédulas en las mismas filas
+      const clientDisplayName = finalCoApplicantName 
+        ? `${finalApplicantName} - ${finalCoApplicantName}`
+        : finalApplicantName
+      
+      const clientDisplayId = finalCoApplicantName 
+        ? `${finalApplicantId || '_______________'} - ${finalCoApplicantId || '_______________'}`
+        : finalApplicantId || '_______________'
+      
       const clientInfo = [
-        { label: 'Cliente:', value: `${dashboardData.data?.para_usuario?.client_name || 'N/A'}` },
-        { label: 'C.C.:', value: '' },
+        { label: 'Cliente:', value: clientDisplayName },
+        { label: 'C.C.:', value: clientDisplayId },
         { label: 'Propiedad:', value: `${dashboardData.data?.para_usuario?.address || 'N/A'}` }
       ]
-      
-      if (dashboardData.data?.para_usuario?.co_applicant_name) {
-        clientInfo.push({ label: 'Co-aplicante:', value: `${dashboardData.data.para_usuario.co_applicant_name}` })
-        clientInfo.push({ label: 'C.C. Co-aplicante:', value: '_______________' })
-      }
       
       clientInfo.push(
         { label: 'Fecha de emisión:', value: `${new Date().toLocaleDateString('es-CO')}` },
@@ -519,7 +602,6 @@ export function PropertyValuation() {
       ]
       
       const programInfo2 = [
-        { label: 'Valor a financiar:', value: `${formatCurrency(dashboardData.data?.flujo_interno?.valor_a_financiar)}` },
         { label: 'Duración:', value: `${dashboardData.data?.flujo_interno?.program_months || 'N/A'} meses` },
         { label: 'Ciudad:', value: `${dashboardData.data?.para_usuario?.city || 'N/A'}` },
         { label: 'Estrato:', value: `${dashboardData.data?.para_usuario?.stratum || 'N/A'}` },
@@ -545,6 +627,9 @@ export function PropertyValuation() {
         pdf.text(` ${info.value}`, margin + 95 + labelWidth, yPos)
         yPos += 8
       })
+      
+      // Ajustar yPos para mantener la misma altura que la columna izquierda (5 campos)
+      yPos = startYPos + (5 * 8)
 
       // LÓGICA BASADA EN LA EXISTENCIA DE DATOS:
       // Caso 1: No existen datos de acabados (programas 1 y 7) - No mostrar nada
@@ -1450,64 +1535,104 @@ export function PropertyValuation() {
         yPos = 60
       }
       
-      const clientName = dashboardData.data?.para_usuario?.client_name || 'N/A'
-      const clientId = dashboardData.data?.para_usuario?.client_id || 'N/A'
-      const coApplicantName = dashboardData.data?.para_usuario?.co_applicant_name
-      const coApplicantId = dashboardData.data?.para_usuario?.co_applicant_id
+      // Usar datos del parámetro si se proporcionan, sino los del dashboard
+      const clientName = applicantData?.name || dashboardData.data?.para_usuario?.client_name || 'N/A'
+      const clientId = applicantData?.id || dashboardData.data?.para_usuario?.client_id || ''
       
-      // Layout horizontal para todas las firmas
+      // Usar datos del parámetro si se proporcionan, sino los del dashboard
+      const coApplicantName = coApplicantData?.name || dashboardData.data?.para_usuario?.co_applicant_name
+      const coApplicantId = coApplicantData?.id || dashboardData.data?.para_usuario?.co_applicant_id
+      
+      // Layout condicional para firmas según si hay co-aplicante
+      const hasCoApplicant = !!(coApplicantName)
       const firmaBaseYPos = yPos
-      const columnWidth = (pageWidth - 2 * margin) / 3
-      const leftColumn = margin
-      const centerColumn = margin + columnWidth
-      const rightColumn = margin + 2 * columnWidth
       
-      // Toperty (columna izquierda)
-      pdf.setDrawColor(0, 24, 69) // Color #001845
-      pdf.setLineWidth(0.3)
-      pdf.line(leftColumn, yPos, leftColumn + columnWidth - 10, yPos)
-      yPos += 8
-      pdf.setFontSize(11)
-      pdf.setFont('Inter', 'bold')
-      pdf.text('Toperty S.A.S', leftColumn, yPos)
-      pdf.setFont('Inter', 'normal')
-      yPos += 6
-      pdf.text('Nicolás Maldonado J.', leftColumn, yPos)
-      yPos += 6
-      pdf.text('Representante Legal', leftColumn, yPos)
-      yPos += 6
-      pdf.text('C.C. 1020758219', leftColumn, yPos)
-      
-      // Co-aplicante (columna central)
-      let yPosCenter = firmaBaseYPos
-      if (coApplicantName) {
+      if (hasCoApplicant) {
+        // Layout con 3 columnas (Toperty, Co-aplicante, Cliente)
+        const columnWidth = (pageWidth - 2 * margin) / 3
+        const leftColumn = margin
+        const centerColumn = margin + columnWidth
+        const rightColumn = margin + 2 * columnWidth
+        
+        // Toperty (columna izquierda)
+        pdf.setDrawColor(0, 24, 69) // Color #001845
+        pdf.setLineWidth(0.3)
+        pdf.line(leftColumn, yPos, leftColumn + columnWidth - 10, yPos)
+        yPos += 8
+        pdf.setFontSize(11)
+        pdf.setFont('Inter', 'bold')
+        pdf.text('Toperty S.A.S', leftColumn, yPos)
+        pdf.setFont('Inter', 'normal')
+        yPos += 6
+        pdf.text('Nicolás Maldonado J.', leftColumn, yPos)
+        yPos += 6
+        pdf.text('Representante Legal', leftColumn, yPos)
+        yPos += 6
+        pdf.text('C.C. 1020758219', leftColumn, yPos)
+        
+        // Co-aplicante (columna central)
+        let yPosCenter = firmaBaseYPos
         pdf.setDrawColor(0, 24, 69) // Color #001845
         pdf.setLineWidth(0.3)
         pdf.line(centerColumn, yPosCenter, centerColumn + columnWidth - 10, yPosCenter)
         yPosCenter += 8
         pdf.setFontSize(11)
         pdf.setFont('Inter', 'normal')
-        pdf.text(`Nombre: ${coApplicantName}`, centerColumn, yPosCenter)
+        pdf.text(`${coApplicantName || 'Nombre: '}`, centerColumn, yPosCenter)
         yPosCenter += 6
-        pdf.text('C.C. _______________', centerColumn, yPosCenter)
-      } 
-      
-      // Cliente (columna derecha)
-      let yPosRight = firmaBaseYPos
-      
-      pdf.setDrawColor(0, 24, 69) // Color #001845
-      pdf.setLineWidth(0.3)
-      pdf.line(rightColumn, yPosRight, rightColumn + columnWidth - 10, yPosRight)
-      yPosRight += 8
-      pdf.setFontSize(11)
-      pdf.setFont('Inter', 'normal')
-      pdf.text(`${clientName}`, rightColumn, yPosRight)
-      yPosRight += 6
-      pdf.text('C.C. _______________', rightColumn, yPosRight)
+        pdf.text(`C.C. ${coApplicantId || '_______________'}`, centerColumn, yPosCenter)
+         
+        // Cliente (columna derecha)
+        let yPosRight = firmaBaseYPos
+        pdf.setDrawColor(0, 24, 69) // Color #001845
+        pdf.setLineWidth(0.3)
+        pdf.line(rightColumn, yPosRight, rightColumn + columnWidth - 10, yPosRight)
+        yPosRight += 8
+        pdf.setFontSize(11)
+        pdf.setFont('Inter', 'normal')
+        pdf.text(`${clientName}`, rightColumn, yPosRight)
+        yPosRight += 6
+        pdf.text(`C.C. ${clientId || '_______________'}`, rightColumn, yPosRight)
 
-      
-      // Asegurar que yPos sea el mayor de todas las columnas
-      yPos = Math.max(yPos, yPosCenter, yPosRight) + 15
+        // Asegurar que yPos sea el mayor de todas las columnas
+        yPos = Math.max(yPos, yPosCenter, yPosRight) + 15
+      } else {
+        // Layout con 2 columnas (Toperty, Cliente)
+        const columnWidth = (pageWidth - 2 * margin) / 2
+        const leftColumn = margin
+        const rightColumn = margin + columnWidth
+        
+        // Toperty (columna izquierda)
+        pdf.setDrawColor(0, 24, 69) // Color #001845
+        pdf.setLineWidth(0.3)
+        pdf.line(leftColumn, yPos, leftColumn + columnWidth - 10, yPos)
+        yPos += 8
+        pdf.setFontSize(11)
+        pdf.setFont('Inter', 'bold')
+        pdf.text('Toperty S.A.S', leftColumn, yPos)
+        pdf.setFont('Inter', 'normal')
+        yPos += 6
+        pdf.text('Nicolás Maldonado J.', leftColumn, yPos)
+        yPos += 6
+        pdf.text('Representante Legal', leftColumn, yPos)
+        yPos += 6
+        pdf.text('C.C. 1020758219', leftColumn, yPos)
+        
+        // Cliente (columna derecha)
+        let yPosRight = firmaBaseYPos
+        pdf.setDrawColor(0, 24, 69) // Color #001845
+        pdf.setLineWidth(0.3)
+        pdf.line(rightColumn, yPosRight, rightColumn + columnWidth - 10, yPosRight)
+        yPosRight += 8
+        pdf.setFontSize(11)
+        pdf.setFont('Inter', 'normal')
+        pdf.text(`${clientName}`, rightColumn, yPosRight)
+        yPosRight += 6
+        pdf.text(`C.C. ${clientId || '_______________'}`, rightColumn, yPosRight)
+
+        // Asegurar que yPos sea el mayor de ambas columnas
+        yPos = Math.max(yPos, yPosRight) + 15
+      }
       
       // Agregar footers a todas las páginas
       const totalPages = pdf.getNumberOfPages()
@@ -1860,11 +1985,17 @@ export function PropertyValuation() {
             program_months: flujoInterno.program_months?.toString() || '',
             // Limpiar símbolo % si viene del backend
             potential_down_payment: flujoInterno.potential_down_payment ? 
-              flujoInterno.potential_down_payment.toString().replace('%', '').trim() : '',
+              (parseFloat(flujoInterno.potential_down_payment.toString().replace('%', '')) < 1 ? 
+                (parseFloat(flujoInterno.potential_down_payment.toString().replace('%', '')) * 100).toString() : 
+                flujoInterno.potential_down_payment.toString().replace('%', '').trim()) : '',
             bank_mortgage_rate: flujoInterno.bank_mortgage_rate ? 
-              flujoInterno.bank_mortgage_rate.toString().replace('%', '').trim() : '',
+              (parseFloat(flujoInterno.bank_mortgage_rate.toString().replace('%', '')) < 1 ? 
+                (parseFloat(flujoInterno.bank_mortgage_rate.toString().replace('%', '')) * 100).toString() : 
+                flujoInterno.bank_mortgage_rate.toString().replace('%', '').trim()) : '',
             dupla_bank_rate: flujoInterno.dupla_bank_rate ? 
-              flujoInterno.dupla_bank_rate.toString().replace('%', '').trim() : '',
+              (parseFloat(flujoInterno.dupla_bank_rate.toString().replace('%', '')) < 1 ? 
+                (parseFloat(flujoInterno.dupla_bank_rate.toString().replace('%', '')) * 100).toString() : 
+                flujoInterno.dupla_bank_rate.toString().replace('%', '').trim()) : '',
             // Para Envío Usuario - usar datos existentes
             client_name: paraUsuario.client_name?.toString() || '',
             address: paraUsuario.address?.toString() || '',
@@ -4040,7 +4171,6 @@ export function PropertyValuation() {
                     required
                   />
                 </div>
-
               </div>
             </div>
             
@@ -4139,23 +4269,51 @@ export function PropertyValuation() {
               {dashboardActionsModal.dashboardUrl && (
                 <button
                   onClick={() => {
-                    setGeneratingPDFInModal(true)
-                    generatePDFFromModal(dashboardActionsModal.dashboardUrl!)
-                      .then(() => {
-                        setSaveMessage({
-                          type: 'success',
-                          text: '✅ PDF generado exitosamente y descargado.'
+                    // Abrir modal inmediatamente
+                    setUserPdfModal({ 
+                      isOpen: true, 
+                      dashboardUrl: dashboardActionsModal.dashboardUrl! 
+                    })
+                    
+                    // Inicializar formulario con campos vacíos
+                    setUserPdfForm({
+                      fullName: '',
+                      idType: 'CC',
+                      idNumber: '',
+                      hasSecondaryClient: false,
+                      secondaryFullName: '',
+                      secondaryIdType: 'CC',
+                      secondaryIdNumber: ''
+                    })
+                    
+                    // Fetch rápido solo para client_name con timeout corto
+                    const loadClientName = async () => {
+                      try {
+                        const controller = new AbortController()
+                        const timeoutId = setTimeout(() => controller.abort(), 3000) // 3 segundos máximo
+                        
+                        const token = dashboardActionsModal.dashboardUrl!.split('/').pop()?.split('?')[0]
+                        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/client-name`, {
+                          signal: controller.signal
                         })
-                        setTimeout(() => setSaveMessage(null), 3000)
-                      })
-                      .catch(() => {
-                        setSaveMessage({
-                          type: 'error',
-                          text: '❌ Error al generar el PDF. Intente nuevamente.'
-                        })
-                        setTimeout(() => setSaveMessage(null), 5000)
-                      })
-                      .finally(() => setGeneratingPDFInModal(false))
+                        
+                        clearTimeout(timeoutId)
+                        
+                        if (response.ok) {
+                          const data = await response.json()
+                          if (data.client_name) {
+                            setUserPdfForm(prev => ({
+                              ...prev,
+                              fullName: data.client_name
+                            }))
+                          }
+                        }
+                      } catch (error) {
+                        // Si tarda más de 3 segundos o falla, no hacer nada
+                      }
+                    }
+                    
+                    loadClientName()
                   }}
                   disabled={generatingPDFInModal}
                   className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -4175,7 +4333,39 @@ export function PropertyValuation() {
                 </button>
               )}
               <button
-                onClick={() => setApprovalLetterModal({ isOpen: true, paymentPlanId: dashboardActionsModal.paymentPlanId || null })}
+                onClick={() => {
+                  // Abrir modal inmediatamente
+                  setApprovalLetterModal({ isOpen: true, paymentPlanId: dashboardActionsModal.paymentPlanId || null })
+                  
+                  // Cargar client_name en background
+                  const loadClientName = async () => {
+                    try {
+                      const controller = new AbortController()
+                      const timeoutId = setTimeout(() => controller.abort(), 3000)
+                      
+                      const token = dashboardActionsModal.dashboardUrl!.split('/').pop()?.split('?')[0]
+                      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/client-name`, {
+                        signal: controller.signal
+                      })
+                      
+                      clearTimeout(timeoutId)
+                      
+                      if (response.ok) {
+                        const data = await response.json()
+                        if (data.client_name) {
+                          setApprovalLetterForm(prev => ({
+                            ...prev,
+                            fullName: data.client_name
+                          }))
+                        }
+                      }
+                    } catch (error) {
+                      // Si falla, mantener vacío
+                    }
+                  }
+                  
+                  loadClientName()
+                }}
                 disabled={generatingPDFInModal}
                 className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-green-50 hover:bg-green-100 text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -4507,6 +4697,194 @@ export function PropertyValuation() {
               onClick={() => setShowFavoriteReplace(null)}
             >
               Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para generar PDF de Usuario con Co-aplicante */}
+      <Dialog open={userPdfModal.isOpen} onOpenChange={(open) => {
+        if (!open && !generatingUserPdf) {
+          setUserPdfModal({ isOpen: false, dashboardUrl: null })
+          setUserPdfForm({
+            fullName: '',
+            idType: '',
+            idNumber: '',
+            hasSecondaryClient: false,
+            secondaryFullName: '',
+            secondaryIdType: '',
+            secondaryIdNumber: ''
+          })
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          {/* Overlay de loading para generar PDF */}
+          {generatingUserPdf && (
+            <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50 rounded-lg">
+              <div className="flex flex-col items-center gap-3">
+                <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-sm font-medium text-gray-700">Generando PDF...</span>
+              </div>
+            </div>
+          )}
+          
+          <DialogHeader>
+            <DialogTitle>Generar PDF de Usuario</DialogTitle>
+            <DialogDescription>
+              Configure las opciones para generar el PDF del plan de pagos del usuario
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Cliente Principal */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Cliente Principal</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="userPdf_fullName">Nombre Completo *</Label>
+                  <Input
+                    id="userPdf_fullName"
+                    value={userPdfForm.fullName}
+                    onChange={(e) => setUserPdfForm(prev => ({ ...prev, fullName: e.target.value }))}
+                    placeholder="Nombre completo del cliente"
+                    required
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="userPdf_idType">Tipo de Identificación *</Label>
+                    <Select 
+                      value={userPdfForm.idType} 
+                      onValueChange={(value) => setUserPdfForm(prev => ({ ...prev, idType: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
+                        <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
+                        <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
+                        <SelectItem value="PA">Pasaporte</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="userPdf_idNumber">Número de Identificación *</Label>
+                    <Input
+                      id="userPdf_idNumber"
+                      value={userPdfForm.idNumber}
+                      onChange={(e) => setUserPdfForm(prev => ({ ...prev, idNumber: e.target.value }))}
+                      placeholder="Número de identificación"
+                      required
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Cliente Secundario */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={userPdfForm.hasSecondaryClient}
+                    onChange={(e) => setUserPdfForm(prev => ({ 
+                      ...prev, 
+                      hasSecondaryClient: e.target.checked,
+                      secondaryFullName: e.target.checked ? prev.secondaryFullName : '',
+                      secondaryIdType: e.target.checked ? prev.secondaryIdType : '',
+                      secondaryIdNumber: e.target.checked ? prev.secondaryIdNumber : ''
+                    }))}
+                    className="rounded border-gray-300"
+                  />
+                  Cliente Secundario
+                </CardTitle>
+                <CardDescription>
+                  Marque la casilla si existe un cliente secundario
+                </CardDescription>
+              </CardHeader>
+              
+              {userPdfForm.hasSecondaryClient && (
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="userPdf_secondaryFullName">Nombre Completo *</Label>
+                    <Input
+                      id="userPdf_secondaryFullName"
+                      value={userPdfForm.secondaryFullName}
+                      onChange={(e) => setUserPdfForm(prev => ({ ...prev, secondaryFullName: e.target.value }))}
+                      placeholder="Nombre completo del cliente secundario"
+                      required={userPdfForm.hasSecondaryClient}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="userPdf_secondaryIdType">Tipo de Identificación *</Label>
+                      <Select 
+                        value={userPdfForm.secondaryIdType} 
+                        onValueChange={(value) => setUserPdfForm(prev => ({ ...prev, secondaryIdType: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
+                          <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
+                          <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
+                          <SelectItem value="PA">Pasaporte</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="userPdf_secondaryIdNumber">Número de Identificación *</Label>
+                      <Input
+                        id="userPdf_secondaryIdNumber"
+                        value={userPdfForm.secondaryIdNumber}
+                        onChange={(e) => setUserPdfForm(prev => ({ ...prev, secondaryIdNumber: e.target.value }))}
+                        placeholder="Número de identificación"
+                        required={userPdfForm.hasSecondaryClient}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setUserPdfModal({ isOpen: false, dashboardUrl: null })}
+              disabled={generatingUserPdf}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleGenerateUserPdf}
+              disabled={generatingUserPdf || 
+                       !userPdfForm.fullName || 
+                       !userPdfForm.idType || 
+                       !userPdfForm.idNumber ||
+                       (userPdfForm.hasSecondaryClient && (!userPdfForm.secondaryFullName || !userPdfForm.secondaryIdType || !userPdfForm.secondaryIdNumber))}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {generatingUserPdf ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Generando...
+                </>
+              ) : (
+                'Generar PDF'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

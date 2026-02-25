@@ -567,6 +567,101 @@ async def get_investor_pdf_data(valuation_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/financial-data-fast/{valuation_id}")
+async def get_financial_data_fast(valuation_id: int):
+    """Endpoint optimizado que solo devuelve los datos financieros básicos para inversionistas"""
+    try:
+        with Session(engine) as session:
+            valuation = session.get(Valuation, valuation_id)
+            if not valuation:
+                raise HTTPException(status_code=404, detail="Valuación no encontrada")
+            
+            # Buscar el dashboard por valuation_name
+            from models.payment_plan_dashboard import PaymentPlanDashboard
+            dashboard = session.exec(
+                select(PaymentPlanDashboard).where(
+                    PaymentPlanDashboard.valuation_name == valuation.valuation_name
+                )
+            ).first()
+            
+            if dashboard is None:
+                return {
+                    "success": True,
+                    "data": {
+                        "precio_compra": 0,
+                        "gastos_cierre": 0,
+                        "cuota_inicial_usuario": 0,
+                        "cuota_administracion": 0,
+                        "piso": 0,
+                        "descripcion_detallada": "",
+                        "ingresos_mensuales_certificados": 0,
+                        "cuota_mensual_total": 0
+                    }
+                }
+            
+            # Usar la misma lógica del endpoint original pero sin sync
+            if not dashboard.sheet_data:
+                return {
+                    "success": True,
+                    "data": {
+                        "precio_compra": 0,
+                        "gastos_cierre": 0,
+                        "cuota_inicial_usuario": 0,
+                        "cuota_administracion": 0,
+                        "piso": 0,
+                        "descripcion_detallada": "",
+                        "ingresos_mensuales_certificados": 0,
+                        "cuota_mensual_total": 0
+                    }
+                }
+
+            # Obtener datos del dashboard - usar misma estrategia que el endpoint original
+            flujo_interno = dashboard.sheet_data.get('flujo_interno', {})
+            resumen = dashboard.sheet_data.get('resumen', {})
+            
+            # Función auxiliar para limpiar valores monetarios (copiada del endpoint original)
+            def clean_currency(value_str):
+                if not value_str:
+                    return 0
+                clean_str = str(value_str).replace(',', '').replace('$', '').strip()
+                try:
+                    return float(clean_str)
+                except ValueError:
+                    return 0
+            
+            # Obtener gastos de cierre SOLO del dashboard (misma lógica que endpoint original)
+            gastos_cierre_raw = resumen.get('gastos_cierre', 0) if resumen else 0
+            if not gastos_cierre_raw:
+                gastos_cierre_raw = flujo_interno.get('gastos_cierre', 0)
+                
+            gastos_cierre = clean_currency(gastos_cierre_raw)
+            
+            # Obtener otros valores necesarios para el cálculo
+            purchase_price = clean_currency(flujo_interno.get('average_purchase_value', 0))
+            user_down_payment = clean_currency(flujo_interno.get('user_down_payment', 0))
+            
+            # Calcular inversión total (misma fórmula que endpoint original)
+            # Monto Total Inversión = Valor de Compra + Gastos de Cierre - Cuota Inicial
+            total_investment = purchase_price + gastos_cierre - user_down_payment
+            
+            return {
+                "success": True,
+                "data": {
+                    "precio_compra": purchase_price,
+                    "gastos_cierre": gastos_cierre,
+                    "cuota_inicial_usuario": user_down_payment,
+                    "total_investment": total_investment,
+                    "cuota_administracion": dashboard.sheet_data.get('cuota_administracion'),
+                    "piso": dashboard.sheet_data.get('piso'),
+                    "descripcion_detallada": dashboard.sheet_data.get('descripcion_detallada'),
+                    "ingresos_mensuales_certificados": dashboard.sheet_data.get('ingresos_mensuales_certificados'),
+                    "cuota_mensual_total": dashboard.sheet_data.get('cuota_mensual_total')
+                }
+            }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving investor data: {str(e)}")
+
 @router.get("/validate/{valuation_id}")
 async def validate_investor_pdf_data(valuation_id: int):
     """Validar que todos los campos necesarios estén completos para generar el PDF"""

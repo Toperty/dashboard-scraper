@@ -416,7 +416,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
   const loadFinancialDataFromExcel = async () => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/financial-data/${valuationId}`
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/investor-form/financial-data-fast/${valuationId}`
       )
       
       if (response.ok) {
@@ -424,10 +424,12 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
         if (data.success && data.data) {
           setValuationData(prev => ({
             ...prev,
-            purchase_price: data.data.purchase_price || 0,
-            closing_costs: data.data.closing_costs || 0,
-            user_down_payment: data.data.user_down_payment || 0,
-            total_investment: data.data.total_investment || 0
+            purchase_price: data.data.precio_compra || 0,
+            closing_costs: data.data.gastos_cierre || 0,
+            user_down_payment: data.data.cuota_inicial_usuario || 0,
+            total_investment: data.data.total_investment || 0,
+            administration_fee: data.data.cuota_administracion || 0,
+            floor: data.data.piso || 0
           }))
         }
       }
