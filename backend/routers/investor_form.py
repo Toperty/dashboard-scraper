@@ -644,6 +644,10 @@ async def get_financial_data_fast(valuation_id: int):
             # Monto Total Inversión = Valor de Compra + Gastos de Cierre - Cuota Inicial
             total_investment = purchase_price + gastos_cierre - user_down_payment
             
+            # Obtener administration_fee y floor desde la valuación
+            administration_fee = valuation.administration_fee if valuation.administration_fee else resumen.get('cuota_administracion')
+            floor = valuation.floor if valuation.floor else resumen.get('piso')
+            
             return {
                 "success": True,
                 "data": {
@@ -651,8 +655,8 @@ async def get_financial_data_fast(valuation_id: int):
                     "gastos_cierre": gastos_cierre,
                     "cuota_inicial_usuario": user_down_payment,
                     "total_investment": total_investment,
-                    "cuota_administracion": dashboard.sheet_data.get('cuota_administracion'),
-                    "piso": dashboard.sheet_data.get('piso'),
+                    "cuota_administracion": administration_fee,
+                    "piso": floor,
                     "descripcion_detallada": dashboard.sheet_data.get('descripcion_detallada'),
                     "ingresos_mensuales_certificados": dashboard.sheet_data.get('ingresos_mensuales_certificados'),
                     "cuota_mensual_total": dashboard.sheet_data.get('cuota_mensual_total')

@@ -147,10 +147,39 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                         if existing_dashboard:
                             existing_dashboard.sheet_id = sheet_id
                             existing_dashboard.sheet_url = sheet_url
-                            existing_dashboard.sheet_data = sheet_data
+                            existing_dashboard.sheet_data = sheet_data  # Guardar datos básicos primero
                             
                             session.commit()
                             session.refresh(existing_dashboard)
+                            
+                            # Ahora sincronizar para obtener datos completos y sobrescribir
+                            apps_script_reader_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
+                            if apps_script_reader_url and sheet_id:
+                                # Dar un pequeño delay para que Google Sheets procese los cambios
+                                import time
+                                time.sleep(2)  # Esperar 2 segundos para que se calculen las fórmulas
+                                
+                                try:
+                                    print(f"Syncing full data after edit for sheet_id: {sheet_id}")
+                                    sync_response = requests.get(
+                                        f"{apps_script_reader_url}?sheetId={sheet_id}",
+                                        timeout=30
+                                    )
+                                    if sync_response.status_code == 200:
+                                        sync_result = sync_response.json()
+                                        if sync_result.get('success'):
+                                            # Sobrescribir con datos completos
+                                            existing_dashboard.sheet_data = sync_result.get('data', {})
+                                            existing_dashboard.last_sync_at = datetime.utcnow()
+                                            session.commit()
+                                            session.refresh(existing_dashboard)
+                                            print(f"Successfully synced full data after edit - data keys: {list(sync_result.get('data', {}).keys())}")
+                                        else:
+                                            print(f"Sync response not successful: {sync_result}")
+                                    else:
+                                        print(f"Sync response status: {sync_response.status_code}")
+                                except Exception as sync_error:
+                                    print(f"Warning: Could not sync full data after edit: {sync_error}")
                             
                             # Construir URL completa para la respuesta
                             base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
@@ -163,6 +192,7 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                                 message=f'Plan de pagos actualizado exitosamente. Dashboard válido por {existing_dashboard.days_remaining} días.'
                             )
                         else:
+                            # Crear dashboard con datos básicos
                             dashboard = PaymentPlanDashboard(
                                 sheet_id=sheet_id,
                                 sheet_url=sheet_url,
@@ -178,6 +208,35 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             session.add(dashboard)
                             session.commit()
                             session.refresh(dashboard)
+                            
+                            # Ahora sincronizar para obtener datos completos
+                            apps_script_reader_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
+                            if apps_script_reader_url and sheet_id:
+                                # Dar un pequeño delay para que Google Sheets procese las fórmulas
+                                import time
+                                time.sleep(2)  # Esperar 2 segundos
+                                
+                                try:
+                                    print(f"Syncing full data for new sheet_id: {sheet_id}")
+                                    sync_response = requests.get(
+                                        f"{apps_script_reader_url}?sheetId={sheet_id}",
+                                        timeout=30
+                                    )
+                                    if sync_response.status_code == 200:
+                                        sync_result = sync_response.json()
+                                        if sync_result.get('success'):
+                                            # Actualizar con datos completos
+                                            dashboard.sheet_data = sync_result.get('data', {})
+                                            dashboard.last_sync_at = datetime.utcnow()
+                                            session.commit()
+                                            session.refresh(dashboard)
+                                            print(f"Successfully synced full data for new plan - data keys: {list(sync_result.get('data', {}).keys())}")
+                                        else:
+                                            print(f"Sync response not successful: {sync_result}")
+                                    else:
+                                        print(f"Sync response status: {sync_response.status_code}")
+                                except Exception as sync_error:
+                                    print(f"Warning: Could not sync full data for new plan: {sync_error}")
                             
                             # Construir URL completa para la respuesta
                             base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
