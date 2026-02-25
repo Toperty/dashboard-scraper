@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
+// import { Analytics } from "@vercel/analytics/next"  // Temporalmente deshabilitado para pruebas
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AlertProvider } from "@/hooks/use-alert"
 import { ConfirmProvider } from "@/hooks/use-confirm"
@@ -37,7 +37,7 @@ export default function RootLayout({
             </ToastProvider>
           </ConfirmProvider>
         </AlertProvider>
-        <Analytics />
+        {/* <Analytics /> */}  {/* Temporalmente deshabilitado para pruebas */}
       </body>
     </html>
   )
