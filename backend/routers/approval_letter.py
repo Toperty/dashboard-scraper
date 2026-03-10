@@ -3,7 +3,7 @@ Router para generar cartas de aprobación
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import httpx
 import os
 import logging
@@ -14,18 +14,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+class AdditionalClient(BaseModel):
+    """Modelo para clientes adicionales"""
+    fullName: str
+    idType: Optional[str] = None
+    idNumber: Optional[str] = None
+
 class ApprovalLetterRequest(BaseModel):
     # Cliente principal
     full_name: str
-    id_type: str
-    id_number: str
+    id_type: Optional[str] = None
+    id_number: Optional[str] = None
     max_approved_amount: float
     min_initial_payment: float
-    # Cliente secundario (opcional)
-    has_secondary_client: bool = False
-    secondary_full_name: Optional[str] = None
-    secondary_id_type: Optional[str] = None
-    secondary_id_number: Optional[str] = None
+    # Clientes adicionales (hasta 3 más para total de 4)
+    additional_clients: List[AdditionalClient] = []
     # ID del plan de pagos para referencia
     payment_plan_id: Optional[int] = None
 
@@ -59,12 +62,65 @@ async def generate_approval_letter(request: ApprovalLetterRequest):
         
         # Preparar datos para el Apps Script
         # Combinar nombres según la cantidad de clientes
-        if request.has_secondary_client and request.secondary_full_name:
-            # Con dos clientes: "Juan y Sara"
-            primer_nombre = f"{extract_first_name(request.full_name)} y {extract_first_name(request.secondary_full_name)}"
+        all_names = [extract_first_name(request.full_name)]
+        for client in request.additional_clients:
+            if client.fullName:
+                all_names.append(extract_first_name(client.fullName))
+        
+        # Formar el string de nombres: "Juan", "Juan y Sara", "Juan, Sara y Pedro", etc.
+        if len(all_names) == 1:
+            primer_nombre = all_names[0]
+        elif len(all_names) == 2:
+            primer_nombre = f"{all_names[0]} y {all_names[1]}"
         else:
-            # Con un cliente: "Juan"
-            primer_nombre = extract_first_name(request.full_name)
+            primer_nombre = ", ".join(all_names[:-1]) + f" y {all_names[-1]}"
+        
+        # Preparar datos individuales para cada cliente adicional
+        # Cliente 2 (primer adicional - secondary)
+        secondary_data = {}
+        if len(request.additional_clients) > 0 and request.additional_clients[0].fullName:
+            secondary_data = {
+                "secondary_nombre_completo": capitalize_name(request.additional_clients[0].fullName),
+                "secondary_tipo_id": request.additional_clients[0].idType or "",
+                "secondary_numero_id": request.additional_clients[0].idNumber or ""
+            }
+        else:
+            # Si no hay cliente secundario, enviar strings vacíos
+            secondary_data = {
+                "secondary_nombre_completo": "",
+                "secondary_tipo_id": "",
+                "secondary_numero_id": ""
+            }
+        
+        # Cliente 3 (segundo adicional - third)
+        third_data = {}
+        if len(request.additional_clients) > 1 and request.additional_clients[1].fullName:
+            third_data = {
+                "third_nombre_completo": capitalize_name(request.additional_clients[1].fullName),
+                "third_tipo_id": request.additional_clients[1].idType or "",
+                "third_numero_id": request.additional_clients[1].idNumber or ""
+            }
+        else:
+            third_data = {
+                "third_nombre_completo": "",
+                "third_tipo_id": "",
+                "third_numero_id": ""
+            }
+        
+        # Cliente 4 (tercer adicional - fourth)
+        fourth_data = {}
+        if len(request.additional_clients) > 2 and request.additional_clients[2].fullName:
+            fourth_data = {
+                "fourth_nombre_completo": capitalize_name(request.additional_clients[2].fullName),
+                "fourth_tipo_id": request.additional_clients[2].idType or "",
+                "fourth_numero_id": request.additional_clients[2].idNumber or ""
+            }
+        else:
+            fourth_data = {
+                "fourth_nombre_completo": "",
+                "fourth_tipo_id": "",
+                "fourth_numero_id": ""
+            }
         
         script_data = {
             "action": "generate_approval_letter",
@@ -75,14 +131,14 @@ async def generate_approval_letter(request: ApprovalLetterRequest):
                 "cupo_maximo": format_currency(request.max_approved_amount),
                 "cuota_inicial_min": format_currency(request.min_initial_payment),
                 "cuota_cupo": calculate_payment_percentage(request.min_initial_payment, request.max_approved_amount),
-                "tipo_id": request.id_type,
-                "numero_id": request.id_number,
+                "tipo_id": request.id_type or "",
+                "numero_id": request.id_number or "",
                 "nombre_completo": capitalize_name(request.full_name),
-                # Datos del cliente secundario para la firma
-                "has_secondary_client": request.has_secondary_client,
-                "secondary_nombre_completo": capitalize_name(request.secondary_full_name) if request.secondary_full_name else "",
-                "secondary_tipo_id": request.secondary_id_type if request.secondary_id_type else "",
-                "secondary_numero_id": request.secondary_id_number if request.secondary_id_number else "",
+                # Agregar los datos de cada cliente adicional
+                **secondary_data,
+                **third_data,
+                **fourth_data,
+                "total_clients": len(all_names)  # Total de clientes (1 a 4)
             }
         }
         

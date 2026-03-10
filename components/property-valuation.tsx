@@ -231,11 +231,12 @@ export function PropertyValuation() {
     idNumber: '',
     maxApprovedAmount: '',
     minInitialPayment: '',
-    // Cliente secundario (opcional)
-    hasSecondaryClient: false,
-    secondaryFullName: '',
-    secondaryIdType: '',
-    secondaryIdNumber: ''
+    // Clientes adicionales (hasta 3 más para total de 4)
+    additionalClients: [] as Array<{
+      fullName: string
+      idType: string
+      idNumber: string
+    }>
   })
 
   const [generatingApprovalLetter, setGeneratingApprovalLetter] = useState(false)
@@ -256,11 +257,12 @@ export function PropertyValuation() {
     fullName: '',
     idType: '',
     idNumber: '',
-    // Cliente Secundario (Co-aplicante)
-    hasSecondaryClient: false,
-    secondaryFullName: '',
-    secondaryIdType: '',
-    secondaryIdNumber: ''
+    // Clientes adicionales (hasta 3 más para total de 4)
+    additionalClients: [] as Array<{
+      fullName: string
+      idType: string
+      idNumber: string
+    }>
   })
 
   // Función para formatear números con separador de miles
@@ -288,13 +290,18 @@ export function PropertyValuation() {
         idType: userPdfForm.idType
       }
       
-      const coApplicantData = userPdfForm.hasSecondaryClient ? {
-        name: userPdfForm.secondaryFullName,
-        id: userPdfForm.secondaryIdNumber,
-        idType: userPdfForm.secondaryIdType
-      } : undefined
+      // Preparar datos de clientes adicionales
+      const additionalClientsData = userPdfForm.additionalClients.map(client => ({
+        name: client.fullName,
+        id: client.idNumber,
+        idType: client.idType
+      }))
 
-      await generatePDFFromModal(userPdfModal.dashboardUrl, coApplicantData, applicantData)
+      await generatePDFFromModalWithMultipleClients(
+        userPdfModal.dashboardUrl, 
+        applicantData, 
+        additionalClientsData
+      )
       
       setSaveMessage({
         type: 'success',
@@ -308,10 +315,7 @@ export function PropertyValuation() {
         fullName: '',
         idType: '',
         idNumber: '',
-        hasSecondaryClient: false,
-        secondaryFullName: '',
-        secondaryIdType: '',
-        secondaryIdNumber: ''
+        additionalClients: []
       })
     } catch (error) {
       setSaveMessage({
@@ -326,7 +330,7 @@ export function PropertyValuation() {
 
   // Función para generar carta de aprobación
   const handleGenerateApprovalLetter = async () => {
-    if (!approvalLetterForm.fullName || !approvalLetterForm.idType || !approvalLetterForm.idNumber || 
+    if (!approvalLetterForm.fullName || 
         !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment) {
       setSaveMessage({
         type: 'error',
@@ -335,14 +339,15 @@ export function PropertyValuation() {
       return
     }
 
-    // Validar cliente secundario si está marcado
-    if (approvalLetterForm.hasSecondaryClient && (!approvalLetterForm.secondaryFullName || 
-        !approvalLetterForm.secondaryIdType || !approvalLetterForm.secondaryIdNumber)) {
-      setSaveMessage({
-        type: 'error',
-        text: 'Por favor complete todos los campos del cliente secundario'
-      })
-      return
+    // Validar solo que los nombres de clientes adicionales no estén vacíos si se agregaron
+    for (const client of approvalLetterForm.additionalClients) {
+      if (!client.fullName || !client.fullName.trim()) {
+        setSaveMessage({
+          type: 'error',
+          text: 'Por favor complete el nombre de todos los clientes adicionales'
+        })
+        return
+      }
     }
 
     setGeneratingApprovalLetter(true)
@@ -358,10 +363,7 @@ export function PropertyValuation() {
             id_number: approvalLetterForm.idNumber,
             max_approved_amount: parseFloat(unformatNumber(approvalLetterForm.maxApprovedAmount)),
             min_initial_payment: parseFloat(unformatNumber(approvalLetterForm.minInitialPayment)),
-            has_secondary_client: approvalLetterForm.hasSecondaryClient,
-            secondary_full_name: approvalLetterForm.hasSecondaryClient ? approvalLetterForm.secondaryFullName : null,
-            secondary_id_type: approvalLetterForm.hasSecondaryClient ? approvalLetterForm.secondaryIdType : null,
-            secondary_id_number: approvalLetterForm.hasSecondaryClient ? approvalLetterForm.secondaryIdNumber : null,
+            additional_clients: approvalLetterForm.additionalClients.filter(c => c.fullName),
             payment_plan_id: approvalLetterModal.paymentPlanId
           })
         }
@@ -384,10 +386,7 @@ export function PropertyValuation() {
             idNumber: '',
             maxApprovedAmount: '',
             minInitialPayment: '',
-            hasSecondaryClient: false,
-            secondaryFullName: '',
-            secondaryIdType: '',
-            secondaryIdNumber: ''
+            additionalClients: []
           })
         } else {
           setSaveMessage({
@@ -438,7 +437,12 @@ export function PropertyValuation() {
   }, [currentValuationsPage, filters])
 
   // Función para generar PDF completo desde el modal
-  const generatePDFFromModal = async (dashboardUrl: string, coApplicantData?: { name: string, id: string }, applicantData?: { name: string, id: string }) => {
+  const generatePDFFromModal = async (
+    dashboardUrl: string, 
+    coApplicantData?: { name: string, id: string }, 
+    applicantData?: { name: string, id: string },
+    additionalClientsData?: Array<{ name: string, id: string }> // Nuevo parámetro para clientes 3 y 4
+  ) => {
     try {
       setGeneratingPDF(true)
       
@@ -551,20 +555,42 @@ export function PropertyValuation() {
       const finalCoApplicantName = coApplicantData?.name || dashboardData.data?.para_usuario?.co_applicant_name
       const finalCoApplicantId = coApplicantData?.id || dashboardData.data?.para_usuario?.co_applicant_id
       
-      // Si hay co-aplicante, mostrar ambos nombres y cédulas en las mismas filas
-      const clientDisplayName = finalCoApplicantName 
-        ? `${finalApplicantName} - ${finalCoApplicantName}`
-        : finalApplicantName
+      // Construir lista de todos los clientes
+      const allClientNames = [finalApplicantName]
+      const allClientIds = [finalApplicantId].filter(id => id) // Solo IDs que existen
       
-      const clientDisplayId = finalCoApplicantName 
-        ? `${finalApplicantId || '_______________'} - ${finalCoApplicantId || '_______________'}`
-        : finalApplicantId || '_______________'
+      if (finalCoApplicantName) {
+        allClientNames.push(finalCoApplicantName)
+        if (finalCoApplicantId) allClientIds.push(finalCoApplicantId)
+      }
       
+      // Agregar clientes adicionales si existen (3 y 4)
+      if (additionalClientsData && additionalClientsData.length > 0) {
+        additionalClientsData.forEach(client => {
+          if (client.name) {
+            allClientNames.push(client.name)
+            if (client.id) allClientIds.push(client.id)
+          }
+        })
+      }
+      
+      // Construir el string de nombres
+      const clientDisplayName = allClientNames.join(' - ')
+      
+      // Construir info del cliente condicionalmente
       const clientInfo = [
-        { label: 'Cliente:', value: clientDisplayName },
-        { label: 'C.C.:', value: clientDisplayId },
-        { label: 'Propiedad:', value: `${dashboardData.data?.para_usuario?.address || 'N/A'}` }
+        { label: 'Cliente:', value: clientDisplayName }
       ]
+      
+      // Solo agregar C.C. si existe alguna identificación
+      if (allClientIds.length > 0) {
+        const clientDisplayId = allClientIds.join(' - ')
+        clientInfo.push({ label: 'C.C.:', value: clientDisplayId })
+      }
+      
+      clientInfo.push(
+        { label: 'Propiedad:', value: `${dashboardData.data?.para_usuario?.address || 'N/A'}` }
+      )
       
       clientInfo.push(
         { label: 'Fecha de emisión:', value: `${new Date().toLocaleDateString('es-CO')}` },
@@ -1535,104 +1561,96 @@ export function PropertyValuation() {
         yPos = 60
       }
       
-      // Usar datos del parámetro si se proporcionan, sino los del dashboard
+      // Recolectar todos los clientes para las firmas
+      const allSigners = []
+      
+      // Cliente principal
       const clientName = applicantData?.name || dashboardData.data?.para_usuario?.client_name || 'N/A'
       const clientId = applicantData?.id || dashboardData.data?.para_usuario?.client_id || ''
+      allSigners.push({ name: clientName, id: clientId })
       
-      // Usar datos del parámetro si se proporcionan, sino los del dashboard
+      // Co-aplicante
       const coApplicantName = coApplicantData?.name || dashboardData.data?.para_usuario?.co_applicant_name
       const coApplicantId = coApplicantData?.id || dashboardData.data?.para_usuario?.co_applicant_id
+      if (coApplicantName) {
+        allSigners.push({ name: coApplicantName, id: coApplicantId })
+      }
       
-      // Layout condicional para firmas según si hay co-aplicante
-      const hasCoApplicant = !!(coApplicantName)
+      // Clientes adicionales (3 y 4)
+      if (additionalClientsData && additionalClientsData.length > 0) {
+        additionalClientsData.forEach(client => {
+          if (client.name) {
+            allSigners.push({ name: client.name, id: client.id || '' })
+          }
+        })
+      }
+      
+      // Calcular el layout según la cantidad de firmantes (+ Toperty)
+      const totalSignatures = allSigners.length + 1 // +1 para Toperty
       const firmaBaseYPos = yPos
       
-      if (hasCoApplicant) {
-        // Layout con 3 columnas (Toperty, Co-aplicante, Cliente)
-        const columnWidth = (pageWidth - 2 * margin) / 3
-        const leftColumn = margin
-        const centerColumn = margin + columnWidth
-        const rightColumn = margin + 2 * columnWidth
-        
-        // Toperty (columna izquierda)
-        pdf.setDrawColor(0, 24, 69) // Color #001845
-        pdf.setLineWidth(0.3)
-        pdf.line(leftColumn, yPos, leftColumn + columnWidth - 10, yPos)
-        yPos += 8
-        pdf.setFontSize(11)
-        pdf.setFont('Inter', 'bold')
-        pdf.text('Toperty S.A.S', leftColumn, yPos)
-        pdf.setFont('Inter', 'normal')
-        yPos += 6
-        pdf.text('Nicolás Maldonado J.', leftColumn, yPos)
-        yPos += 6
-        pdf.text('Representante Legal', leftColumn, yPos)
-        yPos += 6
-        pdf.text('C.C. 1020758219', leftColumn, yPos)
-        
-        // Co-aplicante (columna central)
-        let yPosCenter = firmaBaseYPos
-        pdf.setDrawColor(0, 24, 69) // Color #001845
-        pdf.setLineWidth(0.3)
-        pdf.line(centerColumn, yPosCenter, centerColumn + columnWidth - 10, yPosCenter)
-        yPosCenter += 8
-        pdf.setFontSize(11)
-        pdf.setFont('Inter', 'normal')
-        pdf.text(`${coApplicantName || 'Nombre: '}`, centerColumn, yPosCenter)
-        yPosCenter += 6
-        pdf.text(`C.C. ${coApplicantId || '_______________'}`, centerColumn, yPosCenter)
-         
-        // Cliente (columna derecha)
-        let yPosRight = firmaBaseYPos
-        pdf.setDrawColor(0, 24, 69) // Color #001845
-        pdf.setLineWidth(0.3)
-        pdf.line(rightColumn, yPosRight, rightColumn + columnWidth - 10, yPosRight)
-        yPosRight += 8
-        pdf.setFontSize(11)
-        pdf.setFont('Inter', 'normal')
-        pdf.text(`${clientName}`, rightColumn, yPosRight)
-        yPosRight += 6
-        pdf.text(`C.C. ${clientId || '_______________'}`, rightColumn, yPosRight)
-
-        // Asegurar que yPos sea el mayor de todas las columnas
-        yPos = Math.max(yPos, yPosCenter, yPosRight) + 15
+      // Determinar el layout de firmas según cantidad
+      let columnsPerRow, rowsNeeded
+      if (totalSignatures <= 2) {
+        columnsPerRow = 2
+        rowsNeeded = 1
+      } else if (totalSignatures <= 3) {
+        columnsPerRow = 3
+        rowsNeeded = 1
+      } else if (totalSignatures <= 4) {
+        columnsPerRow = 2
+        rowsNeeded = 2
       } else {
-        // Layout con 2 columnas (Toperty, Cliente)
-        const columnWidth = (pageWidth - 2 * margin) / 2
-        const leftColumn = margin
-        const rightColumn = margin + columnWidth
-        
-        // Toperty (columna izquierda)
-        pdf.setDrawColor(0, 24, 69) // Color #001845
-        pdf.setLineWidth(0.3)
-        pdf.line(leftColumn, yPos, leftColumn + columnWidth - 10, yPos)
-        yPos += 8
-        pdf.setFontSize(11)
-        pdf.setFont('Inter', 'bold')
-        pdf.text('Toperty S.A.S', leftColumn, yPos)
-        pdf.setFont('Inter', 'normal')
-        yPos += 6
-        pdf.text('Nicolás Maldonado J.', leftColumn, yPos)
-        yPos += 6
-        pdf.text('Representante Legal', leftColumn, yPos)
-        yPos += 6
-        pdf.text('C.C. 1020758219', leftColumn, yPos)
-        
-        // Cliente (columna derecha)
-        let yPosRight = firmaBaseYPos
-        pdf.setDrawColor(0, 24, 69) // Color #001845
-        pdf.setLineWidth(0.3)
-        pdf.line(rightColumn, yPosRight, rightColumn + columnWidth - 10, yPosRight)
-        yPosRight += 8
-        pdf.setFontSize(11)
-        pdf.setFont('Inter', 'normal')
-        pdf.text(`${clientName}`, rightColumn, yPosRight)
-        yPosRight += 6
-        pdf.text(`C.C. ${clientId || '_______________'}`, rightColumn, yPosRight)
-
-        // Asegurar que yPos sea el mayor de ambas columnas
-        yPos = Math.max(yPos, yPosRight) + 15
+        columnsPerRow = 3
+        rowsNeeded = 2
       }
+      
+      const columnWidth = (pageWidth - 2 * margin) / columnsPerRow
+      let maxYPos = yPos
+      
+      // Dibujar Toperty primero
+      const topertyX = margin
+      const topertyY = firmaBaseYPos
+      pdf.setDrawColor(0, 24, 69)
+      pdf.setLineWidth(0.3)
+      pdf.line(topertyX, topertyY, topertyX + columnWidth - 10, topertyY)
+      let tempY = topertyY + 8
+      pdf.setFontSize(11)
+      pdf.setFont('Inter', 'bold')
+      pdf.text('Toperty S.A.S', topertyX, tempY)
+      pdf.setFont('Inter', 'normal')
+      tempY += 6
+      pdf.text('Nicolás Maldonado J.', topertyX, tempY)
+      tempY += 6
+      pdf.text('Representante Legal', topertyX, tempY)
+      tempY += 6
+      pdf.text('C.C. 1020758219', topertyX, tempY)
+      maxYPos = Math.max(maxYPos, tempY)
+      
+      // Dibujar cada cliente
+      allSigners.forEach((signer, index) => {
+        const position = index + 1 // +1 porque Toperty ocupa la posición 0
+        const col = position % columnsPerRow
+        const row = Math.floor(position / columnsPerRow)
+        
+        const xPos = margin + (col * columnWidth)
+        const baseY = firmaBaseYPos + (row * 40) // 40 puntos de separación entre filas
+        
+        pdf.setDrawColor(0, 24, 69)
+        pdf.setLineWidth(0.3)
+        pdf.line(xPos, baseY, xPos + columnWidth - 10, baseY)
+        let signerY = baseY + 8
+        pdf.setFontSize(11)
+        pdf.setFont('Inter', 'normal')
+        pdf.text(signer.name, xPos, signerY)
+        if (signer.id) {
+          signerY += 6
+          pdf.text(`C.C. ${signer.id}`, xPos, signerY)
+        }
+        maxYPos = Math.max(maxYPos, signerY)
+      })
+      
+      yPos = maxYPos + 20
       
       // Agregar footers a todas las páginas
       const totalPages = pdf.getNumberOfPages()
@@ -1653,6 +1671,20 @@ export function PropertyValuation() {
     } finally {
       setGeneratingPDF(false)
     }
+  }
+
+  // Función para generar PDF con múltiples clientes (hasta 4)
+  const generatePDFFromModalWithMultipleClients = async (
+    dashboardUrl: string, 
+    applicantData: { name: string, id: string, idType: string },
+    additionalClients: Array<{ name: string, id: string, idType: string }> = []
+  ) => {
+    // Separar el primer cliente adicional como co-aplicante y el resto como clientes adicionales
+    const coApplicantData = additionalClients.length > 0 ? additionalClients[0] : undefined
+    const extraClients = additionalClients.length > 1 ? additionalClients.slice(1) : undefined
+    
+    // Llamar a la función principal con todos los parámetros
+    return await generatePDFFromModal(dashboardUrl, coApplicantData, applicantData, extraClients)
   }
 
   // Cargar avalúos cuando cambien los filtros o la página
@@ -4278,12 +4310,9 @@ export function PropertyValuation() {
                     // Inicializar formulario con campos vacíos
                     setUserPdfForm({
                       fullName: '',
-                      idType: 'CC',
+                      idType: '',
                       idNumber: '',
-                      hasSecondaryClient: false,
-                      secondaryFullName: '',
-                      secondaryIdType: 'CC',
-                      secondaryIdNumber: ''
+                      additionalClients: []
                     })
                     
                     // Fetch rápido solo para client_name con timeout corto
@@ -4397,10 +4426,7 @@ export function PropertyValuation() {
             idNumber: '',
             maxApprovedAmount: '',
             minInitialPayment: '',
-            hasSecondaryClient: false,
-            secondaryFullName: '',
-            secondaryIdType: '',
-            secondaryIdNumber: ''
+            additionalClients: []
           })
         }
       }}>
@@ -4448,7 +4474,7 @@ export function PropertyValuation() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="idType">Tipo de Identificación *</Label>
+                    <Label htmlFor="idType">Tipo de Identificación (opcional)</Label>
                     <Select 
                       value={approvalLetterForm.idType} 
                       onValueChange={(value) => setApprovalLetterForm(prev => ({ ...prev, idType: value }))}
@@ -4466,13 +4492,12 @@ export function PropertyValuation() {
                   </div>
                   
                   <div>
-                    <Label htmlFor="idNumber">Número de Identificación *</Label>
+                    <Label htmlFor="idNumber">Número de Identificación (opcional)</Label>
                     <Input
                       id="idNumber"
                       value={approvalLetterForm.idNumber}
                       onChange={(e) => setApprovalLetterForm(prev => ({ ...prev, idNumber: e.target.value }))}
                       placeholder="Número de identificación"
-                      required
                     />
                   </div>
                 </div>
@@ -4509,74 +4534,103 @@ export function PropertyValuation() {
               </CardContent>
             </Card>
 
-            {/* Cliente Secundario */}
+            {/* Clientes Adicionales */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={approvalLetterForm.hasSecondaryClient}
-                    onChange={(e) => setApprovalLetterForm(prev => ({ 
-                      ...prev, 
-                      hasSecondaryClient: e.target.checked,
-                      secondaryFullName: e.target.checked ? prev.secondaryFullName : '',
-                      secondaryIdType: e.target.checked ? prev.secondaryIdType : '',
-                      secondaryIdNumber: e.target.checked ? prev.secondaryIdNumber : ''
-                    }))}
-                    className="rounded border-gray-300"
-                  />
-                  Cliente Secundario
-                </CardTitle>
+                <CardTitle className="text-lg">Clientes Adicionales</CardTitle>
                 <CardDescription>
-                  Marque la casilla si existe un cliente secundario
+                  Puede agregar hasta 3 clientes adicionales (máximo 4 en total). Solo el nombre es obligatorio.
                 </CardDescription>
               </CardHeader>
-              
-              {approvalLetterForm.hasSecondaryClient && (
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="secondaryFullName">Nombre Completo *</Label>
-                    <Input
-                      id="secondaryFullName"
-                      value={approvalLetterForm.secondaryFullName}
-                      onChange={(e) => setApprovalLetterForm(prev => ({ ...prev, secondaryFullName: e.target.value }))}
-                      placeholder="Nombre completo del cliente secundario"
-                      required={approvalLetterForm.hasSecondaryClient}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="secondaryIdType">Tipo de Identificación *</Label>
-                      <Select 
-                        value={approvalLetterForm.secondaryIdType} 
-                        onValueChange={(value) => setApprovalLetterForm(prev => ({ ...prev, secondaryIdType: value }))}
+              <CardContent className="space-y-4">
+                {approvalLetterForm.additionalClients.map((client, index) => (
+                  <div key={index} className="border rounded-lg p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium">Cliente {index + 2}</h4>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setApprovalLetterForm(prev => ({
+                            ...prev,
+                            additionalClients: prev.additionalClients.filter((_, i) => i !== index)
+                          }))
+                        }}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
-                          <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
-                          <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
-                          <SelectItem value="PA">Pasaporte</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                     
                     <div>
-                      <Label htmlFor="secondaryIdNumber">Número de Identificación *</Label>
+                      <Label>Nombre Completo *</Label>
                       <Input
-                        id="secondaryIdNumber"
-                        value={approvalLetterForm.secondaryIdNumber}
-                        onChange={(e) => setApprovalLetterForm(prev => ({ ...prev, secondaryIdNumber: e.target.value }))}
-                        placeholder="Número de identificación"
-                        required={approvalLetterForm.hasSecondaryClient}
+                        value={client.fullName}
+                        onChange={(e) => {
+                          const newClients = [...approvalLetterForm.additionalClients]
+                          newClients[index].fullName = e.target.value
+                          setApprovalLetterForm(prev => ({ ...prev, additionalClients: newClients }))
+                        }}
+                        placeholder="Nombre completo (obligatorio)"
+                        required
                       />
                     </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Tipo de Identificación (opcional)</Label>
+                        <Select 
+                          value={client.idType} 
+                          onValueChange={(value) => {
+                            const newClients = [...approvalLetterForm.additionalClients]
+                            newClients[index].idType = value
+                            setApprovalLetterForm(prev => ({ ...prev, additionalClients: newClients }))
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
+                            <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
+                            <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
+                            <SelectItem value="PA">Pasaporte</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <Label>Número de Identificación (opcional)</Label>
+                        <Input
+                          value={client.idNumber}
+                          onChange={(e) => {
+                            const newClients = [...approvalLetterForm.additionalClients]
+                            newClients[index].idNumber = e.target.value
+                            setApprovalLetterForm(prev => ({ ...prev, additionalClients: newClients }))
+                          }}
+                          placeholder="Número de identificación"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </CardContent>
-              )}
+                ))}
+                
+                {approvalLetterForm.additionalClients.length < 3 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setApprovalLetterForm(prev => ({
+                        ...prev,
+                        additionalClients: [...prev.additionalClients, { fullName: '', idType: '', idNumber: '' }]
+                      }))
+                    }}
+                    className="w-full"
+                  >
+                    + Agregar Cliente Adicional
+                  </Button>
+                )}
+              </CardContent>
             </Card>
           </div>
 
@@ -4594,18 +4648,16 @@ export function PropertyValuation() {
                 disabled={
                   generatingApprovalLetter || 
                   !approvalLetterForm.fullName || 
-                  !approvalLetterForm.idType || 
-                  !approvalLetterForm.idNumber || 
                   !approvalLetterForm.maxApprovedAmount || 
                   !approvalLetterForm.minInitialPayment ||
-                  (approvalLetterForm.hasSecondaryClient && (!approvalLetterForm.secondaryFullName || !approvalLetterForm.secondaryIdType || !approvalLetterForm.secondaryIdNumber))
+                  approvalLetterForm.additionalClients.some(c => c.fullName && !c.fullName.trim())
                 }
                 className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={
-                  (!approvalLetterForm.fullName || !approvalLetterForm.idType || !approvalLetterForm.idNumber || !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment) ?
-                  'Complete todos los campos del cliente principal' :
-                  (approvalLetterForm.hasSecondaryClient && (!approvalLetterForm.secondaryFullName || !approvalLetterForm.secondaryIdType || !approvalLetterForm.secondaryIdNumber)) ?
-                  'Complete todos los campos del cliente secundario' : 
+                  (!approvalLetterForm.fullName || !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment) ?
+                  'Complete todos los campos obligatorios' :
+                  approvalLetterForm.additionalClients.some(c => c.fullName && !c.fullName.trim()) ?
+                  'Los nombres de los clientes adicionales no pueden estar vacíos' : 
                   ''
                 }
               >
@@ -4710,14 +4762,11 @@ export function PropertyValuation() {
             fullName: '',
             idType: '',
             idNumber: '',
-            hasSecondaryClient: false,
-            secondaryFullName: '',
-            secondaryIdType: '',
-            secondaryIdNumber: ''
+            additionalClients: []
           })
         }
       }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           {/* Overlay de loading para generar PDF */}
           {generatingUserPdf && (
             <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50 rounded-lg">
@@ -4758,7 +4807,7 @@ export function PropertyValuation() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="userPdf_idType">Tipo de Identificación *</Label>
+                    <Label htmlFor="userPdf_idType">Tipo de Identificación (opcional)</Label>
                     <Select 
                       value={userPdfForm.idType} 
                       onValueChange={(value) => setUserPdfForm(prev => ({ ...prev, idType: value }))}
@@ -4776,87 +4825,115 @@ export function PropertyValuation() {
                   </div>
                   
                   <div>
-                    <Label htmlFor="userPdf_idNumber">Número de Identificación *</Label>
+                    <Label htmlFor="userPdf_idNumber">Número de Identificación (opcional)</Label>
                     <Input
                       id="userPdf_idNumber"
                       value={userPdfForm.idNumber}
                       onChange={(e) => setUserPdfForm(prev => ({ ...prev, idNumber: e.target.value }))}
                       placeholder="Número de identificación"
-                      required
                     />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Cliente Secundario */}
+            {/* Clientes Adicionales */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={userPdfForm.hasSecondaryClient}
-                    onChange={(e) => setUserPdfForm(prev => ({ 
-                      ...prev, 
-                      hasSecondaryClient: e.target.checked,
-                      secondaryFullName: e.target.checked ? prev.secondaryFullName : '',
-                      secondaryIdType: e.target.checked ? prev.secondaryIdType : '',
-                      secondaryIdNumber: e.target.checked ? prev.secondaryIdNumber : ''
-                    }))}
-                    className="rounded border-gray-300"
-                  />
-                  Cliente Secundario
-                </CardTitle>
+                <CardTitle className="text-lg">Clientes Adicionales</CardTitle>
                 <CardDescription>
-                  Marque la casilla si existe un cliente secundario
+                  Puede agregar hasta 3 clientes adicionales (máximo 4 en total). Solo el nombre es obligatorio.
                 </CardDescription>
               </CardHeader>
-              
-              {userPdfForm.hasSecondaryClient && (
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="userPdf_secondaryFullName">Nombre Completo *</Label>
-                    <Input
-                      id="userPdf_secondaryFullName"
-                      value={userPdfForm.secondaryFullName}
-                      onChange={(e) => setUserPdfForm(prev => ({ ...prev, secondaryFullName: e.target.value }))}
-                      placeholder="Nombre completo del cliente secundario"
-                      required={userPdfForm.hasSecondaryClient}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="userPdf_secondaryIdType">Tipo de Identificación *</Label>
-                      <Select 
-                        value={userPdfForm.secondaryIdType} 
-                        onValueChange={(value) => setUserPdfForm(prev => ({ ...prev, secondaryIdType: value }))}
+              <CardContent className="space-y-4">
+                {userPdfForm.additionalClients.map((client, index) => (
+                  <div key={index} className="border rounded-lg p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium">Cliente {index + 2}</h4>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setUserPdfForm(prev => ({
+                            ...prev,
+                            additionalClients: prev.additionalClients.filter((_, i) => i !== index)
+                          }))
+                        }}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
-                          <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
-                          <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
-                          <SelectItem value="PA">Pasaporte</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                     
                     <div>
-                      <Label htmlFor="userPdf_secondaryIdNumber">Número de Identificación *</Label>
+                      <Label>Nombre Completo *</Label>
                       <Input
-                        id="userPdf_secondaryIdNumber"
-                        value={userPdfForm.secondaryIdNumber}
-                        onChange={(e) => setUserPdfForm(prev => ({ ...prev, secondaryIdNumber: e.target.value }))}
-                        placeholder="Número de identificación"
-                        required={userPdfForm.hasSecondaryClient}
+                        value={client.fullName}
+                        onChange={(e) => {
+                          const newClients = [...userPdfForm.additionalClients]
+                          newClients[index].fullName = e.target.value
+                          setUserPdfForm(prev => ({ ...prev, additionalClients: newClients }))
+                        }}
+                        placeholder="Nombre completo (obligatorio)"
+                        required
                       />
                     </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Tipo de Identificación (opcional)</Label>
+                        <Select 
+                          value={client.idType} 
+                          onValueChange={(value) => {
+                            const newClients = [...userPdfForm.additionalClients]
+                            newClients[index].idType = value
+                            setUserPdfForm(prev => ({ ...prev, additionalClients: newClients }))
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CC">Cédula de Ciudadanía (C.C.)</SelectItem>
+                            <SelectItem value="TI">Tarjeta de Identidad (T.I.)</SelectItem>
+                            <SelectItem value="CE">Cédula de Extranjería (C.E.)</SelectItem>
+                            <SelectItem value="PA">Pasaporte</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <Label>Número de Identificación (opcional)</Label>
+                        <Input
+                          value={client.idNumber}
+                          onChange={(e) => {
+                            const newClients = [...userPdfForm.additionalClients]
+                            newClients[index].idNumber = e.target.value
+                            setUserPdfForm(prev => ({ ...prev, additionalClients: newClients }))
+                          }}
+                          placeholder="Número de identificación"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </CardContent>
-              )}
+                ))}
+                
+                {userPdfForm.additionalClients.length < 3 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setUserPdfForm(prev => ({
+                        ...prev,
+                        additionalClients: [...prev.additionalClients, { fullName: '', idType: '', idNumber: '' }]
+                      }))
+                    }}
+                    className="w-full"
+                  >
+                    + Agregar Cliente Adicional
+                  </Button>
+                )}
+              </CardContent>
             </Card>
           </div>
 
@@ -4872,9 +4949,7 @@ export function PropertyValuation() {
               onClick={handleGenerateUserPdf}
               disabled={generatingUserPdf || 
                        !userPdfForm.fullName || 
-                       !userPdfForm.idType || 
-                       !userPdfForm.idNumber ||
-                       (userPdfForm.hasSecondaryClient && (!userPdfForm.secondaryFullName || !userPdfForm.secondaryIdType || !userPdfForm.secondaryIdNumber))}
+                       userPdfForm.additionalClients.some(c => c.fullName && !c.fullName.trim())}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {generatingUserPdf ? (
