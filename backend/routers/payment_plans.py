@@ -471,23 +471,29 @@ async def extend_dashboard_expiration(access_token: str, days: int = 10):
         if not dashboard:
             raise HTTPException(status_code=404, detail="Dashboard not found")
         
-        # If dashboard is expired, reactivate it
+        # Only extend if dashboard is expired or inactive
         if dashboard.is_expired or not dashboard.is_active:
             dashboard.is_active = True
             # Reset expiration from today if expired
             dashboard.expires_at = datetime.utcnow() + timedelta(days=days)
+            session.commit()
+            
+            return {
+                "message": "Dashboard expiration extended successfully",
+                "new_expiration_date": dashboard.expires_at.isoformat(),
+                "days_extended": days,
+                "is_active": dashboard.is_active,
+                "was_extended": True
+            }
         else:
-            # Extend from current expiration date
-            dashboard.expires_at = dashboard.expires_at + timedelta(days=days)
-        
-        session.commit()
-        
-        return {
-            "message": "Dashboard expiration extended successfully",
-            "new_expiration_date": dashboard.expires_at.isoformat(),
-            "days_extended": days,
-            "is_active": dashboard.is_active
-        }
+            # Dashboard is active and not expired, no need to extend
+            return {
+                "message": "Dashboard is active and not expired",
+                "new_expiration_date": dashboard.expires_at.isoformat(),
+                "days_remaining": dashboard.days_remaining,
+                "is_active": dashboard.is_active,
+                "was_extended": False
+            }
 
 
 @router.post("/dashboard/{access_token}/sync")
