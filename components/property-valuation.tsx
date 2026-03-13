@@ -1611,6 +1611,27 @@ export function PropertyValuation() {
       // Dibujar Toperty primero
       const topertyX = margin
       const topertyY = firmaBaseYPos
+      
+      // Añadir imagen de firma
+      try {
+        const signatureImg = new Image()
+        signatureImg.crossOrigin = 'anonymous'
+        const signatureLoaded = await new Promise<boolean>((resolve) => {
+          signatureImg.onload = () => resolve(true)
+          signatureImg.onerror = () => resolve(false)
+          signatureImg.src = '/signature-toperty.jpeg'
+        })
+        
+        if (signatureLoaded) {
+          // Añadir la imagen de firma sobre la línea
+          const signatureWidth = 60
+          const signatureHeight = 30
+          pdf.addImage(signatureImg, 'JPEG', topertyX, topertyY - signatureHeight - 5, signatureWidth, signatureHeight)
+        }
+      } catch (error) {
+        console.error('Error loading signature image:', error)
+      }
+      
       pdf.setDrawColor(0, 24, 69)
       pdf.setLineWidth(0.3)
       pdf.line(topertyX, topertyY, topertyX + columnWidth - 10, topertyY)
@@ -1776,24 +1797,23 @@ export function PropertyValuation() {
     
     // Calcular valores correctos desde los datos guardados
     if (valuation.rent_price_per_sqm) {
-      // Renta mensual total = precio por m² × área (esta es la renta mensual real)
-      const monthlyRentTotal = valuation.rent_price_per_sqm * valuation.area
-      // Renta anual = renta mensual × 12
+      // Usar el total_rent_price guardado o calcular desde precio por m²
+      // IMPORTANTE: total_rent_price ahora debe ser la renta mensual, no el valor capitalizado
+      const monthlyRentTotal = valuation.total_rent_price || (valuation.rent_price_per_sqm * valuation.area)
       const annualRent = monthlyRentTotal * 12
       
-      // Agregar el valor de renta mensual total que faltaba
+      // Agregar el valor de renta mensual total
       calculatedResults.rent_monthly_total = monthlyRentTotal
       calculatedResults.rent_annual_price = annualRent
+      calculatedResults.total_rent_price = monthlyRentTotal // Mantener como renta mensual
       
       if (valuation.capitalization_rate) {
         const capRate = valuation.capitalization_rate
-        // total_rent_price guardado es el valor capitalizado
-        const capitalizedValue = valuation.total_rent_price || (monthlyRentTotal / (capRate / 100))
+        // Calcular el valor capitalizado desde la renta mensual
+        const capitalizedValue = monthlyRentTotal / (capRate / 100)
         
         calculatedResults.capitalization_rate = capRate
         calculatedResults.capitalized_value = capitalizedValue
-        // Mantener el total_rent_price como el valor capitalizado guardado
-        calculatedResults.total_rent_price = capitalizedValue
         
         // Si también hay precio de venta, calcular promedio
         if (valuation.sell_price_per_sqm && valuation.total_sell_price) {
@@ -2317,13 +2337,8 @@ export function PropertyValuation() {
     setSaving(true)
     
     try {
-      // Calcular el valor capitalizado si hay renta y tasa
-      let capitalizedRentValue = results.total_rent_price
-      if (results.total_rent_price && capitalizationRate && parseFloat(capitalizationRate) > 0) {
-        const monthlyRent = results.total_rent_price
-        const capRate = parseFloat(capitalizationRate)
-        capitalizedRentValue = monthlyRent / (capRate / 100)
-      }
+      // NO capitalizar el total_rent_price - debe guardarse como renta mensual
+      const monthlyRentValue = results.total_rent_price || 0 // Mantener la renta mensual original
 
       // Usar el valor final editado si existe, sino usar el calculado
       const finalPriceForSave = editableFinalPrice && parseFloat(editableFinalPrice) > 0 
@@ -2345,7 +2360,7 @@ export function PropertyValuation() {
         sell_price_per_sqm: results.sell_price_per_sqm,
         rent_price_per_sqm: results.rent_price_per_sqm,
         total_sell_price: results.total_sell_price,
-        total_rent_price: capitalizedRentValue, // Ahora guarda el valor capitalizado
+        total_rent_price: monthlyRentValue, // Guardar la renta mensual, NO el valor capitalizado
         final_price: finalPriceForSave
       }
 
@@ -2654,7 +2669,7 @@ export function PropertyValuation() {
         
         // Si hay precio de renta, calcular valor capitalizado
         if (apiResults.rent_price_per_sqm && !apiResults.rent_error) {
-          const monthlyRent = apiResults.total_rent_price
+          const monthlyRent = apiResults.total_rent_price // Este ya es el valor mensual correcto del API
           const capRate = Number(capitalizationRate)
           // Para tasa mensual, se divide la renta mensual por la tasa mensual
           const capitalizedValue = monthlyRent / (capRate / 100)
@@ -2664,6 +2679,7 @@ export function PropertyValuation() {
           enhancedResults.rent_monthly_total = monthlyRent
           enhancedResults.rent_annual_price = annualRent
           enhancedResults.capitalized_value = capitalizedValue
+          // NO sobrescribir total_rent_price - mantenerlo como renta mensual
           
           // Si también hay precio de venta, calcular promedio
           if (apiResults.sell_price_per_sqm && !apiResults.sell_error) {
@@ -3265,7 +3281,7 @@ export function PropertyValuation() {
                         <Badge className="bg-blue-600 text-white">{formatCurrency(results.capitalized_value!)}</Badge>
                       </div>
                       <p className="text-xs text-blue-700 mt-2">
-                        Cálculo: {formatCurrency(results.total_rent_price!)} ÷ {results.capitalization_rate}%
+                        Cálculo: {formatCurrency(results.rent_monthly_total!)} ÷ {results.capitalization_rate}%
                       </p>
                     </div>
                   </div>
