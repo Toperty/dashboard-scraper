@@ -456,6 +456,40 @@ async def get_investor_dashboard(access_token: str):
     return await get_dashboard_by_type(access_token, "investor")
 
 
+@router.post("/dashboard/{access_token}/extend")
+async def extend_dashboard_expiration(access_token: str, days: int = 10):
+    """Extend dashboard expiration date and reactivate if expired"""
+    from models.payment_plan_dashboard import PaymentPlanDashboard
+    from datetime import timedelta, datetime
+    
+    with Session(engine) as session:
+        # Don't filter by is_active=True to allow reactivating expired dashboards
+        dashboard = session.query(PaymentPlanDashboard).filter_by(
+            access_token=access_token
+        ).first()
+        
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+        # If dashboard is expired, reactivate it
+        if dashboard.is_expired or not dashboard.is_active:
+            dashboard.is_active = True
+            # Reset expiration from today if expired
+            dashboard.expires_at = datetime.utcnow() + timedelta(days=days)
+        else:
+            # Extend from current expiration date
+            dashboard.expires_at = dashboard.expires_at + timedelta(days=days)
+        
+        session.commit()
+        
+        return {
+            "message": "Dashboard expiration extended successfully",
+            "new_expiration_date": dashboard.expires_at.isoformat(),
+            "days_extended": days,
+            "is_active": dashboard.is_active
+        }
+
+
 @router.post("/dashboard/{access_token}/sync")
 async def sync_dashboard_data(access_token: str):
     """Force sync dashboard data with Google Sheets"""

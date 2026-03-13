@@ -450,10 +450,39 @@ export function PropertyValuation() {
       await new Promise(resolve => setTimeout(resolve, 100))
       
       const token = dashboardUrl.split('/').pop()?.split('?')[0]
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/dashboard/${token}/user`)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      let response = await fetch(`${apiUrl}/api/dashboard/${token}/user`)
       
       if (!response.ok) {
-        throw new Error('Error al obtener datos del dashboard')
+        if (response.status === 410) {
+          // Dashboard expirado - intentar extenderlo automáticamente
+          console.log('Dashboard expirado, intentando extender plazo automáticamente...')
+          try {
+            const extendResponse = await fetch(`${apiUrl}/api/dashboard/${token}/extend`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ days: 30 })
+            })
+            
+            if (extendResponse.ok) {
+              console.log('Plazo extendido exitosamente, reintentando obtener dashboard...')
+              // Reintentar la obtención del dashboard
+              response = await fetch(`${apiUrl}/api/dashboard/${token}/user`)
+              if (!response.ok) {
+                throw new Error('No se pudo obtener el dashboard después de extender el plazo')
+              }
+            } else {
+              throw new Error('El dashboard ha expirado y no se pudo extender automáticamente')
+            }
+          } catch (extendError) {
+            console.error('Error extendiendo dashboard:', extendError)
+            throw new Error('El dashboard ha expirado. Por favor, contacte al administrador.')
+          }
+        } else if (response.status === 404) {
+          throw new Error('Dashboard no encontrado')
+        } else {
+          throw new Error('Error al obtener datos del dashboard')
+        }
       }
       
       const data = await response.json()
@@ -1688,7 +1717,8 @@ export function PropertyValuation() {
       
     } catch (error) {
       console.error('Error generando PDF:', error)
-      alert('Error al generar el PDF. Por favor, intente nuevamente.')
+      const errorMessage = error instanceof Error ? error.message : 'Error al generar el PDF'
+      alert(errorMessage)
     } finally {
       setGeneratingPDF(false)
     }
