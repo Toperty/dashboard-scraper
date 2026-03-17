@@ -82,7 +82,7 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
         params = urlencode(data_dict)
         full_url = f"{forms_url}?{params}"
         
-        response = requests.get(full_url, allow_redirects=True, timeout=30)
+        response = requests.get(full_url, allow_redirects=True, timeout=60)
         
         if response.status_code == 200:
             try:
@@ -163,7 +163,7 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                                     print(f"Syncing full data after edit for sheet_id: {sheet_id}")
                                     sync_response = requests.get(
                                         f"{apps_script_reader_url}?sheetId={sheet_id}",
-                                        timeout=30
+                                        timeout=60
                                     )
                                     if sync_response.status_code == 200:
                                         sync_result = sync_response.json()
@@ -220,7 +220,7 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                                     print(f"Syncing full data for new sheet_id: {sheet_id}")
                                     sync_response = requests.get(
                                         f"{apps_script_reader_url}?sheetId={sheet_id}",
-                                        timeout=30
+                                        timeout=60
                                     )
                                     if sync_response.status_code == 200:
                                         sync_result = sync_response.json()
@@ -392,13 +392,13 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
             apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
             if apps_script_url:
                 # Use async request with longer timeout and retry logic
-                max_retries = 2
+                max_retries = 3
                 for attempt in range(max_retries + 1):
                     try:
                         async with aiohttp.ClientSession() as http_session:
                             async with http_session.get(
                                 f"{apps_script_url}?sheetId={dashboard.sheet_id}&type={dashboard_type}",
-                                timeout=aiohttp.ClientTimeout(total=30)  # 30 seconds timeout
+                                timeout=aiohttp.ClientTimeout(total=60)  # 60 seconds timeout
                             ) as response:
                                 if response.status == 200:
                                     result = await response.json()
