@@ -1982,6 +1982,11 @@ export function PropertyValuation() {
     return value.replace(/[^0-9]/g, '')
   }
 
+  // Para campos decimales: solo convertir coma a punto
+  const normalizeDecimalInput = (value: string) => {
+    return value.replace(/,/g, '.')
+  }
+
   // Función para formatear valores de entrada como moneda (redondeado)
   const formatInputValue = (value: string | number) => {
     if (!value) return ''
@@ -2166,6 +2171,11 @@ export function PropertyValuation() {
         ...prev,
         [field]: parseFormattedValue(value)
       }))
+    } else if (field === 'area') {
+      setPaymentPlanData(prev => ({
+        ...prev,
+        [field]: normalizeDecimalInput(value)
+      }))
     } else if (field === 'commercial_value') {
       // Para commercial_value, permitir texto temporal mientras se edita
       const cleanValue = value.replace(/[^0-9]/g, '')
@@ -2220,8 +2230,8 @@ export function PropertyValuation() {
         valuation_name: selectedValuation?.valuation_name || paymentPlanData.client_name, // Usar nombre del avalúo
         template_sheet_id: templateSheetId, // ID del template de Google Sheets
         // Asegurar que todos los campos sean strings y remover formato de miles
-        area: paymentPlanData.area ? String(paymentPlanData.area).replace(/[,.]/g, '') : '',
-        commercial_value: paymentPlanData.commercial_value ? String(paymentPlanData.commercial_value).replace(/[,.]/g, '') : '',
+        area: paymentPlanData.area ? normalizeDecimalInput(String(paymentPlanData.area)) : '',
+        commercial_value: paymentPlanData.commercial_value ? parseFormattedValue(String(paymentPlanData.commercial_value)) : '',
         average_purchase_value: paymentPlanData.average_purchase_value ? String(paymentPlanData.average_purchase_value).replace(/[,.]/g, '') : '',
         asking_price: paymentPlanData.asking_price ? String(paymentPlanData.asking_price).replace(/[,.]/g, '') : '',
         user_down_payment: paymentPlanData.user_down_payment ? String(paymentPlanData.user_down_payment).replace(/[,.]/g, '') : '',
@@ -3927,6 +3937,7 @@ export function PropertyValuation() {
                 <Input
                   id="area_pp"
                   type="number"
+                  step="any"
                   value={paymentPlanData.area}
                   onChange={(e) => handlePaymentPlanChange('area', e.target.value)}
                   placeholder="Ej: 80"
@@ -3946,7 +3957,7 @@ export function PropertyValuation() {
                 <Input
                   id="commercial_value"
                   type="text"
-                  value={paymentPlanData.commercial_value && !isNaN(parseFloat(paymentPlanData.commercial_value)) ? formatCurrency(parseFloat(paymentPlanData.commercial_value)) : paymentPlanData.commercial_value}
+                  value={paymentPlanData.commercial_value ? formatInputValue(paymentPlanData.commercial_value) : ''}
                   onChange={(e) => handlePaymentPlanChange('commercial_value', e.target.value)}
                   placeholder="Ej: $ 250.000.000"
                   required
