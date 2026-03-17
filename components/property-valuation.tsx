@@ -2812,9 +2812,13 @@ export function PropertyValuation() {
                     id="area"
                     type="number"
                     min="1"
+                    step="any"
                     placeholder="Ej: 80"
                     value={formData.area || ''}
-                    onChange={(e) => handleInputChange('area', e.target.value === '' ? undefined : Number(e.target.value))}
+                    onChange={(e) => {
+                      const normalizedValue = e.target.value.replace(',', '.')
+                      handleInputChange('area', normalizedValue === '' ? undefined : Number(normalizedValue))
+                    }}
                     onFocus={(e) => { if (e.target.value === '0') e.target.select() }}
                     required
                   />
