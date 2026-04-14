@@ -466,8 +466,9 @@ export function PropertyValuation() {
             
             if (extendResponse.ok) {
               console.log('Plazo extendido exitosamente, reintentando obtener dashboard...')
-              // Reintentar la obtención del dashboard
-              response = await fetch(`${apiUrl}/api/dashboard/${token}/user`)
+              // Reintentar la obtención del dashboard con cache busting para forzar actualización
+              const timestamp = new Date().getTime()
+              response = await fetch(`${apiUrl}/api/dashboard/${token}/user?t=${timestamp}`)
               if (!response.ok) {
                 throw new Error('No se pudo obtener el dashboard después de extender el plazo')
               }
