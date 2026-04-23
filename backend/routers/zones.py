@@ -133,7 +133,7 @@ async def get_zone_statistics_full(
                 END as rent_valorization,
                 CASE 
                     WHEN sale_price_m2 > 0 AND rent_price_m2 > 0 THEN 
-                        (rent_price_m2 / sale_price_m2 / 12)
+                        ((rent_price_m2 * 12) / sale_price_m2)
                     ELSE 0 
                 END as cap_rate
             FROM zone_stats
@@ -345,10 +345,7 @@ async def get_zone_details(
                 rent_count = int(result_filtered[2]) if result_filtered[2] else 0
                 sale_price_m2 = float(result_filtered[3]) if result_filtered[3] else 0
                 rent_avg_price = float(result_filtered[4]) if result_filtered[4] else 0
-                avg_sale_price = float(result_filtered[5]) if result_filtered[5] else 0
-                avg_rent_price = float(result_filtered[6]) if result_filtered[6] else 0
-                
-                cap_rate = ((avg_rent_price * 12) / avg_sale_price) if avg_sale_price > 0 and avg_rent_price > 0 else 0
+                cap_rate = ((rent_avg_price * 12) / sale_price_m2) if sale_price_m2 > 0 and rent_avg_price > 0 else 0
                 cap_rate = 0 if math.isnan(cap_rate) or math.isinf(cap_rate) else cap_rate
                 
                 filtered_data = {
@@ -367,10 +364,7 @@ async def get_zone_details(
                 rent_count_current = int(result_current[2]) if result_current[2] else 0
                 sale_price_m2_current = float(result_current[3]) if result_current[3] else 0
                 rent_avg_price_current = float(result_current[4]) if result_current[4] else 0
-                avg_sale_price_current = float(result_current[5]) if result_current[5] else 0
-                avg_rent_price_current = float(result_current[6]) if result_current[6] else 0
-                
-                cap_rate_current = ((avg_rent_price_current * 12) / avg_sale_price_current) if avg_sale_price_current > 0 and avg_rent_price_current > 0 else 0
+                cap_rate_current = ((rent_avg_price_current * 12) / sale_price_m2_current) if sale_price_m2_current > 0 and rent_avg_price_current > 0 else 0
                 cap_rate_current = 0 if math.isnan(cap_rate_current) or math.isinf(cap_rate_current) else cap_rate_current
                 
                 property_count_current = int(result_current[0]) if result_current[0] else 0
