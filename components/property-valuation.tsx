@@ -318,11 +318,12 @@ export function PropertyValuation() {
         additionalClients: []
       })
     } catch (error) {
+      const detail = error instanceof Error && error.message ? error.message : 'Intente nuevamente.'
       setSaveMessage({
         type: 'error',
-        text: '❌ Error al generar el PDF. Intente nuevamente.'
+        text: `❌ ${detail}`
       })
-      setTimeout(() => setSaveMessage(null), 3000)
+      setTimeout(() => setSaveMessage(null), 6000)
     } finally {
       setGeneratingUserPdf(false)
     }
@@ -461,7 +462,7 @@ export function PropertyValuation() {
             const extendResponse = await fetch(`${apiUrl}/api/dashboard/${token}/extend`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ days: 30 })
+              body: JSON.stringify({ days: 10 })
             })
             
             if (extendResponse.ok) {
@@ -1815,7 +1816,7 @@ export function PropertyValuation() {
     
     setValuationName(valuation.valuation_name)
     setCapitalizationRate(valuation.capitalization_rate?.toString() || '')
-    setEditableFinalPrice(valuation.final_price?.toString() || '')
+    setEditableFinalPrice(valuation.final_price ? Math.round(valuation.final_price).toString() : '')
     
     // Crear resultados replicando exactamente los cálculos originales
     const calculatedResults: any = {
@@ -2381,10 +2382,11 @@ export function PropertyValuation() {
       // NO capitalizar el total_rent_price - debe guardarse como renta mensual
       const monthlyRentValue = results.total_rent_price || 0 // Mantener la renta mensual original
 
-      // Usar el valor final editado si existe, sino usar el calculado
-      const finalPriceForSave = editableFinalPrice && parseFloat(editableFinalPrice) > 0 
-        ? parseFloat(editableFinalPrice) 
+      // Usar el valor final editado si existe, sino usar el calculado. Siempre entero.
+      const rawFinalPrice = editableFinalPrice && parseFloat(editableFinalPrice) > 0
+        ? parseFloat(editableFinalPrice)
         : (results.average_valuation || results.capitalized_value || results.total_sell_price)
+      const finalPriceForSave = rawFinalPrice ? Math.round(rawFinalPrice) : rawFinalPrice
 
       const valuationData = {
         valuation_name: valuationName.trim(),
@@ -2703,37 +2705,44 @@ export function PropertyValuation() {
       const data = await response.json()
       
       if (data.status === 'success') {
-        const apiResults = data.data.valuation_results
-        
-        // Realizar cálculos adicionales
+        const rawApiResults = data.data.valuation_results
+
+        // Redondear todos los valores numéricos del modelo para evitar decimales
+        // que arrastren problemas de formato en cálculos y vistas posteriores.
+        const roundIfNumber = (value: unknown) =>
+          typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : value
+        const apiResults = Object.fromEntries(
+          Object.entries(rawApiResults).map(([key, value]) => [key, roundIfNumber(value)])
+        ) as typeof rawApiResults
+
         let enhancedResults = { ...apiResults }
-        
+
         // Si hay precio de renta, calcular valor capitalizado
         if (apiResults.rent_price_per_sqm && !apiResults.rent_error) {
           const monthlyRent = apiResults.total_rent_price // Este ya es el valor mensual correcto del API
           const capRate = Number(capitalizationRate)
           // Para tasa mensual, se divide la renta mensual por la tasa mensual
-          const capitalizedValue = monthlyRent / (capRate / 100)
+          const capitalizedValue = Math.round(monthlyRent / (capRate / 100))
           const annualRent = monthlyRent * 12
-          
+
           enhancedResults.capitalization_rate = capRate
           enhancedResults.rent_monthly_total = monthlyRent
           enhancedResults.rent_annual_price = annualRent
           enhancedResults.capitalized_value = capitalizedValue
           // NO sobrescribir total_rent_price - mantenerlo como renta mensual
-          
+
           // Si también hay precio de venta, calcular promedio
           if (apiResults.sell_price_per_sqm && !apiResults.sell_error) {
-            const averageValuation = (apiResults.total_sell_price + capitalizedValue) / 2
+            const averageValuation = Math.round((apiResults.total_sell_price + capitalizedValue) / 2)
             enhancedResults.average_valuation = averageValuation
           }
         }
-        
+
         setResults(enhancedResults)
         // Actualizar el valor final editable con el valor calculado
         const calculatedFinalPrice = enhancedResults.average_valuation || enhancedResults.capitalized_value || enhancedResults.total_sell_price
         if (calculatedFinalPrice) {
-          setEditableFinalPrice(calculatedFinalPrice.toString())
+          setEditableFinalPrice(Math.round(calculatedFinalPrice).toString())
         }
       } else {
         console.error('Error:', data.message)
@@ -3246,10 +3255,13 @@ export function PropertyValuation() {
                         id="editable_final_price"
                         type="number"
                         min="1"
+                        step="1"
                         placeholder="Ingrese valor ajustado si es necesario"
                         value={editableFinalPrice}
                         onChange={(e) => {
-                          setEditableFinalPrice(e.target.value)
+                          // Aceptar solo dígitos para evitar decimales
+                          const digitsOnly = e.target.value.replace(/[^\d]/g, '')
+                          setEditableFinalPrice(digitsOnly)
                           setLastSavedValuation(null) // Limpiar hash cuando cambie el precio final
                         }}
                         className="mt-2"

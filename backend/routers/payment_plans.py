@@ -360,18 +360,20 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
     
     with Session(engine) as session:
         dashboard = session.query(PaymentPlanDashboard).filter_by(
-            access_token=access_token,
-            is_active=True
+            access_token=access_token
         ).first()
-        
+
         if not dashboard:
-            raise HTTPException(status_code=404, detail="Dashboard not found or expired")
-        
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+
+        # Expired takes precedence over inactive so the frontend can offer to extend.
+        # Soft-deleted dashboards (inactive but not expired) still resolve to 404.
         if dashboard.is_expired:
-            dashboard.is_active = False
-            session.commit()
             raise HTTPException(status_code=410, detail="Dashboard has expired")
-        
+
+        if not dashboard.is_active:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+
         dashboard.view_count += 1
         
         # Check if we need to sync (cache for 3 minutes for faster updates)
