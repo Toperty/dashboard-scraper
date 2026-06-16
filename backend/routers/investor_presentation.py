@@ -75,51 +75,56 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 .where(PropertyImage.is_facade == True)
             ).first()
             
-            # Función helper para verificar/generar URL firmada
+            # Función helper para verificar/generar URL firmada.
+            # IMPORTANTE: las URLs firmadas vencen a los 7 días. La presentación se puede
+            # generar mucho después de subir las imágenes, así que SIEMPRE regeneramos una
+            # firma fresca desde el path del blob (no reutilizamos la firma guardada, que
+            # puede estar vencida → el AppScript recibiría 403 y quitaría la imagen).
             def ensure_signed_url(image_path: str) -> str:
-                """Asegura que la URL esté firmada, usa la existente o genera una nueva"""
+                """Devuelve una URL firmada fresca para la imagen, regenerándola desde GCS."""
                 if not image_path:
                     return ""
-                    
-                # Si ya tiene parámetros de firma, devolverla tal cual
-                if 'X-Goog-Algorithm' in image_path:
-                    return image_path
-                    
-                # Si es una URL de GCS simple, generar URL firmada
-                if image_path.startswith('https://storage.googleapis.com/'):
-                    logger.warning(f"Image without signed URL found, this shouldn't happen: {image_path[:80]}...")
-                    # Generar URL firmada de emergencia
-                    if gcs_client and gcs_client.client:
-                        try:
-                            path_parts = image_path.replace('https://storage.googleapis.com/', '').split('/', 1)
-                            if len(path_parts) == 2:
-                                bucket_name = path_parts[0]
-                                blob_path = path_parts[1]
-                                
-                                bucket = gcs_client.client.bucket(bucket_name)
-                                blob = bucket.blob(blob_path)
-                                
-                                from datetime import timedelta
-                                signed_url = blob.generate_signed_url(
-                                    version="v4",
-                                    expiration=timedelta(days=7),  # 7 days max allowed by GCS
-                                    method="GET"
-                                )
-                                logger.info(f"Emergency signed URL generated for {blob_path}")
-                                return signed_url
-                        except Exception as e:
-                            logger.error(f"Could not generate emergency signed URL: {e}")
-                            return image_path
-                    return image_path
-                        
-                # Si es otra URL o ruta relativa
-                elif image_path.startswith('http'):
-                    return image_path
-                else:
-                    # Ruta relativa, esto no debería pasar con el nuevo código
+
+                # Si no es una imagen de GCS, devolverla tal cual (otra URL http válida)
+                if not image_path.startswith('https://storage.googleapis.com/'):
+                    if image_path.startswith('http'):
+                        return image_path
+                    # Ruta relativa (no debería pasar): construir URL de GCS para intentar firmar
                     logger.error(f"Relative path found, this shouldn't happen: {image_path}")
                     bucket_name = os.getenv('GCS_BUCKET_NAME', 'appraisals-images')
-                    return f"https://storage.googleapis.com/{bucket_name}/{image_path}"
+                    image_path = f"https://storage.googleapis.com/{bucket_name}/{image_path}"
+
+                # Sin cliente GCS no podemos firmar; devolver lo que haya (último recurso)
+                if not (gcs_client and gcs_client.client):
+                    logger.warning("GCS client no disponible para regenerar URL firmada")
+                    return image_path
+
+                try:
+                    from urllib.parse import unquote
+                    # Quitar la firma vieja (query string) para obtener la URL base del blob
+                    base_url = image_path.split('?', 1)[0]
+                    path_parts = base_url.replace('https://storage.googleapis.com/', '').split('/', 1)
+                    if len(path_parts) != 2:
+                        logger.error(f"No se pudo extraer blob path de: {base_url[:80]}...")
+                        return image_path
+
+                    bucket_name = path_parts[0]
+                    blob_path = unquote(path_parts[1])  # decodificar %20, etc.
+
+                    bucket = gcs_client.client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+
+                    from datetime import timedelta
+                    signed_url = blob.generate_signed_url(
+                        version="v4",
+                        expiration=timedelta(days=7),  # 7 días = máximo permitido por GCS
+                        method="GET"
+                    )
+                    logger.info(f"URL firmada regenerada para {blob_path}")
+                    return signed_url
+                except Exception as e:
+                    logger.error(f"No se pudo regenerar URL firmada, usando la existente: {e}")
+                    return image_path
             
             # Preparar URLs de las imágenes para el AppScript
             image_urls = {}

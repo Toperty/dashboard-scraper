@@ -371,8 +371,13 @@ async def get_financial_data_from_dashboard(valuation_id: int):
                                 if response.status == 200:
                                     result = await response.json()
                                     if result.get('success'):
-                                        # Actualizar sheet_data con datos específicos de inversionista
-                                        dashboard.sheet_data = result.get('data', {})
+                                        # Actualizar sheet_data con datos específicos de inversionista.
+                                        # Merge en vez de overwrite para conservar 'Para Envío Usuario'
+                                        # (client_id, co_applicant_*) que solo existe en el formulario.
+                                        from routers.payment_plans import _deep_merge_sheet_data
+                                        dashboard.sheet_data = _deep_merge_sheet_data(
+                                            dashboard.sheet_data or {}, result.get('data', {})
+                                        )
                                         dashboard.last_sync_at = datetime.utcnow()
                                         session.add(dashboard)
                                         session.commit()

@@ -82,6 +82,33 @@ def _sync_full_sheet_data(sheet_id: str, max_attempts: int = 4) -> Optional[Dict
     return last_data
 
 
+def _deep_merge_sheet_data(base: Any, override: Any) -> Any:
+    """
+    Combina recursivamente dos estructuras de sheet_data. `override` (datos
+    sincronizados desde el Sheet) gana sobre `base` (datos básicos del formulario),
+    PERO sin eliminar claves que el Sheet no devuelve ni pisar con valores vacíos.
+
+    Esto evita que el sync borre campos de 'Para Envío Usuario' que solo existen en
+    el formulario y nunca vuelven desde el Sheet (client_id, co_applicant_name,
+    co_applicant_id, etc.).
+    """
+    if not isinstance(base, dict) or not isinstance(override, dict):
+        return override
+
+    merged = dict(base)
+    for key, ov in override.items():
+        bv = merged.get(key)
+        if isinstance(bv, dict) and isinstance(ov, dict):
+            merged[key] = _deep_merge_sheet_data(bv, ov)
+        elif ov is None or (isinstance(ov, str) and ov.strip() == ''):
+            # No sobrescribir con vacío si ya hay un valor en base
+            if key not in merged:
+                merged[key] = ov
+        else:
+            merged[key] = ov
+    return merged
+
+
 def ensure_dashboard_synced(dashboard, session) -> bool:
     """
     Garantiza que un dashboard tenga datos completos antes de consumirlos en
@@ -104,7 +131,8 @@ def ensure_dashboard_synced(dashboard, session) -> bool:
     print(f"[ensure] dashboard {dashboard.id} con datos incompletos, re-sincronizando...")
     resynced = _sync_full_sheet_data(dashboard.sheet_id)
     if resynced:
-        dashboard.sheet_data = resynced
+        # Merge para no perder campos del formulario ('Para Envío Usuario')
+        dashboard.sheet_data = _deep_merge_sheet_data(dashboard.sheet_data or {}, resynced)
         dashboard.last_sync_at = datetime.utcnow()
         session.add(dashboard)
         session.commit()
@@ -272,11 +300,14 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             # Ahora sincronizar (con reintentos) para obtener datos completos y sobrescribir
                             synced_data = _sync_full_sheet_data(sheet_id)
                             if synced_data:
-                                existing_dashboard.sheet_data = synced_data
+                                # Merge en vez de overwrite: conserva 'Para Envío Usuario' del formulario
+                                existing_dashboard.sheet_data = _deep_merge_sheet_data(
+                                    existing_dashboard.sheet_data or {}, synced_data
+                                )
                                 existing_dashboard.last_sync_at = datetime.utcnow()
                                 session.commit()
                                 session.refresh(existing_dashboard)
-                                print(f"Successfully synced full data after edit - data keys: {list(synced_data.keys())}")
+                                print(f"Successfully synced full data after edit - data keys: {list(existing_dashboard.sheet_data.keys())}")
                             else:
                                 print("Warning: Could not sync full data after edit, dashboard keeps basic data")
 
@@ -311,11 +342,14 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             # Ahora sincronizar (con reintentos) para obtener datos completos
                             synced_data = _sync_full_sheet_data(sheet_id)
                             if synced_data:
-                                dashboard.sheet_data = synced_data
+                                # Merge en vez de overwrite: conserva 'Para Envío Usuario' del formulario
+                                dashboard.sheet_data = _deep_merge_sheet_data(
+                                    dashboard.sheet_data or {}, synced_data
+                                )
                                 dashboard.last_sync_at = datetime.utcnow()
                                 session.commit()
                                 session.refresh(dashboard)
-                                print(f"Successfully synced full data for new plan - data keys: {list(synced_data.keys())}")
+                                print(f"Successfully synced full data for new plan - data keys: {list(dashboard.sheet_data.keys())}")
                             else:
                                 print("Warning: Could not sync full data for new plan, dashboard keeps basic data")
 
@@ -492,7 +526,10 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
                                     if result.get('success'):
                                         # Procesar porcentajes antes de guardar
                                         raw_data = result.get('data', {})
-                                        dashboard.sheet_data = process_percentage_values(raw_data)
+                                        # Merge para conservar campos del formulario ('Para Envío Usuario')
+                                        dashboard.sheet_data = _deep_merge_sheet_data(
+                                            dashboard.sheet_data or {}, process_percentage_values(raw_data)
+                                        )
                                         dashboard.last_sync_at = datetime.utcnow()
                                         # Solo terminar si los datos quedaron completos; si las
                                         # fórmulas aún no estaban listas, reintentar dentro del
