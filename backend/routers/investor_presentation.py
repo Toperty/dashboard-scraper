@@ -10,6 +10,7 @@ from models.valuation import Valuation
 from models.investor_tenant import InvestorTenantInfo
 from models.property_images import PropertyImage
 from models.payment_plan_dashboard import PaymentPlanDashboard
+from routers.payment_plans import ensure_dashboard_synced, refresh_dashboard_expiration
 from datetime import datetime
 import os
 import httpx
@@ -140,13 +141,29 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
             else:
                 image_urls["foto_7"] = ""
             
-            # Obtener datos del dashboard
+            # Obtener datos del dashboard.
+            # Preferir el dashboard ACTIVO y más reciente para evitar tomar uno viejo/expirado.
             dashboard = session.exec(
-                select(PaymentPlanDashboard).where(
-                    PaymentPlanDashboard.valuation_name == valuation.valuation_name
+                select(PaymentPlanDashboard)
+                .where(PaymentPlanDashboard.valuation_name == valuation.valuation_name)
+                .order_by(
+                    PaymentPlanDashboard.is_active.desc(),
+                    PaymentPlanDashboard.created_at.desc()
                 )
             ).first()
-            
+
+            # Garantizar datos completos en la BD antes de construir la presentación
+            # (re-sincroniza y persiste si el sync al crear el plan quedó incompleto).
+            if dashboard:
+                if ensure_dashboard_synced(dashboard, session):
+                    logger.info(f"Datos del dashboard {dashboard.id} completos para generar presentación")
+                else:
+                    logger.warning(f"Dashboard {dashboard.id} sin datos completos; se generará con lo disponible")
+
+                # Renovar la validez del dashboard: al generar la presentación, el link
+                # de inversionista debe quedar vigente (reactiva si estaba expirado).
+                refresh_dashboard_expiration(dashboard, session)
+
             # Función auxiliar para limpiar valores monetarios
             def clean_currency(value_str: Any) -> float:
                 if not value_str:
@@ -550,6 +567,16 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 # Log si no se encontró spreadsheet_id
                 if not spreadsheet_id_found:
                     logger.warning(f"No se encontró spreadsheet_id para valuación {valuation.id}")
+
+            # link_investor: URL pública de la vista de inversionista del dashboard del plan.
+            # Se envía al AppScript para insertarla como hipervínculo en la presentación.
+            if dashboard and dashboard.dashboard_url:
+                base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000').rstrip('/')
+                presentation_data['link_investor'] = f"{base_url}{dashboard.dashboard_url}/investor"
+                logger.info(f"link_investor: {presentation_data['link_investor']}")
+            else:
+                presentation_data['link_investor'] = ""
+                logger.warning("No se pudo construir link_investor (sin dashboard o dashboard_url)")
             
             # Validar y aplicar valores por defecto para campos críticos
             def validate_and_default(data_dict):
@@ -637,7 +664,7 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                 logger.warning("⚠️ Algunos campos críticos tienen valores por defecto")
             
             # Enviar datos al AppScript con la estructura correcta (timeout aumentado)
-            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
                 # El AppScript espera un objeto con action y data
                 payload = {
                     "action": "generate_presentation",
@@ -657,7 +684,7 @@ async def generate_investor_presentation(request: PresentationRequest) -> Presen
                         }
                     )
                 except httpx.ReadTimeout:
-                    logger.error("AppScript timeout - La generación está tardando más de 60 segundos")
+                    logger.error("AppScript timeout - La generación está tardando más de 120 segundos")
                     raise HTTPException(
                         status_code=504,
                         detail="El AppScript está tardando mucho en responder. Esto puede ser por problemas de permisos en el Google Sheets o muchas imágenes que procesar."

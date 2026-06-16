@@ -18,6 +18,123 @@ import aiohttp
 router = APIRouter(prefix="/api", tags=["payment-plans"])
 
 
+def _is_sheet_data_complete(data: Any) -> bool:
+    """
+    Determina si los datos sincronizados del sheet están completos, es decir,
+    si las fórmulas ya fueron calculadas. Consideramos completo si alguna de las
+    secciones financieras clave tiene al menos un valor significativo.
+    """
+    if not isinstance(data, dict) or not data:
+        return False
+    for section in ('resumen', 'flujo_interno'):
+        sec = data.get(section)
+        if isinstance(sec, dict) and any(
+            v not in (None, '', 0, '0', '0.0') for v in sec.values()
+        ):
+            return True
+    return False
+
+
+def _sync_full_sheet_data(sheet_id: str, max_attempts: int = 4) -> Optional[Dict[str, Any]]:
+    """
+    Sincroniza los datos completos del sheet desde el Apps Script reader, con
+    reintentos y backoff para dar tiempo a que Google Sheets calcule las fórmulas.
+
+    Devuelve el dict de datos cuando los considera completos. Si nunca quedan
+    "completos" pero se obtuvo alguna respuesta válida, devuelve la última
+    (mejor que descartar datos parciales). Devuelve None si no se pudo sincronizar.
+    """
+    apps_script_reader_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
+    if not apps_script_reader_url or not sheet_id:
+        return None
+
+    import time
+    last_data: Optional[Dict[str, Any]] = None
+    for attempt in range(1, max_attempts + 1):
+        # Backoff creciente (3s, 4s, 5s, 6s) para esperar el cálculo de fórmulas
+        time.sleep(min(2 + attempt, 6))
+        try:
+            resp = requests.get(
+                f"{apps_script_reader_url}?sheetId={sheet_id}",
+                timeout=60
+            )
+            if resp.status_code != 200:
+                print(f"[sync] sheet {sheet_id} intento {attempt}/{max_attempts}: HTTP {resp.status_code}")
+                continue
+
+            result = resp.json()
+            if not result.get('success'):
+                print(f"[sync] sheet {sheet_id} intento {attempt}/{max_attempts}: success=false")
+                continue
+
+            data = result.get('data', {}) or {}
+            last_data = data
+            if _is_sheet_data_complete(data):
+                print(f"[sync] sheet {sheet_id} completo en intento {attempt} (keys: {list(data.keys())})")
+                return data
+
+            print(f"[sync] sheet {sheet_id} intento {attempt}/{max_attempts}: datos incompletos, reintentando")
+        except Exception as e:
+            print(f"[sync] sheet {sheet_id} intento {attempt}/{max_attempts}: error {e}")
+
+    if last_data is not None:
+        print(f"[sync] sheet {sheet_id}: nunca quedó completo, devolviendo última respuesta parcial")
+    return last_data
+
+
+def ensure_dashboard_synced(dashboard, session) -> bool:
+    """
+    Garantiza que un dashboard tenga datos completos antes de consumirlos en
+    cualquier parte (presentación, vista, edición, PDF, etc.).
+
+    Si los datos están incompletos (el sync al crear el plan falló o las fórmulas
+    no habían terminado de calcular), re-sincroniza con reintentos y persiste.
+    Devuelve True si tras esto los datos quedaron completos.
+
+    Es idempotente y barato cuando ya están completos: no hace ninguna llamada
+    externa en ese caso.
+    """
+    if not dashboard:
+        return False
+    if _is_sheet_data_complete(dashboard.sheet_data):
+        return True
+    if not dashboard.sheet_id:
+        return False
+
+    print(f"[ensure] dashboard {dashboard.id} con datos incompletos, re-sincronizando...")
+    resynced = _sync_full_sheet_data(dashboard.sheet_id)
+    if resynced:
+        dashboard.sheet_data = resynced
+        dashboard.last_sync_at = datetime.utcnow()
+        session.add(dashboard)
+        session.commit()
+        session.refresh(dashboard)
+
+    complete = _is_sheet_data_complete(dashboard.sheet_data)
+    print(f"[ensure] dashboard {dashboard.id} {'completo' if complete else 'aún incompleto'} tras re-sync")
+    return complete
+
+
+def refresh_dashboard_expiration(dashboard, session, days: int = 10) -> None:
+    """
+    Renueva la validez de un dashboard: lo reactiva y empuja su expiración a al
+    menos `days` días desde hoy. Nunca acorta una expiración mayor existente.
+
+    Se usa, por ejemplo, al generar la presentación para que el link del dashboard
+    de inversionista siga vigente.
+    """
+    if not dashboard:
+        return
+    new_expiration = datetime.utcnow() + timedelta(days=days)
+    dashboard.is_active = True
+    if not dashboard.expires_at or dashboard.expires_at < new_expiration:
+        dashboard.expires_at = new_expiration
+    session.add(dashboard)
+    session.commit()
+    session.refresh(dashboard)
+    print(f"[expire] dashboard {dashboard.id} renovado, expira {dashboard.expires_at.isoformat()}")
+
+
 class PaymentPlanRequest(BaseModel):
     """Request model for payment plan data"""
     valuation_name: str
@@ -151,36 +268,18 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             
                             session.commit()
                             session.refresh(existing_dashboard)
-                            
-                            # Ahora sincronizar para obtener datos completos y sobrescribir
-                            apps_script_reader_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
-                            if apps_script_reader_url and sheet_id:
-                                # Dar un pequeño delay para que Google Sheets procese los cambios
-                                import time
-                                time.sleep(2)  # Esperar 2 segundos para que se calculen las fórmulas
-                                
-                                try:
-                                    print(f"Syncing full data after edit for sheet_id: {sheet_id}")
-                                    sync_response = requests.get(
-                                        f"{apps_script_reader_url}?sheetId={sheet_id}",
-                                        timeout=60
-                                    )
-                                    if sync_response.status_code == 200:
-                                        sync_result = sync_response.json()
-                                        if sync_result.get('success'):
-                                            # Sobrescribir con datos completos
-                                            existing_dashboard.sheet_data = sync_result.get('data', {})
-                                            existing_dashboard.last_sync_at = datetime.utcnow()
-                                            session.commit()
-                                            session.refresh(existing_dashboard)
-                                            print(f"Successfully synced full data after edit - data keys: {list(sync_result.get('data', {}).keys())}")
-                                        else:
-                                            print(f"Sync response not successful: {sync_result}")
-                                    else:
-                                        print(f"Sync response status: {sync_response.status_code}")
-                                except Exception as sync_error:
-                                    print(f"Warning: Could not sync full data after edit: {sync_error}")
-                            
+
+                            # Ahora sincronizar (con reintentos) para obtener datos completos y sobrescribir
+                            synced_data = _sync_full_sheet_data(sheet_id)
+                            if synced_data:
+                                existing_dashboard.sheet_data = synced_data
+                                existing_dashboard.last_sync_at = datetime.utcnow()
+                                session.commit()
+                                session.refresh(existing_dashboard)
+                                print(f"Successfully synced full data after edit - data keys: {list(synced_data.keys())}")
+                            else:
+                                print("Warning: Could not sync full data after edit, dashboard keeps basic data")
+
                             # Construir URL completa para la respuesta
                             base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
                             full_dashboard_url = f"{base_url}{existing_dashboard.dashboard_url}"
@@ -208,36 +307,18 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                             session.add(dashboard)
                             session.commit()
                             session.refresh(dashboard)
-                            
-                            # Ahora sincronizar para obtener datos completos
-                            apps_script_reader_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
-                            if apps_script_reader_url and sheet_id:
-                                # Dar un pequeño delay para que Google Sheets procese las fórmulas
-                                import time
-                                time.sleep(2)  # Esperar 2 segundos
-                                
-                                try:
-                                    print(f"Syncing full data for new sheet_id: {sheet_id}")
-                                    sync_response = requests.get(
-                                        f"{apps_script_reader_url}?sheetId={sheet_id}",
-                                        timeout=60
-                                    )
-                                    if sync_response.status_code == 200:
-                                        sync_result = sync_response.json()
-                                        if sync_result.get('success'):
-                                            # Actualizar con datos completos
-                                            dashboard.sheet_data = sync_result.get('data', {})
-                                            dashboard.last_sync_at = datetime.utcnow()
-                                            session.commit()
-                                            session.refresh(dashboard)
-                                            print(f"Successfully synced full data for new plan - data keys: {list(sync_result.get('data', {}).keys())}")
-                                        else:
-                                            print(f"Sync response not successful: {sync_result}")
-                                    else:
-                                        print(f"Sync response status: {sync_response.status_code}")
-                                except Exception as sync_error:
-                                    print(f"Warning: Could not sync full data for new plan: {sync_error}")
-                            
+
+                            # Ahora sincronizar (con reintentos) para obtener datos completos
+                            synced_data = _sync_full_sheet_data(sheet_id)
+                            if synced_data:
+                                dashboard.sheet_data = synced_data
+                                dashboard.last_sync_at = datetime.utcnow()
+                                session.commit()
+                                session.refresh(dashboard)
+                                print(f"Successfully synced full data for new plan - data keys: {list(synced_data.keys())}")
+                            else:
+                                print("Warning: Could not sync full data for new plan, dashboard keeps basic data")
+
                             # Construir URL completa para la respuesta
                             base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
                             full_dashboard_url = f"{base_url}{dashboard.dashboard_url}"
@@ -384,6 +465,10 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
                 should_sync = True
             elif not dashboard.last_sync_at:
                 should_sync = True
+            elif not _is_sheet_data_complete(dashboard.sheet_data):
+                # Datos incompletos guardados (sync previo falló o fórmulas no listas):
+                # forzar re-sync sin importar la ventana de caché.
+                should_sync = True
             else:
                 time_since_sync = datetime.utcnow() - dashboard.last_sync_at
                 if time_since_sync > timedelta(minutes=3):
@@ -409,7 +494,13 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
                                         raw_data = result.get('data', {})
                                         dashboard.sheet_data = process_percentage_values(raw_data)
                                         dashboard.last_sync_at = datetime.utcnow()
-                                        break  # Success, exit retry loop
+                                        # Solo terminar si los datos quedaron completos; si las
+                                        # fórmulas aún no estaban listas, reintentar dentro del
+                                        # presupuesto para no persistir datos incompletos.
+                                        if _is_sheet_data_complete(dashboard.sheet_data) or attempt >= max_retries:
+                                            break
+                                        print(f"Sync de dashboard {dashboard.id} incompleto, reintentando ({attempt + 1}/{max_retries + 1})...")
+                                        await asyncio.sleep(1)
                     except asyncio.TimeoutError:
                         if attempt < max_retries:
                             print(f"Timeout syncing with Apps Script for dashboard {dashboard.id}, attempt {attempt + 1}/{max_retries + 1}, retrying...")
