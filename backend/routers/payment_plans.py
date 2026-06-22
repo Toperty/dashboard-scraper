@@ -481,10 +481,13 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
         if not dashboard:
             raise HTTPException(status_code=404, detail="Dashboard not found")
 
-        # Expired takes precedence over inactive so the frontend can offer to extend.
-        # Soft-deleted dashboards (inactive but not expired) still resolve to 404.
-        if dashboard.is_expired:
-            raise HTTPException(status_code=410, detail="Dashboard has expired")
+        # El link de inversionistas nunca expira; solo el de cliente ("user"/"full")
+        # está sujeto a vencimiento. Para inversionistas se ignora is_expired.
+        if dashboard_type != "investor":
+            # Expired takes precedence over inactive so the frontend can offer to extend.
+            # Soft-deleted dashboards (inactive but not expired) still resolve to 404.
+            if dashboard.is_expired:
+                raise HTTPException(status_code=410, detail="Dashboard has expired")
 
         if not dashboard.is_active:
             raise HTTPException(status_code=404, detail="Dashboard not found")
@@ -699,15 +702,21 @@ async def delete_dashboard(access_token: str):
 
 @router.get("/dashboard/cleanup")
 async def cleanup_expired_dashboards():
-    """Clean up expired dashboards"""
+    """Report expired dashboards.
+
+    Ya NO se desactivan los dashboards vencidos: el link de inversionista nunca
+    expira y comparte el mismo registro que el de cliente, así que poner
+    is_active=False mataría también el acceso de inversionista. El vencimiento
+    del cliente se controla con is_expired (410) en el endpoint de lectura, sin
+    necesidad de desactivar el registro. is_active queda reservado para borrado
+    manual explícito.
+    """
     from models.payment_plan_dashboard import PaymentPlanDashboard
-    
+
     with Session(engine) as session:
         expired_count = session.query(PaymentPlanDashboard).filter(
             PaymentPlanDashboard.expires_at < datetime.utcnow(),
             PaymentPlanDashboard.is_active == True
-        ).update({"is_active": False})
-        
-        session.commit()
-        
-        return {"success": True, "message": f"Cleaned up {expired_count} expired dashboards"}
+        ).count()
+
+        return {"success": True, "message": f"{expired_count} dashboards de cliente vencidos (inversionista sigue activo)"}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Clock, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertCircle, RefreshCw, TrendingUp, DollarSign, BarChart3, PieChart, ChevronLeft, ChevronRight, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TopertyLogo } from '@/components/toperty-logo'
@@ -179,10 +179,7 @@ export default function InvestorDashboardPage() {
             </div>
             
             <div className="text-right">
-              <div className="flex items-center gap-2 text-sm text-orange-600">
-                <Clock className="w-4 h-4" />
-                <span>Válido por {dashboardData.days_remaining} días</span>
-              </div>
+              {/* El link de inversionista no expira: no se muestra contador de vigencia */}
               {/* Indicador de estado del plan */}
               {dashboardData.data?.plan_status && (
                 <div className={`flex items-center gap-2 text-sm mt-1 ${dashboardData.data.plan_status.valid ? 'text-green-600' : 'text-red-600'}`}>
