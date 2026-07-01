@@ -14,31 +14,31 @@ const statusConfig = {
   completed: { 
     label: "Completado", 
     icon: CheckCircle2, 
-    color: "bg-green-600 text-white hover:bg-green-600",
+    color: "bg-success text-white hover:bg-success",
     tooltip: "La ciudad ha terminado su proceso de scraping para todas las páginas programadas"
   },
   en_proceso: { 
     label: "En proceso", 
     icon: Clock, 
-    color: "bg-orange-500 text-white hover:bg-orange-500",
+    color: "bg-brand-orange text-white hover:bg-brand-orange",
     tooltip: "El scraper está actualmente procesando páginas de esta ciudad"
   },
   programado: { 
     label: "Programado", 
     icon: Clock, 
-    color: "bg-blue-500 text-white hover:bg-blue-500",
+    color: "bg-info text-white hover:bg-info",
     tooltip: "La ciudad está en la cola de scraping y será procesada próximamente"
   },
   atrasado: { 
     label: "Atrasado", 
     icon: XCircle, 
-    color: "bg-red-600 text-white hover:bg-red-600",
+    color: "bg-destructive text-white hover:bg-destructive",
     tooltip: "El proceso de scraping para esta ciudad se ha retrasado respecto al cronograma"
   },
   no_iniciado: { 
     label: "No Iniciado", 
     icon: AlertCircle, 
-    color: "bg-slate-500 text-white hover:bg-slate-500",
+    color: "bg-neutral-500 text-white hover:bg-neutral-500",
     tooltip: "El scraping para esta ciudad aún no ha comenzado"
   },
 }

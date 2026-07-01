@@ -495,8 +495,8 @@ export function PropertyValuation() {
       const pageHeight = pdf.internal.pageSize.getHeight()
       const margin = 20
       const primaryTextColor = [0, 24, 69] // #001845
-      const sectionTitleColor = [5, 103, 201] // #0567C9
-      const bodyTextColor = [136, 136, 136] // #888888
+      const sectionTitleColor = [5, 103, 201] // #4254f8
+      const bodyTextColor = [136, 136, 136] // #698695
       const separatorColor = [220, 220, 220] // Light gray for subtle separators
       
       // Helper function to draw subtle separator
@@ -1107,7 +1107,7 @@ export function PropertyValuation() {
               // Barra 1 (base) - Color azul muy oscuro
               if (value1 > 0) {
                 const barHeight1 = (value1 / maxValue) * chartHeight
-                pdf.setFillColor(2, 25, 69) // #021945
+                pdf.setFillColor(2, 25, 69) // #001845
                 pdf.rect(barX, chartY + chartHeight - barHeight1, barWidth, barHeight1, 'F')
                 
                 // Valor sobre la barra 1
@@ -1167,14 +1167,14 @@ export function PropertyValuation() {
             
             // Dibujar línea conectando los puntos
             if (linePoints.length > 1) {
-              pdf.setDrawColor(4, 102, 201) // #0466c9
+              pdf.setDrawColor(4, 102, 201) // #4254f8
               pdf.setLineWidth(0.5)
               for (let i = 0; i < linePoints.length - 1; i++) {
                 pdf.line(linePoints[i].x, linePoints[i].y, linePoints[i + 1].x, linePoints[i + 1].y)
               }
               // Dibujar puntos como pequeños cuadrados
               linePoints.forEach(point => {
-                pdf.setFillColor(4, 102, 201) // #0466c9
+                pdf.setFillColor(4, 102, 201) // #4254f8
                 pdf.rect(point.x - 0.8, point.y - 0.8, 1.6, 1.6, 'F')
               })
             }
@@ -1189,7 +1189,7 @@ export function PropertyValuation() {
             const legendStartX = margin
             
             // Serie 1
-            pdf.setFillColor(2, 25, 69) // #021945
+            pdf.setFillColor(2, 25, 69) // #001845
             pdf.rect(legendStartX, yPos, 3, 3, 'F')
             pdf.text(`${grafica1.label1 || 'Serie 1'}`, legendStartX + 5, yPos + 2)
             
@@ -1199,7 +1199,7 @@ export function PropertyValuation() {
             pdf.text(`${grafica1.label2 || 'Serie 2'}`, legendStartX + 65, yPos + 2)
             
             // Serie 3 (línea)
-            pdf.setDrawColor(4, 102, 201) // #0466c9
+            pdf.setDrawColor(4, 102, 201) // #4254f8
             pdf.setLineWidth(1)
             pdf.line(legendStartX + 120, yPos + 1.5, legendStartX + 126, yPos + 1.5)
             pdf.text(`${grafica1.label3 || 'Serie 3'}`, legendStartX + 130, yPos + 2)
@@ -1302,7 +1302,7 @@ export function PropertyValuation() {
               // Barra 1 (label1) - Color azul muy oscuro
               if (item[grafica2.label1]) {
                 const barHeight1 = (item[grafica2.label1] / maxValue2) * chartHeight
-                pdf.setFillColor(2, 25, 69) // #021945
+                pdf.setFillColor(2, 25, 69) // #001845
                 pdf.rect(groupStartX, chartY + chartHeight - barHeight1, barIndividualWidth, barHeight1, 'F')
                 
                 // Valor sobre la barra 1
@@ -1354,14 +1354,14 @@ export function PropertyValuation() {
             
             // Dibujar línea conectando los puntos
             if (linePoints2.length > 1) {
-              pdf.setDrawColor(4, 102, 201) // #0466c9
+              pdf.setDrawColor(4, 102, 201) // #4254f8
               pdf.setLineWidth(0.5)
               for (let i = 0; i < linePoints2.length - 1; i++) {
                 pdf.line(linePoints2[i].x, linePoints2[i].y, linePoints2[i + 1].x, linePoints2[i + 1].y)
               }
               // Dibujar puntos como pequeños cuadrados
               linePoints2.forEach(point => {
-                pdf.setFillColor(4, 102, 201) // #0466c9
+                pdf.setFillColor(4, 102, 201) // #4254f8
                 pdf.rect(point.x - 0.8, point.y - 0.8, 1.6, 1.6, 'F')
               })
             }
@@ -1376,7 +1376,7 @@ export function PropertyValuation() {
             const legendStartX2 = margin
             
             // Serie 1
-            pdf.setFillColor(2, 25, 69) // #021945
+            pdf.setFillColor(2, 25, 69) // #001845
             pdf.rect(legendStartX2, yPos, 3, 3, 'F')
             pdf.text(`${grafica2.label1 || 'Serie 1'}`, legendStartX2 + 5, yPos + 2)
             
@@ -1386,7 +1386,7 @@ export function PropertyValuation() {
             pdf.text(`${grafica2.label2 || 'Serie 2'}`, legendStartX2 + 65, yPos + 2)
             
             // Serie 3 (línea)
-            pdf.setDrawColor(4, 102, 201) // #0466c9
+            pdf.setDrawColor(4, 102, 201) // #4254f8
             pdf.setLineWidth(1)
             pdf.line(legendStartX2 + 120, yPos + 1.5, legendStartX2 + 126, yPos + 1.5)
             pdf.text(`${grafica2.label3 || 'Serie 3'}`, legendStartX2 + 130, yPos + 2)
@@ -2781,8 +2781,8 @@ export function PropertyValuation() {
       {saveMessage && (
         <div className={`p-4 rounded-lg text-center font-medium ${
           saveMessage.type === 'success' 
-            ? 'bg-green-100 text-green-800 border border-green-200' 
-            : 'bg-red-100 text-red-800 border border-red-200'
+            ? 'bg-success/15 text-success border border-success/30' 
+            : 'bg-destructive/15 text-destructive border border-destructive/30'
         }`}>
           {saveMessage.text}
         </div>
@@ -2793,12 +2793,12 @@ export function PropertyValuation() {
         <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-sm mx-4">
             <div className="relative">
-              <div className="w-16 h-16 border-4 border-blue-200 rounded-full"></div>
-              <div className="absolute top-0 left-0 w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-16 h-16 border-4 border-primary/30 rounded-full"></div>
+              <div className="absolute top-0 left-0 w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             </div>
             <div className="text-center">
-              <h3 className="text-lg font-semibold text-gray-900">Generando PDF</h3>
-              <p className="text-sm text-gray-500 mt-1">Por favor espere, el archivo se descargará automáticamente...</p>
+              <h3 className="text-lg font-semibold text-foreground">Generando PDF</h3>
+              <p className="text-sm text-muted-foreground mt-1">Por favor espere, el archivo se descargará automáticamente...</p>
             </div>
           </div>
         </div>
@@ -3087,7 +3087,7 @@ export function PropertyValuation() {
                     />
                     {geocoding && (
                       <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                        <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                        <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
                       </div>
                     )}
                   </div>
@@ -3127,7 +3127,7 @@ export function PropertyValuation() {
                     onChange={(e) => handleInputChange('latitude', e.target.value === '' ? undefined : Number(e.target.value))}
                     onFocus={(e) => { if (e.target.value === '0') e.target.select() }}
                     required
-                    className={lastGeocodedAddress ? "bg-green-50 border-green-200" : ""}
+                    className={lastGeocodedAddress ? "bg-success/10 border-success/30" : ""}
                   />
                 </div>
                 <div>
@@ -3150,13 +3150,13 @@ export function PropertyValuation() {
                     onChange={(e) => handleInputChange('longitude', e.target.value === '' ? undefined : Number(e.target.value))}
                     onFocus={(e) => { if (e.target.value === '0') e.target.select() }}
                     required
-                    className={lastGeocodedAddress ? "bg-green-50 border-green-200" : ""}
+                    className={lastGeocodedAddress ? "bg-success/10 border-success/30" : ""}
                   />
                 </div>
               </div>
               
               {lastGeocodedAddress && currentCoordinates && (
-                <div className="text-xs text-green-600 bg-green-50 p-2 rounded flex items-center justify-between">
+                <div className="text-xs text-success bg-success/10 p-2 rounded flex items-center justify-between">
                   <div>
                     ✓ Coordenadas obtenidas de: {lastGeocodedAddress}
                   </div>
@@ -3164,7 +3164,7 @@ export function PropertyValuation() {
                     href={`https://www.google.com/maps?q=${currentCoordinates.lat},${currentCoordinates.lng}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium"
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary text-xs font-medium"
                   >
                     <MapPin className="h-3 w-3" />
                     Ver en Maps
@@ -3228,17 +3228,17 @@ export function PropertyValuation() {
                 {/* Resumen Final */}
                 {(results.average_valuation || results.capitalized_value || results.total_sell_price) && (
                   <div className="space-y-4">
-                    <div className="p-6 border-2 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-                      <h3 className="font-bold text-purple-800 mb-3 flex items-center gap-2 text-lg">
+                    <div className="p-6 border-2 rounded-lg bg-gradient-to-r from-brand-teal/10 to-accent border-brand-teal/30">
+                      <h3 className="font-bold text-brand-teal mb-3 flex items-center gap-2 text-lg">
                         <Calculator className="h-5 w-5" />
                         Avalúo Final
                       </h3>
                       <div className="text-center">
-                        <div className="text-3xl font-bold text-purple-900 mb-2">
+                        <div className="text-3xl font-bold text-brand-teal mb-2">
                           {editableFinalPrice ? formatCurrency(parseFloat(editableFinalPrice)) : 
                            formatCurrency(results.average_valuation || results.capitalized_value || results.total_sell_price!)}
                         </div>
-                        <p className="text-sm text-purple-600">
+                        <p className="text-sm text-brand-teal">
                           {results.average_valuation ? 
                             'Promedio entre valoración por venta y por renta capitalizada' : 
                             'Valoración calculada por metodología'}
@@ -3247,8 +3247,8 @@ export function PropertyValuation() {
                     </div>
                     
                     {/* Campo editable para valor final */}
-                    <div className="p-4 border rounded-lg bg-orange-50 border-orange-200">
-                      <Label htmlFor="editable_final_price" className="text-orange-800 font-semibold">
+                    <div className="p-4 border rounded-lg bg-brand-orange/10 border-brand-orange/30">
+                      <Label htmlFor="editable_final_price" className="text-brand-orange font-semibold">
                         Valor Final Ajustado (Opcional)
                       </Label>
                       <Input
@@ -3266,7 +3266,7 @@ export function PropertyValuation() {
                         }}
                         className="mt-2"
                       />
-                      <p className="text-xs text-orange-700 mt-2">
+                      <p className="text-xs text-brand-orange mt-2">
                         Modifique este valor si como avaluador considera que debe ajustarse el resultado final
                       </p>
                     </div>
@@ -3275,8 +3275,8 @@ export function PropertyValuation() {
 
                 {/* Metodología por Venta */}
                 {results.sell_price_per_sqm && !results.sell_error ? (
-                  <div className="p-4 border rounded-lg bg-green-50">
-                    <h3 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                  <div className="p-4 border rounded-lg bg-success/10">
+                    <h3 className="font-semibold text-success mb-3 flex items-center gap-2">
                       <Home className="h-4 w-4" />
                       Metodología por Venta
                     </h3>
@@ -3289,20 +3289,20 @@ export function PropertyValuation() {
                         <span>Área de la propiedad:</span>
                         <span>{formData.area} m²</span>
                       </div>
-                      <hr className="border-green-200" />
+                      <hr className="border-success/30" />
                       <div className="flex justify-between font-semibold">
                         <span>Valor Total por Venta:</span>
-                        <Badge className="bg-green-600 text-white">{formatCurrency(results.total_sell_price!)}</Badge>
+                        <Badge className="bg-success text-white">{formatCurrency(results.total_sell_price!)}</Badge>
                       </div>
-                      <p className="text-xs text-green-700 mt-2">
+                      <p className="text-xs text-success mt-2">
                         Cálculo: {formatCurrency(results.sell_price_per_sqm)} × {formData.area} m²
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="p-4 border rounded-lg bg-red-50">
-                    <h3 className="font-semibold text-red-800 mb-2">Metodología por Venta</h3>
-                    <p className="text-red-600 text-sm">
+                  <div className="p-4 border rounded-lg bg-destructive/10">
+                    <h3 className="font-semibold text-destructive mb-2">Metodología por Venta</h3>
+                    <p className="text-destructive text-sm">
                       {results.sell_error || "Modelo no disponible"}
                     </p>
                   </div>
@@ -3310,8 +3310,8 @@ export function PropertyValuation() {
 
                 {/* Metodología por Renta Capitalizada */}
                 {results.rent_price_per_sqm && !results.rent_error ? (
-                  <div className="p-4 border rounded-lg bg-blue-50">
-                    <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                  <div className="p-4 border rounded-lg bg-accent">
+                    <h3 className="font-semibold text-primary mb-3 flex items-center gap-2">
                       <MapPin className="h-4 w-4" />
                       Metodología por Renta Capitalizada
                     </h3>
@@ -3332,20 +3332,20 @@ export function PropertyValuation() {
                         <span>Tasa de capitalización mensual:</span>
                         <span>{results.capitalization_rate}%</span>
                       </div>
-                      <hr className="border-blue-200" />
+                      <hr className="border-primary/30" />
                       <div className="flex justify-between font-semibold">
                         <span>Valor Capitalizado:</span>
-                        <Badge className="bg-blue-600 text-white">{formatCurrency(results.capitalized_value!)}</Badge>
+                        <Badge className="bg-primary text-white">{formatCurrency(results.capitalized_value!)}</Badge>
                       </div>
-                      <p className="text-xs text-blue-700 mt-2">
+                      <p className="text-xs text-primary mt-2">
                         Cálculo: {formatCurrency(results.rent_monthly_total!)} ÷ {results.capitalization_rate}%
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="p-4 border rounded-lg bg-red-50">
-                    <h3 className="font-semibold text-red-800 mb-2">Metodología por Renta Capitalizada</h3>
-                    <p className="text-red-600 text-sm">
+                  <div className="p-4 border rounded-lg bg-destructive/10">
+                    <h3 className="font-semibold text-destructive mb-2">Metodología por Renta Capitalizada</h3>
+                    <p className="text-destructive text-sm">
                       {results.rent_error || "Modelo no disponible"}
                     </p>
                   </div>
@@ -3355,8 +3355,8 @@ export function PropertyValuation() {
                 {saveMessage && (
                   <div className={`p-3 rounded-lg text-center font-medium ${
                     saveMessage.type === 'success' 
-                      ? 'bg-green-100 text-green-800 border border-green-200' 
-                      : 'bg-red-100 text-red-800 border border-red-200'
+                      ? 'bg-success/15 text-success border border-success/30' 
+                      : 'bg-destructive/15 text-destructive border border-destructive/30'
                   }`}>
                     {saveMessage.text}
                   </div>
@@ -3371,7 +3371,7 @@ export function PropertyValuation() {
                           type="button"
                           onClick={handleSaveValuation}
                           disabled={saving || !valuationName.trim()}
-                          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none"
+                          className="flex items-center gap-2 bg-success hover:bg-success/90 text-white disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none"
                         >
                           {saving ? (
                             <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
@@ -3434,7 +3434,7 @@ export function PropertyValuation() {
         <CardContent>
           {/* Sección de filtros */}
           {showFilters && (
-            <div className="mb-6 p-4 border rounded-lg bg-gray-50">
+            <div className="mb-6 p-4 border rounded-lg bg-muted">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="filter-name">Buscar por nombre</Label>
@@ -3489,7 +3489,7 @@ export function PropertyValuation() {
                 <div>
                   <Label htmlFor="filter-price-min">Precio mínimo</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                     <Input
                       id="filter-price-min"
                       type="text"
@@ -3518,7 +3518,7 @@ export function PropertyValuation() {
                 <div>
                   <Label htmlFor="filter-price-max">Precio máximo</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                     <Input
                       id="filter-price-max"
                       type="text"
@@ -3589,7 +3589,7 @@ export function PropertyValuation() {
                     <TableRow>
                       <TableCell colSpan={10} className="text-center py-8">
                         <div className="flex items-center justify-center gap-2">
-                          <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                          <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"></div>
                           Cargando avalúos...
                         </div>
                       </TableCell>
@@ -3604,7 +3604,7 @@ export function PropertyValuation() {
                     </TableRow>
                   ) : (
                     valuationsData?.valuations.map((valuation) => (
-                      <TableRow key={valuation.id} className={favoriteValuations.includes(valuation.id) ? 'bg-yellow-50' : ''}>
+                      <TableRow key={valuation.id} className={favoriteValuations.includes(valuation.id) ? 'bg-brand-orange/10' : ''}>
                         <TableCell className="text-center">
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -3615,8 +3615,8 @@ export function PropertyValuation() {
                                 disabled={updatingFavorite !== null}
                                 className={`p-1 hover:bg-transparent ${
                                   favoriteValuations.includes(valuation.id)
-                                    ? 'text-yellow-600'
-                                    : 'text-gray-400 hover:text-gray-600'
+                                    ? 'text-brand-orange'
+                                    : 'text-neutral-400 hover:text-muted-foreground'
                                 } ${
                                   updatingFavorite === valuation.id ? 'opacity-50' : ''
                                 }`}
@@ -3644,7 +3644,7 @@ export function PropertyValuation() {
                         <TableCell>{valuation.rooms}</TableCell>
                         <TableCell>{valuation.baths}</TableCell>
                         <TableCell>Estrato {valuation.stratum}</TableCell>
-                        <TableCell className="font-bold text-green-600">
+                        <TableCell className="font-bold text-success">
                           {formatCurrency(valuation.final_price)}
                         </TableCell>
                         <TableCell>
@@ -3668,8 +3668,8 @@ export function PropertyValuation() {
                               disabled={loadingPaymentPlanId === valuation.id}
                               className={`w-36 flex items-center justify-center gap-1 transition-all duration-200 hover:scale-105 hover:shadow-md ${
                                 valuation.has_payment_plan 
-                                  ? 'border-blue-800 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-900' 
-                                  : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                                  ? 'border-primary bg-accent text-primary hover:bg-accent hover:border-primary' 
+                                  : 'text-primary hover:text-primary hover:bg-accent'
                               }`}
                             >
                               {loadingPaymentPlanId === valuation.id ? (
@@ -3691,7 +3691,7 @@ export function PropertyValuation() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleInvestorPDF(valuation)}
-                              className="w-32 flex items-center justify-center gap-1 text-green-600 hover:text-green-700 hover:bg-green-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                              className="w-32 flex items-center justify-center gap-1 text-success hover:text-success hover:bg-success/10 transition-all duration-200 hover:scale-105 hover:shadow-md"
                             >
                               <FileText className="h-3 w-3" />
                               PDF Inversionista
@@ -3700,7 +3700,7 @@ export function PropertyValuation() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleDeleteValuation(valuation)}
-                              className="w-24 flex items-center justify-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                              className="w-24 flex items-center justify-center gap-1 text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-200 hover:scale-105 hover:shadow-md"
                             >
                               <Trash2 className="h-3 w-3" />
                               Eliminar
@@ -3770,7 +3770,7 @@ export function PropertyValuation() {
           <form onSubmit={handlePaymentPlanSubmit} className="space-y-6">
             {/* Subtítulo: Configuración del Programa */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Configuración del Programa</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Configuración del Programa</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative">
                   <Tooltip>
@@ -3936,7 +3936,7 @@ export function PropertyValuation() {
 
             {/* Subtítulo: Flujo Toperty Interno */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Flujo Toperty Interno</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Flujo Toperty Interno</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Tooltip>
@@ -4072,7 +4072,7 @@ export function PropertyValuation() {
                     className="pr-8"
                     required
                   />
-                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">%</span>
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">%</span>
                 </div>
               </div>
 
@@ -4120,7 +4120,7 @@ export function PropertyValuation() {
             
             {/* Subtítulo: Para Envío Usuario */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Para Envío Usuario</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-4 border-b pb-2">Para Envío Usuario</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
                 <div>
@@ -4322,17 +4322,17 @@ export function PropertyValuation() {
           {generatingPDFInModal && (
             <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50 rounded-lg">
               <div className="flex flex-col items-center gap-3">
-                <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span className="text-sm font-medium text-gray-700">Generando PDF...</span>
+                <span className="text-sm font-medium text-muted-foreground">Generando PDF...</span>
               </div>
             </div>
           )}
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Check className="h-5 w-5 text-green-600" />
+              <Check className="h-5 w-5 text-success" />
               {dashboardActionsModal.title || '¡Plan de Pagos Creado!'}
             </DialogTitle>
             <DialogDescription>
@@ -4340,25 +4340,25 @@ export function PropertyValuation() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1 py-4">
-            <div className="text-sm text-gray-500 mb-2">Acciones disponibles:</div>
+            <div className="text-sm text-muted-foreground mb-2">Acciones disponibles:</div>
             <div className="space-y-1">
               {dashboardActionsModal.dashboardUrl && (
                 <>
                   <button
                     onClick={() => window.open(`${dashboardActionsModal.dashboardUrl}/user`, '_blank')}
                     disabled={generatingPDFInModal}
-                    className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-muted hover:bg-muted text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="font-medium">Ver Dashboard Usuario</span>
-                    <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                    <span className="text-neutral-400 group-hover:text-muted-foreground">→</span>
                   </button>
                   <button
                     onClick={() => window.open(`${dashboardActionsModal.dashboardUrl}/investor`, '_blank')}
                     disabled={generatingPDFInModal}
-                    className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-muted hover:bg-muted text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="font-medium">Ver Dashboard Inversionista</span>
-                    <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                    <span className="text-neutral-400 group-hover:text-muted-foreground">→</span>
                   </button>
                 </>
               )}
@@ -4366,10 +4366,10 @@ export function PropertyValuation() {
                 <button
                   onClick={() => window.open(dashboardActionsModal.sheetUrl!, '_blank')}
                   disabled={generatingPDFInModal}
-                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-muted hover:bg-muted text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className="font-medium">Ver Excel</span>
-                  <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                  <span className="text-neutral-400 group-hover:text-muted-foreground">→</span>
                 </button>
               )}
               {dashboardActionsModal.dashboardUrl && (
@@ -4419,20 +4419,20 @@ export function PropertyValuation() {
                     loadClientName()
                   }}
                   disabled={generatingPDFInModal}
-                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-gray-50 hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-muted hover:bg-muted text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className="font-medium">PDF Usuario</span>
-                  <span className="text-gray-400 group-hover:text-gray-600">→</span>
+                  <span className="text-neutral-400 group-hover:text-muted-foreground">→</span>
                 </button>
               )}
               {dashboardActionsModal.showEditButton && (
                 <button
                   onClick={handleEditPlanFromModal}
                   disabled={generatingPDFInModal}
-                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-amber-50 hover:bg-amber-100 text-amber-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-brand-orange/10 hover:bg-brand-orange/15 text-brand-orange disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className="font-medium">Editar Plan</span>
-                  <span className="text-amber-400 group-hover:text-amber-600">→</span>
+                  <span className="text-brand-orange group-hover:text-brand-orange">→</span>
                 </button>
               )}
               <button
@@ -4470,10 +4470,10 @@ export function PropertyValuation() {
                   loadClientName()
                 }}
                 disabled={generatingPDFInModal}
-                className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-green-50 hover:bg-green-100 text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-success/10 hover:bg-success/15 text-success disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="font-medium">Generar Carta de Aprobación</span>
-                <span className="text-green-400 group-hover:text-green-600">→</span>
+                <span className="text-success group-hover:text-success">→</span>
               </button>
             </div>
             {/* Botón de cerrar separado */}
@@ -4481,7 +4481,7 @@ export function PropertyValuation() {
               <button
                 onClick={() => setDashboardActionsModal(prev => ({ ...prev, isOpen: false }))}
                 disabled={generatingPDFInModal}
-                className="w-full px-4 py-2 rounded-md font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-2 rounded-md font-medium bg-white border border-border text-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cerrar
               </button>
@@ -4510,12 +4510,12 @@ export function PropertyValuation() {
             <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center">
               <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-sm mx-4">
                 <div className="relative">
-                  <div className="w-16 h-16 border-4 border-blue-200 rounded-full"></div>
-                  <div className="absolute top-0 left-0 w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-16 h-16 border-4 border-primary/30 rounded-full"></div>
+                  <div className="absolute top-0 left-0 w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                 </div>
                 <div className="text-center">
-                  <h3 className="text-lg font-semibold text-gray-900">Generando carta de aprobación</h3>
-                  <p className="text-sm text-gray-500 mt-1">Por favor espere, se abrirá en una nueva pestaña...</p>
+                  <h3 className="text-lg font-semibold text-foreground">Generando carta de aprobación</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Por favor espere, se abrirá en una nueva pestaña...</p>
                 </div>
               </div>
             </div>
@@ -4726,7 +4726,7 @@ export function PropertyValuation() {
                   !approvalLetterForm.minInitialPayment ||
                   approvalLetterForm.additionalClients.some(c => c.fullName && !c.fullName.trim())
                 }
-                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-success hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={
                   (!approvalLetterForm.fullName || !approvalLetterForm.maxApprovedAmount || !approvalLetterForm.minInitialPayment) ?
                   'Complete todos los campos obligatorios' :
@@ -4768,7 +4768,7 @@ export function PropertyValuation() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pin className="h-5 w-5 text-yellow-600" />
+              <Pin className="h-5 w-5 text-brand-orange" />
               Límite de favoritos alcanzado
             </DialogTitle>
             <DialogDescription>
@@ -4778,7 +4778,7 @@ export function PropertyValuation() {
           </DialogHeader>
           
           <div className="space-y-2 my-4">
-            <div className="text-sm font-medium text-gray-700 mb-2">
+            <div className="text-sm font-medium text-muted-foreground mb-2">
               Favoritos actuales:
             </div>
             {valuationsData?.valuations
@@ -4788,7 +4788,7 @@ export function PropertyValuation() {
                 <div 
                   key={valuation.id}
                   className={`p-3 border rounded-lg transition-colors ${
-                    updatingFavorite === null ? 'hover:bg-gray-50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                    updatingFavorite === null ? 'hover:bg-muted cursor-pointer' : 'opacity-50 cursor-not-allowed'
                   }`}
                   onClick={() => {
                     if (updatingFavorite === null) {
@@ -4799,7 +4799,7 @@ export function PropertyValuation() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium">{valuation.valuation_name}</div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-muted-foreground">
                         {formatCurrency(valuation.final_price)} - {new Date(valuation.created_at).toLocaleDateString('es-CO')}
                       </div>
                     </div>
@@ -4845,11 +4845,11 @@ export function PropertyValuation() {
           {generatingUserPdf && (
             <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50 rounded-lg">
               <div className="flex flex-col items-center gap-3">
-                <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span className="text-sm font-medium text-gray-700">Generando PDF...</span>
+                <span className="text-sm font-medium text-muted-foreground">Generando PDF...</span>
               </div>
             </div>
           )}
@@ -5024,7 +5024,7 @@ export function PropertyValuation() {
               disabled={generatingUserPdf || 
                        !userPdfForm.fullName || 
                        userPdfForm.additionalClients.some(c => c.fullName && !c.fullName.trim())}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-primary hover:bg-primary/90"
             >
               {generatingUserPdf ? (
                 <>

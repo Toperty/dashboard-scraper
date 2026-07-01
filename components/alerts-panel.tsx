@@ -12,21 +12,21 @@ interface AlertsPanelProps {
 const alertConfig = {
   critical: {
     icon: AlertTriangle,
-    color: "bg-red-50 border-red-200",
-    badgeColor: "bg-red-600 text-white hover:bg-red-600",
-    iconColor: "text-red-600",
+    color: "bg-destructive/10 border-destructive/30",
+    badgeColor: "bg-destructive text-white hover:bg-destructive",
+    iconColor: "text-destructive",
   },
   warning: {
     icon: AlertCircle,
-    color: "bg-yellow-50 border-yellow-200",
-    badgeColor: "bg-yellow-600 text-white hover:bg-yellow-600",
-    iconColor: "text-yellow-600",
+    color: "bg-brand-orange/10 border-brand-orange/30",
+    badgeColor: "bg-brand-orange text-white hover:bg-brand-orange",
+    iconColor: "text-brand-orange",
   },
   info: {
     icon: Info,
-    color: "bg-blue-50 border-blue-200",
-    badgeColor: "bg-blue-600 text-white hover:bg-blue-600",
-    iconColor: "text-blue-600",
+    color: "bg-accent border-info/30",
+    badgeColor: "bg-info text-white hover:bg-info",
+    iconColor: "text-info",
   },
 }
 
@@ -37,7 +37,7 @@ function getTimeAgo(timestamp: string): string {
     const diff = now.getTime() - date.getTime()
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}m`
     }
@@ -47,7 +47,21 @@ function getTimeAgo(timestamp: string): string {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// Mostramos todas las alertas, pero las CRITICAL solo si tienen ≤ 24h
+// (las críticas no cambian seguido y las antiguas quedan colgadas sin aportar).
+function shouldShowAlert(alert: Alert): boolean {
+  if (alert.level?.toLowerCase() !== "critical") return true
+  const time = new Date(alert.timestamp).getTime()
+  if (isNaN(time)) return false
+  const age = Date.now() - time
+  return age >= 0 && age <= DAY_MS
+}
+
 export function AlertsPanel({ alerts }: AlertsPanelProps) {
+  const visibleAlerts = alerts.filter(shouldShowAlert)
+
   return (
     <Card>
         <CardHeader>
@@ -55,12 +69,12 @@ export function AlertsPanel({ alerts }: AlertsPanelProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {alerts.length === 0 ? (
+            {visibleAlerts.length === 0 ? (
               <div className="text-center py-4 text-muted-foreground text-sm">
                 No hay alertas activas
               </div>
             ) : (
-              alerts.slice(0, 5).map((alert, index) => {
+              visibleAlerts.slice(0, 5).map((alert, index) => {
                 const config = alertConfig[alert.level as keyof typeof alertConfig] || alertConfig.info
                 const Icon = config.icon
 

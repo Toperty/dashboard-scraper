@@ -49,24 +49,137 @@ class SaveValuationRequest(BaseModel):
     final_price: Optional[float] = None
 
 
-@router.post("/valuation")
-async def calculate_valuation(data: PropertyValuationRequest):
-    """Calcular avalúo de propiedad usando modelos ML"""
-    import pandas as pd
-    import numpy as np
+# Categóricas que los modelos LightGBM tratan como tales (deben coincidir con
+# ml_models/train.py). LightGBM re-mapea a las categorías de entrenamiento
+# guardadas en el modelo (pandas_categorical) al predecir.
+CATEGORICAL_FEATURES = ["is_new", "age_bucket", "city_id"]
+
+# --- Alineación frontend → categorías de entrenamiento -----------------------
+# El formulario del avalúo manda representaciones distintas a las que aprendió
+# el modelo. Sin normalizar, LightGBM las trata como categoría desconocida y
+# pierde la feature (city_id pesa ~17% en renta y ~26% en venta). Traducimos
+# aquí, en el serving, para que la señal se use de verdad.
+_AGE_BUCKET_TRAIN = {"menos_1_ano", "1_a_8_anos", "9_a_15_anos",
+                     "16_a_30_anos", "mas_30_anos", "sin_especificar"}
+_AGE_BUCKET_MAP = {           # etiquetas del formulario → bucket de entrenamiento
+    "0-1": "menos_1_ano", "1-8": "1_a_8_anos", "9-15": "9_a_15_anos",
+    "16-30": "16_a_30_anos", "30+": "mas_30_anos", "": "sin_especificar",
+}
+_IS_NEW_TRUE = {"si", "sí", "yes", "true", "1", "nuevo"}
+
+# Centroides (lat/lon medianos por city_id) para derivar la ciudad desde las
+# coordenadas — el formulario no permite elegir ciudad, pero sí trae lat/lon.
+_CENTROIDS = None
+
+
+def _load_centroids():
+    global _CENTROIDS
+    if _CENTROIDS is None:
+        import os
+        import json
+        path = os.path.join(os.path.dirname(__file__), '..', 'ml_models', 'city_centroids.json')
+        try:
+            with open(path) as f:
+                raw = json.load(f)
+            _CENTROIDS = [(cid, v["lat"], v["lon"]) for cid, v in raw.items()]
+        except (OSError, ValueError):
+            _CENTROIDS = []
+    return _CENTROIDS
+
+
+def _city_id_from_latlon(lat, lon):
+    """city_id de la ciudad cuyo centroide está más cerca (o None si no aplica)."""
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    # solo dentro de Colombia (evita coords inválidas/0,0)
+    if not (-5 <= lat <= 15 and -82 <= lon <= -66):
+        return None
+    best, best_d = None, None
+    for cid, clat, clon in _load_centroids():
+        d = (lat - clat) ** 2 + (lon - clon) ** 2
+        if best_d is None or d < best_d:
+            best, best_d = cid, d
+    return best
+
+
+def _normalize_categoricals(pd_data):
+    """Traduce los categóricos del formulario a como fueron entrenados (in place)."""
+    # city_id: preferimos derivarlo de lat/lon (el formulario siempre manda "1");
+    # el modelo entrenó con city_id como float-string ("1" -> "1.0").
+    derived = _city_id_from_latlon(pd_data.get("latitude"), pd_data.get("longitude"))
+    cid = derived if derived is not None else pd_data.get("city_id")
+    if cid is not None and str(cid).strip() != "":
+        try:
+            pd_data["city_id"] = str(float(cid))
+        except (TypeError, ValueError):
+            pd_data["city_id"] = str(cid)
+    # age_bucket: acepta el valor ya correcto o traduce la etiqueta del formulario
+    ab = str(pd_data.get("age_bucket", "") or "").strip()
+    if ab in _AGE_BUCKET_TRAIN:
+        pd_data["age_bucket"] = ab
+    else:
+        pd_data["age_bucket"] = _AGE_BUCKET_MAP.get(ab, "sin_especificar")
+    # is_new: "si"/"no" (o boolean) -> "true"/"false"
+    pd_data["is_new"] = "true" if str(pd_data.get("is_new", "")).strip().lower() in _IS_NEW_TRUE else "false"
+    return pd_data
+
+# Cache de modelos a nivel de módulo: los archivos (~10-12 MB) se cargan y
+# parsean una sola vez, no en cada request.
+_MODELS = {}
+
+
+def _load_models():
+    """Carga (y cachea) los modelos LightGBM de renta y venta + orden de features."""
+    if _MODELS:
+        return _MODELS
+
     import lightgbm as lgb
-    from catboost import CatBoostRegressor
     import os
     import json
-    
+
+    base_path = os.path.join(os.path.dirname(__file__), '..', 'ml_models')
+    metadata_path = os.path.join(base_path, 'metadata.json')
+
+    default_order = ['area', 'rooms', 'baths', 'garages', 'stratum', 'latitude',
+                     'longitude', 'antiquity', 'is_new', 'area_per_room',
+                     'age_bucket', 'has_garage', 'city_id', 'property_type']
+    metadata = {}
+    if os.path.exists(metadata_path):
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+    for offer, filename in (('rent', 'model_rent_lightgbm.txt'),
+                            ('sell', 'model_sell_lightgbm.txt')):
+        model_path = os.path.join(base_path, filename)
+        features = metadata.get(offer, {}).get('lightgbm', {}).get('features') or default_order
+        model = None
+        if os.path.exists(model_path):
+            with open(model_path, 'r') as f:
+                model = lgb.Booster(model_str=f.read())
+        _MODELS[offer] = {'model': model, 'features': features}
+
+    return _MODELS
+
+
+def _predict_price_per_sqm(bundle, processed_data):
+    """Predice precio/m² con un modelo LightGBM (target = log1p, se aplica expm1)."""
+    import pandas as pd
+    import numpy as np
+
+    df = pd.DataFrame([processed_data])[bundle['features']]
+    for cat in CATEGORICAL_FEATURES:
+        if cat in df.columns:
+            df[cat] = pd.Categorical(df[cat].astype(str))
+    pred = bundle['model'].predict(df)[0]
+    return float(np.expm1(pred))
+
+
+@router.post("/valuation")
+async def calculate_valuation(data: PropertyValuationRequest):
+    """Calcular avalúo de propiedad usando modelos ML (LightGBM renta y venta)"""
     try:
-        # Rutas de archivos
-        base_path = os.path.join(os.path.dirname(__file__), '..', 'ml_models')
-        metadata_path = os.path.join(base_path, 'metadata.json')
-        rent_model_path = os.path.join(base_path, 'model_rent_lightgbm.txt')
-        sell_model_path = os.path.join(base_path, 'model_sell_catboost.cbm')
-        
-        # Preparar datos procesados
         processed_data = {
             'area': data.area,
             'rooms': data.rooms,
@@ -83,67 +196,34 @@ async def calculate_valuation(data: PropertyValuationRequest):
             'city_id': data.city_id,
             'property_type': data.property_type
         }
-        
+
+        # Copia normalizada para el modelo (categóricos alineados con el
+        # entrenamiento); processed_data queda intacto para el eco de la respuesta.
+        model_input = _normalize_categoricals(dict(processed_data))
+
+        models = _load_models()
         results = {}
-        
-        # Leer metadata para obtener el orden correcto de features
-        if os.path.exists(metadata_path):
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-            rent_features_order = metadata.get('rent', {}).get('lightgbm', {}).get('features', [])
-            sell_features_order = metadata.get('sell', {}).get('catboost', {}).get('features', [])
-        else:
-            # Orden por defecto si no hay metadata
-            rent_features_order = ['area', 'rooms', 'baths', 'garages', 'stratum', 
-                                   'latitude', 'longitude', 'antiquity', 'is_new',
-                                   'area_per_room', 'has_garage', 'city_id', 'property_type']
-            sell_features_order = rent_features_order
-        
+
         # Modelo de renta (LightGBM)
-        if os.path.exists(rent_model_path):
+        if models.get('rent', {}).get('model') is not None:
             try:
-                with open(rent_model_path, 'r') as f:
-                    model_str = f.read()
-                rent_model = lgb.Booster(model_str=model_str)
-                
-                df_rent = pd.DataFrame([processed_data])
-                if rent_features_order:
-                    df_rent = df_rent[rent_features_order]
-                
-                # Convertir variables categóricas
-                categorical_features = ["is_new", "age_bucket", "city_id"]
-                for cat_feat in categorical_features:
-                    if cat_feat in df_rent.columns:
-                        df_rent[cat_feat] = pd.Categorical(df_rent[cat_feat].astype(str))
-                
-                rent_prediction = rent_model.predict(df_rent)[0]
-                rent_price = float(np.expm1(rent_prediction))
-                
+                rent_price = _predict_price_per_sqm(models['rent'], model_input)
                 results['rent_price_per_sqm'] = round(rent_price, 2)
                 results['total_rent_price'] = round(rent_price * data.area, 2)
             except Exception as e:
                 results['rent_error'] = str(e)
                 print(f"Error modelo renta: {e}")
-        
-        # Modelo de venta (CatBoost)
-        if os.path.exists(sell_model_path):
+
+        # Modelo de venta (LightGBM)
+        if models.get('sell', {}).get('model') is not None:
             try:
-                sell_model = CatBoostRegressor()
-                sell_model.load_model(sell_model_path)
-                
-                df_sell = pd.DataFrame([processed_data])
-                if sell_features_order:
-                    df_sell = df_sell[sell_features_order]
-                
-                sell_prediction = sell_model.predict(df_sell)[0]
-                sell_price = float(np.expm1(sell_prediction))
-                
+                sell_price = _predict_price_per_sqm(models['sell'], model_input)
                 results['sell_price_per_sqm'] = round(sell_price, 2)
                 results['total_sell_price'] = round(sell_price * data.area, 2)
             except Exception as e:
                 results['sell_error'] = str(e)
                 print(f"Error modelo venta: {e}")
-        
+
         return {
             "status": "success",
             "message": "Avalúo realizado exitosamente",
@@ -152,7 +232,7 @@ async def calculate_valuation(data: PropertyValuationRequest):
                 "valuation_results": results
             }
         }
-        
+
     except Exception as e:
         print(f"Error en avalúo: {e}")
         return {"status": "error", "message": str(e), "data": None}

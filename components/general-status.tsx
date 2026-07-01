@@ -14,21 +14,21 @@ export function GeneralStatus({ summary }: GeneralStatusProps) {
       label: "Ciudades Completadas", 
       value: summary ? `${summary.completed_cities}/${summary.total_cities}` : "0/0", 
       icon: CheckCircle, 
-      color: "text-green-600",
+      color: "text-success",
       tooltip: "Número de ciudades que han completado su proceso de scraping del total de ciudades configuradas, cuando finalice el proceso se reiniciarán automáticamente"
     },
     { 
       label: "Última Ejecución", 
       value: summary?.last_execution_time || "N/A", 
       icon: Clock, 
-      color: "text-blue-600",
+      color: "text-primary",
       tooltip: "Tiempo transcurrido desde la última actividad registrada en el sistema de scraping"
     },
     { 
       label: "Errores Recientes", 
       value: summary?.recent_errors_count|| "0", 
       icon: AlertTriangle, 
-      color: "text-red-600",
+      color: "text-destructive",
       tooltip: "Número de errores ocurridos en las últimas 24 horas durante el proceso de scraping"
     },
     { 
@@ -37,7 +37,7 @@ export function GeneralStatus({ summary }: GeneralStatusProps) {
         ? summary.avg_speed_ms.toFixed(2)
         : "N/A", 
       icon: Zap, 
-      color: "text-orange-600",
+      color: "text-brand-orange",
       tooltip: "Velocidad promedio de navegación del scraper calculada en páginas procesadas por minuto"
     },
   ]

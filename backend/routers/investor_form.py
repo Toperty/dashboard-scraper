@@ -356,8 +356,14 @@ async def get_financial_data_from_dashboard(valuation_id: int):
             import os
             from datetime import datetime, timedelta
             
-            should_sync = True  # Siempre sincronizar para obtener datos de inversionista actualizados
-            logger.info(f"Attempting to sync dashboard {dashboard.id} with sheet_id: {dashboard.sheet_id}")
+            # La BD es la fuente de verdad: los datos completos se guardan al crear/
+            # editar el plan. Solo re-sincronizamos como red de seguridad si el registro
+            # quedó incompleto; si ya está completo, se sirve directo desde la BD.
+            from routers.payment_plans import _is_sheet_data_complete
+            should_sync = not _is_sheet_data_complete(dashboard.sheet_data)
+            logger.info(
+                f"Dashboard {dashboard.id} {'incompleto, sincronizando' if should_sync else 'completo, sirviendo desde BD'}"
+            )
             
             if should_sync and dashboard.sheet_id:
                 apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')

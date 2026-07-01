@@ -2,12 +2,34 @@
 
 Este directorio contiene los modelos entrenados para realizar avalúos de propiedades.
 
-## Modelos Requeridos
+## Modelos
 
-Coloque los siguientes archivos en esta carpeta:
+Ambos modelos son **LightGBM** y predicen `log1p(precio/m²)` (el backend aplica
+`expm1` en inferencia). Archivos en esta carpeta:
 
-1. `model_rent_lightgbm.txt` - Modelo LightGBM para predecir precios de renta
-2. `model_sell_catboost.cbm` - Modelo CatBoost para predecir precios de venta
+1. `model_rent_lightgbm.txt` - precios de **renta** (R²≈0.64)
+2. `model_sell_lightgbm.txt` - precios de **venta** (R²≈0.64)
+3. `metadata.json` - orden de features, categóricas y métricas por modelo
+4. `city_centroids.json` - lat/lon mediano por `city_id`; el serving deriva la
+   ciudad desde las coordenadas del avalúo (el formulario no elige ciudad)
+
+> Nota: antes venta usaba CatBoost (`model_sell_catboost.cbm`); se migró a
+> LightGBM porque mejora las métricas y unifica el serving en un solo formato.
+
+## Reentrenamiento
+
+El pipeline reproducible está en `train.py` (reemplaza al notebook, que era
+solo exploratorio). Toma las credenciales de la BD por variables de entorno —
+**nunca** las hardcodee:
+
+```bash
+export TRAIN_DB_URI="postgresql+psycopg2://USER:PASS@HOST:5432/toperty_appraisals"
+python train.py     # escribe model_*.txt + metadata.json en esta carpeta
+```
+
+Requiere `lightgbm`, `pandas`, `numpy`, `scikit-learn`, `sqlalchemy`,
+`psycopg2`. Genera exactamente los nombres de archivo que carga el backend
+(`routers/valuations.py`).
 
 ## Estructura de Datos de Entrada
 

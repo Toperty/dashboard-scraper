@@ -124,7 +124,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
   // Mostrar pantalla de carga
   if (authState.loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-navy to-brand-teal">
         <Card className="w-full max-w-md">
           <CardContent className="p-8">
             <div className="flex flex-col items-center space-y-4">
@@ -140,7 +140,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
   // Si no está autenticado, mostrar pantalla de login
   if (!authState.isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-navy to-brand-teal p-4">
         <Card className="w-full max-w-md shadow-2xl">
           <CardHeader className="space-y-1 text-center pb-8">
             <div className="flex justify-center mb-6">
@@ -155,22 +155,22 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
           </CardHeader>
           <CardContent className="space-y-6">
             {authState.error && (
-              <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <div className="p-4 rounded-lg bg-brand-orange/10 border border-brand-orange/30">
                 <div className="flex items-start gap-3">
                   {authState.error.includes("configurado") ? (
-                    <Settings className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <Settings className="h-5 w-5 text-brand-orange mt-0.5" />
                   ) : (
-                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
                   )}
                   <div className="space-y-2 flex-1">
-                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    <p className="text-sm font-medium text-brand-orange">
                       {authState.error.includes("configurado") ? "Configuración requerida" : "Error de autenticación"}
                     </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-300">{authState.error}</p>
+                    <p className="text-sm text-muted-foreground">{authState.error}</p>
                     {authState.error.includes("configurado") && (
-                      <div className="mt-3 p-3 bg-amber-100 dark:bg-amber-900/30 rounded text-xs space-y-1">
+                      <div className="mt-3 p-3 bg-brand-orange/15 rounded text-xs space-y-1">
                         <p className="font-semibold">Pasos para configurar:</p>
-                        <ol className="list-decimal list-inside space-y-1 text-amber-700 dark:text-amber-400">
+                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                           <li>Copia el archivo .env.local.example a .env.local</li>
                           <li>Obtén un Client ID desde Google Cloud Console</li>
                           <li>Agrega el Client ID al archivo .env.local</li>
@@ -223,23 +223,23 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
   // Si está autenticado, mostrar la aplicación con header de usuario
   return (
     <div className="min-h-screen">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-14 w-full items-center px-4">
+      <header className="bg-primary text-primary-foreground">
+        <div className="flex h-16 w-full items-center px-4 lg:px-6">
           <div className="flex flex-1 items-center justify-between">
             <div className="flex items-center gap-3">
-              <TopertyLogoCompact width={110} height={40} />
+              <TopertyLogoCompact variant="white" width={120} height={44} />
             </div>
-            
+
             <div className="flex items-center gap-4">
-              <div className="text-sm">
-                <p className="font-medium">{authState.user?.name}</p>
-                <p className="text-xs text-muted-foreground">{authState.user?.email}</p>
+              <div className="text-sm text-right">
+                <p className="font-medium leading-tight">{authState.user?.name}</p>
+                <p className="text-xs text-white/60">{authState.user?.email}</p>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
-                className="gap-2 transition-all duration-200 hover:scale-105 hover:shadow-md"
+                className="gap-2 text-white hover:bg-white/10 hover:text-white"
               >
                 <LogOut className="h-4 w-4" />
                 Cerrar sesión

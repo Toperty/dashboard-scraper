@@ -186,9 +186,9 @@ export function SimpleGoogleMap() {
         
         if (colorStyle === 'simple') {
           return {
-            fillColor: '#4285F4',
+            fillColor: '#001845',
             fillOpacity: 0.1,
-            strokeColor: '#1a73e8',
+            strokeColor: '#6efafb',
             strokeWeight: 2
           }
         } else if (colorStyle === 'random') {
@@ -205,9 +205,9 @@ export function SimpleGoogleMap() {
         }
         
         return {
-          fillColor: '#4285F4',
+          fillColor: '#001845',
           fillOpacity: 0.1,
-          strokeColor: '#1a73e8',
+          strokeColor: '#6efafb',
           strokeWeight: 2
         }
       }
@@ -390,7 +390,7 @@ export function SimpleGoogleMap() {
         <div style="padding: 15px; min-width: 200px;">
           <div style="font-weight: 600; margin-bottom: 10px;">📊 ${zoneName}</div>
           <div style="text-align: center; padding: 20px;">
-            <div style="display: inline-block; border: 2px solid #3b82f6; border-top-color: transparent; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite;"></div>
+            <div style="display: inline-block; border: 2px solid #001845; border-top-color: transparent; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite;"></div>
             <style>@keyframes spin { to { transform: rotate(360deg); }}</style>
             <div style="margin-top: 10px; color: #666;">Calculando...</div>
           </div>
@@ -508,7 +508,7 @@ export function SimpleGoogleMap() {
       if (infoWindow) {
         infoWindow.setContent(`
           <div style="padding: 15px;">
-            <div style="color: #ef4444;">❌ Error cargando datos</div>
+            <div style="color: #ee2525;">❌ Error cargando datos</div>
           </div>
         `)
       }
@@ -534,34 +534,34 @@ export function SimpleGoogleMap() {
       
       const content = `
         <div style="padding: 15px; min-width: 550px; font-family: system-ui, -apple-system, sans-serif;">
-          <div style="font-weight: 600; font-size: 14px; margin-bottom: 12px; color: #1f2937; text-align: center;">
+          <div style="font-weight: 600; font-size: 14px; margin-bottom: 12px; color: #001845; text-align: center;">
             📊 ${zoneName}
           </div>
           
           <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start;">
             <!-- Período Filtrado -->
             <div>
-              <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px; color: #3b82f6; text-align: center;">Período Filtrado</div>
-              <div style="font-size: 13px; color: #4b5563; margin-bottom: 8px; text-align: center;">
+              <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px; color: #001845; text-align: center;">Período Filtrado</div>
+              <div style="font-size: 13px; color: #4b6b7b; margin-bottom: 8px; text-align: center;">
                 Total: <strong>${filtered.property_count}</strong> propiedades
               </div>
-              <div style="font-size: 12px; color: #6b7280; margin-bottom: 12px; text-align: center;">
+              <div style="font-size: 12px; color: #698695; margin-bottom: 12px; text-align: center;">
                 🏘️ Venta: ${filtered.sale_count} | Arriendo: ${filtered.rent_count}
               </div>
               ${filtered.sale_avg_price_m2 > 0 ? `
-                <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">💰 Precio Venta/m²</div>
-                  <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(filtered.sale_avg_price_m2).toLocaleString()}</div>
+                <div style="margin-bottom: 10px; padding: 8px; background: #f9fafb; border-radius: 6px;">
+                  <div style="font-size: 11px; color: #698695; margin-bottom: 2px;">💰 Precio Venta/m²</div>
+                  <div style="font-size: 16px; font-weight: 600; color: #001845;">$${Math.round(filtered.sale_avg_price_m2).toLocaleString()}</div>
                 </div>
               ` : ''}
               ${filtered.rent_avg_price_m2 > 0 ? `
-                <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
-                  <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(filtered.rent_avg_price_m2).toLocaleString()}</div>
+                <div style="margin-bottom: 10px; padding: 8px; background: #f9fafb; border-radius: 6px;">
+                  <div style="font-size: 11px; color: #698695; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
+                  <div style="font-size: 16px; font-weight: 600; color: #001845;">$${Math.round(filtered.rent_avg_price_m2).toLocaleString()}</div>
                 </div>
               ` : ''}
               ${filtered.cap_rate > 0 ? `
-                <div style="padding: 10px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 6px; text-align: center;">
+                <div style="padding: 10px; background: linear-gradient(135deg, #001845 0%, #2e5061 100%); border-radius: 6px; text-align: center;">
                   <div style="font-size: 11px; color: #e0e7ff; margin-bottom: 2px;">📈 Cap Rate</div>
                   <div style="font-size: 20px; font-weight: 700; color: white;">${(filtered.cap_rate * 100).toFixed(2)}%</div>
                 </div>
@@ -570,32 +570,32 @@ export function SimpleGoogleMap() {
             
             <!-- VS Separator -->
             <div style="display: flex; align-items: center; justify-content: center; padding: 0 8px;">
-              <div style="font-size: 18px; font-weight: 700; color: #9ca3af; padding-top: 100px;">VS</div>
+              <div style="font-size: 18px; font-weight: 700; color: #a5bac4; padding-top: 100px;">VS</div>
             </div>
             
             <!-- Último Mes -->
             <div>
-              <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px; color: #10b981; text-align: center;">Último Mes</div>
-              <div style="font-size: 13px; color: #4b5563; margin-bottom: 8px; text-align: center;">
+              <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px; color: #37b27a; text-align: center;">Último Mes</div>
+              <div style="font-size: 13px; color: #4b6b7b; margin-bottom: 8px; text-align: center;">
                 Total: <strong>${current.property_count}</strong> propiedades
               </div>
-              <div style="font-size: 12px; color: #6b7280; margin-bottom: 12px; text-align: center;">
+              <div style="font-size: 12px; color: #698695; margin-bottom: 12px; text-align: center;">
                 🏘️ Venta: ${current.sale_count} | Arriendo: ${current.rent_count}
               </div>
               ${current.sale_avg_price_m2 > 0 ? `
-                <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">💰 Precio Venta/m²</div>
-                  <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(current.sale_avg_price_m2).toLocaleString()}</div>
+                <div style="margin-bottom: 10px; padding: 8px; background: #f9fafb; border-radius: 6px;">
+                  <div style="font-size: 11px; color: #698695; margin-bottom: 2px;">💰 Precio Venta/m²</div>
+                  <div style="font-size: 16px; font-weight: 600; color: #001845;">$${Math.round(current.sale_avg_price_m2).toLocaleString()}</div>
                 </div>
               ` : ''}
               ${current.rent_avg_price_m2 > 0 ? `
-                <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-                  <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
-                  <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(current.rent_avg_price_m2).toLocaleString()}</div>
+                <div style="margin-bottom: 10px; padding: 8px; background: #f9fafb; border-radius: 6px;">
+                  <div style="font-size: 11px; color: #698695; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
+                  <div style="font-size: 16px; font-weight: 600; color: #001845;">$${Math.round(current.rent_avg_price_m2).toLocaleString()}</div>
                 </div>
               ` : ''}
               ${current.cap_rate > 0 ? `
-                <div style="padding: 10px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 6px; text-align: center;">
+                <div style="padding: 10px; background: linear-gradient(135deg, #37b27a 0%, #2e9d68 100%); border-radius: 6px; text-align: center;">
                   <div style="font-size: 11px; color: #d1fae5; margin-bottom: 2px;">📈 Cap Rate</div>
                   <div style="font-size: 20px; font-weight: 700; color: white;">${(current.cap_rate * 100).toFixed(2)}%</div>
                 </div>
@@ -623,29 +623,29 @@ export function SimpleGoogleMap() {
     
     const content = `
       <div style="padding: 15px; min-width: 250px; font-family: system-ui, -apple-system, sans-serif;">
-        <div style="font-weight: 600; font-size: 14px; margin-bottom: 12px; color: #1f2937;">
+        <div style="font-weight: 600; font-size: 14px; margin-bottom: 12px; color: #001845;">
           📊 ${zoneName}
         </div>
-        <div style="font-size: 13px; color: #4b5563; margin-bottom: 8px;">
+        <div style="font-size: 13px; color: #4b6b7b; margin-bottom: 8px;">
           Total: <strong>${propertyCount}</strong> propiedades
         </div>
-        <div style="font-size: 12px; color: #6b7280; margin-bottom: 12px;">
+        <div style="font-size: 12px; color: #698695; margin-bottom: 12px;">
           🏘️ Venta: ${saleCount} | Arriendo: ${rentCount}
         </div>
         ${salePriceM2 > 0 ? `
-          <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">💰 Precio Venta/m²</div>
-            <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(salePriceM2).toLocaleString()}</div>
+          <div style="margin-bottom: 10px; padding: 8px; background: #f9fafb; border-radius: 6px;">
+            <div style="font-size: 11px; color: #698695; margin-bottom: 2px;">💰 Precio Venta/m²</div>
+            <div style="font-size: 16px; font-weight: 600; color: #001845;">$${Math.round(salePriceM2).toLocaleString()}</div>
           </div>
         ` : ''}
         ${rentPrice > 0 ? `
-          <div style="margin-bottom: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px;">
-            <div style="font-size: 11px; color: #6b7280; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
-            <div style="font-size: 16px; font-weight: 600; color: #1f2937;">$${Math.round(rentPrice).toLocaleString()}</div>
+          <div style="margin-bottom: 10px; padding: 8px; background: #f9fafb; border-radius: 6px;">
+            <div style="font-size: 11px; color: #698695; margin-bottom: 2px;">🏠 Precio Arriendo/m²</div>
+            <div style="font-size: 16px; font-weight: 600; color: #001845;">$${Math.round(rentPrice).toLocaleString()}</div>
           </div>
         ` : ''}
         ${capRate > 0 ? `
-          <div style="padding: 10px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 6px; text-align: center;">
+          <div style="padding: 10px; background: linear-gradient(135deg, #001845 0%, #2e5061 100%); border-radius: 6px; text-align: center;">
             <div style="font-size: 11px; color: #e0e7ff; margin-bottom: 2px;">📈 Tasa de Capitalización</div>
             <div style="font-size: 20px; font-weight: 700; color: white;">${(capRate * 100).toFixed(2)}%</div>
           </div>

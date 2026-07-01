@@ -8,7 +8,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        // CTA de marca Toperty: cyan con texto navy
+        default: "bg-brand-cyan text-brand-navy font-bold shadow-sm hover:bg-[#56e0e1] active:translate-y-px",
+        // Acción sólida navy (alternativa sobria)
+        navy: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:

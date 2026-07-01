@@ -6,6 +6,7 @@ import PaymentPlanDashboard from '@/components/payment-plan-dashboard'
 import { Card, CardContent } from '@/components/ui/card'
 import { AlertCircle, Clock, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { TopertyLogo } from '@/components/toperty-logo'
 
 export default function PaymentDashboardPage() {
   const params = useParams()
@@ -102,9 +103,9 @@ export default function PaymentDashboardPage() {
         <Card className="max-w-md w-full">
           <CardContent className="pt-6">
             <div className="text-center">
-              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">Error</h2>
-              <p className="text-gray-600">{error}</p>
+              <p className="text-muted-foreground">{error}</p>
             </div>
           </CardContent>
         </Card>
@@ -113,36 +114,40 @@ export default function PaymentDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-muted">
       {/* Header with expiration notice */}
-      <div className="bg-white border-b">
+      <div className="bg-primary text-primary-foreground">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">Plan de Pagos - {dashboardData.valuation_name}</h1>
-              <p className="text-sm text-gray-600">Cliente: {dashboardData.client_name}</p>
+          <div className="flex justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <TopertyLogo variant="white" width={100} height={40} />
+              <div className="hidden md:block border-l border-white/20 pl-4">
+                <h1 className="text-lg font-bold leading-tight">Plan de Pagos - {dashboardData.valuation_name}</h1>
+                <p className="text-sm text-white/70">Cliente: {dashboardData.client_name}</p>
+              </div>
             </div>
-            
+
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <div className="flex items-center gap-2 text-sm text-orange-600">
+                <div className="flex items-center gap-2 text-sm text-brand-cyan">
                   <Clock className="w-4 h-4" />
                   <span>
                     Válido por {dashboardData.days_remaining} días
                   </span>
                 </div>
                 {dashboardData.last_sync_at && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-white/60 mt-1">
                     Última sincronización: {new Date(dashboardData.last_sync_at).toLocaleString('es-CO')}
                   </p>
                 )}
               </div>
-              
-              <Button 
-                onClick={syncData} 
+
+              <Button
+                onClick={syncData}
                 disabled={syncing}
                 variant="outline"
                 size="sm"
+                className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
                 Sincronizar
@@ -158,7 +163,7 @@ export default function PaymentDashboardPage() {
       </div>
       
       {/* Footer with view count */}
-      <div className="text-center py-4 text-sm text-gray-500">
+      <div className="text-center py-4 text-sm text-muted-foreground">
         Este dashboard ha sido visto {dashboardData.view_count} veces
       </div>
     </div>

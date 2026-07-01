@@ -92,10 +92,10 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
         <Card>
           <CardContent className="p-8 text-center">
             <h3 className="text-lg font-semibold mb-2">Cargando datos...</h3>
-            <p className="text-gray-600">
+            <p className="text-muted-foreground">
               Los datos del plan de pagos se están sincronizando desde Google Sheets.
             </p>
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
               Si este mensaje persiste, verifique que el Google Apps Script esté configurado correctamente.
             </p>
           </CardContent>
@@ -118,29 +118,21 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
       title: 'Valor Comercial',
       value: formatCurrency(data.flujo_interno?.commercial_value),
       icon: DollarSign,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50'
     },
     {
       title: 'Precio de Venta',
       value: formatCurrency(data.flujo_interno?.asking_price),
       icon: TrendingUp,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50'
     },
     {
       title: 'Cuota Inicial Usuario',
       value: formatCurrency(data.flujo_interno?.user_down_payment),
       icon: Calculator,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50'
     },
     {
       title: 'Meses del Programa',
       value: data.flujo_interno?.program_months || '0',
       icon: Calendar,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50'
     }
   ]
 
@@ -168,7 +160,7 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {programInfo.map((info, index) => (
               <div key={index} className="flex flex-col">
-                <span className="text-sm text-gray-500">{info.label}</span>
+                <span className="text-sm text-muted-foreground">{info.label}</span>
                 <span className="text-base font-medium">{info.value}</span>
               </div>
             ))}
@@ -183,11 +175,11 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-sm text-gray-600 mb-1">{metric.title}</p>
+                  <p className="text-sm text-muted-foreground mb-1">{metric.title}</p>
                   <p className="text-2xl font-bold">{metric.value}</p>
                 </div>
-                <div className={`${metric.bgColor} p-3 rounded-lg`}>
-                  <metric.icon className={`w-6 h-6 ${metric.color}`} />
+                <div className="bg-brand-navy p-3 rounded-full">
+                  <metric.icon className="w-6 h-6 text-brand-cyan" />
                 </div>
               </div>
             </CardContent>
@@ -206,10 +198,10 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
         <CardContent>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-3xl font-bold text-green-600">
+              <span className="text-3xl font-bold text-success">
                 {formatPercent(data.flujo_interno?.potential_down_payment)}
               </span>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-muted-foreground">
                 del valor comercial
               </span>
             </div>
@@ -230,7 +222,7 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {propertyDetails.map((detail, index) => (
               <div key={index} className="flex items-start gap-2">
-                <span className="text-sm text-gray-500 min-w-[140px]">{detail.label}:</span>
+                <span className="text-sm text-muted-foreground min-w-[140px]">{detail.label}:</span>
                 <span className="text-sm font-medium">{detail.value || '-'}</span>
               </div>
             ))}
@@ -253,7 +245,7 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
                 <thead>
                   <tr className="border-b">
                     {data.cash_flow[0]?.map((header, index) => (
-                      <th key={index} className="px-4 py-2 text-left text-sm font-medium text-gray-600">
+                      <th key={index} className="px-4 py-2 text-left text-sm font-medium text-muted-foreground">
                         {header}
                       </th>
                     ))}
@@ -261,7 +253,7 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
                 </thead>
                 <tbody>
                   {data.cash_flow.slice(1, 10).map((row, rowIndex) => (
-                    <tr key={rowIndex} className="border-b hover:bg-gray-50">
+                    <tr key={rowIndex} className="border-b hover:bg-muted">
                       {row.map((cell, cellIndex) => (
                         <td key={cellIndex} className="px-4 py-2 text-sm">
                           {cellIndex > 0 && !isNaN(parseFloat(cell)) 
@@ -274,7 +266,7 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
                 </tbody>
               </table>
               {data.cash_flow.length > 10 && (
-                <p className="text-sm text-gray-500 mt-4 text-center">
+                <p className="text-sm text-muted-foreground mt-4 text-center">
                   Mostrando las primeras 10 filas de {data.cash_flow.length - 1}
                 </p>
               )}
@@ -290,7 +282,7 @@ export default function PaymentPlanDashboard({ data }: PaymentPlanDashboardProps
             <CardTitle>Debug: Raw Data</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-xs overflow-auto max-h-64 bg-gray-100 p-2 rounded">
+            <pre className="text-xs overflow-auto max-h-64 bg-muted p-2 rounded">
               {JSON.stringify(data, null, 2)}
             </pre>
           </CardContent>

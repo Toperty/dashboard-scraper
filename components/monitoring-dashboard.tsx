@@ -39,15 +39,18 @@ export function MonitoringDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-background">
-        <div className="container mx-auto px-4 lg:px-6 py-4 lg:py-6">
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 lg:px-6 py-5 lg:py-7">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-lg lg:text-xl font-bold tracking-tight">Dashboard de Monitoreo</h1>
-              <p className="text-muted-foreground mt-1 text-sm lg:text-base">Sistema de control operacional de scrapers</p>
+            <div className="flex items-center gap-3">
+              <span className="h-9 w-1.5 rounded-full bg-brand-cyan" />
+              <div>
+                <h1 className="text-xl lg:text-2xl font-black tracking-tight">Dashboard de Monitoreo</h1>
+                <p className="text-muted-foreground mt-0.5 text-sm lg:text-base">Sistema de control operacional de scrapers</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-card w-fit">
-              <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary text-primary-foreground w-fit">
+              <div className="h-2 w-2 rounded-full bg-brand-cyan animate-pulse" />
               <span className="text-sm font-medium">Sistema activo</span>
             </div>
           </div>

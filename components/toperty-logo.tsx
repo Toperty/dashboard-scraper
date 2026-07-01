@@ -1,17 +1,34 @@
 import React from 'react'
 import Image from 'next/image'
 
+type LogoVariant = 'navy' | 'white'
+
 interface TopertyLogoProps {
   className?: string
   width?: number
   height?: number
+  /**
+   * `navy` (por defecto): logo en tinta navy, para fondos claros.
+   * `white`: logo blanco, para fondos navy/oscuros.
+   */
+  variant?: LogoVariant
 }
 
-export function TopertyLogo({ className = '', width = 110, height = 50 }: TopertyLogoProps) {
+const LOGO_SRC: Record<LogoVariant, string> = {
+  navy: '/logo-toperty-dark.png',
+  white: '/logo-toperty-light.png',
+}
+
+export function TopertyLogo({
+  className = '',
+  width = 110,
+  height = 50,
+  variant = 'navy',
+}: TopertyLogoProps) {
   return (
     <Image
-      src="/logo-toperty-horizontal.png"
-      alt="Toperty Logo"
+      src={LOGO_SRC[variant]}
+      alt="Toperty"
       width={width}
       height={height}
       className={className}
@@ -20,11 +37,16 @@ export function TopertyLogo({ className = '', width = 110, height = 50 }: Topert
   )
 }
 
-// Versión compacta con logo cuadrado
-export function TopertyLogoCompact({ className = '', width = 32, height = 32 }: TopertyLogoProps) {
+// Versión compacta (mismo logo horizontal, tamaño reducido)
+export function TopertyLogoCompact({
+  className = '',
+  width = 32,
+  height = 32,
+  variant = 'navy',
+}: TopertyLogoProps) {
   return (
     <Image
-      src="/logo-toperty-horizontal.png"
+      src={LOGO_SRC[variant]}
       alt="Toperty"
       width={width}
       height={height}

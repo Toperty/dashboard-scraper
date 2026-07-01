@@ -292,12 +292,20 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                         if existing_dashboard:
                             existing_dashboard.sheet_id = sheet_id
                             existing_dashboard.sheet_url = sheet_url
-                            existing_dashboard.sheet_data = sheet_data  # Guardar datos básicos primero
-                            
+                            # Merge de los básicos del formulario SOBRE la data completa previa
+                            # (no reemplazo). Así los valores recién editados se aplican de
+                            # inmediato y, si el sync fallara, el dashboard conserva el resto de
+                            # la data completa anterior (resumen, flujos, gráficas) en vez de
+                            # quedar solo con lo básico (que el read ya no autocura por verse
+                            # "completo").
+                            existing_dashboard.sheet_data = _deep_merge_sheet_data(
+                                existing_dashboard.sheet_data or {}, sheet_data
+                            )
+
                             session.commit()
                             session.refresh(existing_dashboard)
 
-                            # Ahora sincronizar (con reintentos) para obtener datos completos y sobrescribir
+                            # Ahora sincronizar (con reintentos) para traer los valores recalculados del Sheet
                             synced_data = _sync_full_sheet_data(sheet_id)
                             if synced_data:
                                 # Merge en vez de overwrite: conserva 'Para Envío Usuario' del formulario
@@ -309,7 +317,7 @@ async def create_payment_plan_sheet(payment_plan_data: PaymentPlanRequest):
                                 session.refresh(existing_dashboard)
                                 print(f"Successfully synced full data after edit - data keys: {list(existing_dashboard.sheet_data.keys())}")
                             else:
-                                print("Warning: Could not sync full data after edit, dashboard keeps basic data")
+                                print("Warning: Could not sync full data after edit, dashboard conserva data completa previa + nuevos básicos")
 
                             # Construir URL completa para la respuesta
                             base_url = os.getenv('NEXT_PUBLIC_API_URL', 'http://localhost:3000')
@@ -493,24 +501,18 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
             raise HTTPException(status_code=404, detail="Dashboard not found")
 
         dashboard.view_count += 1
-        
-        # Check if we need to sync (cache for 3 minutes for faster updates)
-        # Force sync if cache busting parameter is present
-        should_sync = False
-        if dashboard.sheet_id:
-            if t is not None:  # Cache busting parameter present, force refresh
-                should_sync = True
-            elif not dashboard.last_sync_at:
-                should_sync = True
-            elif not _is_sheet_data_complete(dashboard.sheet_data):
-                # Datos incompletos guardados (sync previo falló o fórmulas no listas):
-                # forzar re-sync sin importar la ventana de caché.
-                should_sync = True
-            else:
-                time_since_sync = datetime.utcnow() - dashboard.last_sync_at
-                if time_since_sync > timedelta(minutes=3):
-                    should_sync = True
-        
+
+        # La base de datos es la fuente de verdad: la información completa se guarda
+        # al crear/editar el plan desde el formulario (sync 'full' con merge). Las
+        # lecturas NO sincronizan con Google Sheets — se sirven directo desde la BD,
+        # lo que ahorra varios segundos por request.
+        #
+        # Única excepción (red de seguridad): si por algún motivo los datos guardados
+        # quedaron incompletos (el sync al crear falló o las fórmulas aún no estaban
+        # calculadas), se re-sincroniza esta vez para autocurar el registro. Cuando los
+        # datos ya están completos, esto no hace ninguna llamada externa.
+        should_sync = bool(dashboard.sheet_id) and not _is_sheet_data_complete(dashboard.sheet_data)
+
         # Only sync if needed - use longer timeout with retries
         if should_sync:
             apps_script_url = os.getenv('GOOGLE_APPS_SCRIPT_READER_URL', '')
@@ -521,7 +523,9 @@ async def get_dashboard_by_type(access_token: str, dashboard_type: str = "full",
                     try:
                         async with aiohttp.ClientSession() as http_session:
                             async with http_session.get(
-                                f"{apps_script_url}?sheetId={dashboard.sheet_id}&type={dashboard_type}",
+                                # type=full para que la auto-cura deje SIEMPRE el registro
+                                # completo (user + investor), sin importar qué vista se pidió.
+                                f"{apps_script_url}?sheetId={dashboard.sheet_id}&type=full",
                                 timeout=aiohttp.ClientTimeout(total=60)  # 60 seconds timeout
                             ) as response:
                                 if response.status == 200:

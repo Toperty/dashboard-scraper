@@ -3,96 +3,115 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   Toperty — Paleta corporativa mapeada a tokens shadcn.
+   Fuente: Design System (Framer @ toperty.co).
+   Marca: navy #001845 (principal) · cyan #6EFAFB (accent).
+   ============================================================ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  /* Modern vibrant blue for primary */
-  --primary: oklch(0.55 0.22 250);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.961 0 0);
-  --secondary-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.961 0 0);
-  --muted-foreground: oklch(0.455 0 0);
-  /* Softer accent color */
-  --accent: oklch(0.95 0.01 250);
-  --accent-foreground: oklch(0.145 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  /* Modern blue ring color */
-  --ring: oklch(0.55 0.22 250);
-  /* Updated chart colors to be more modern and vibrant */
-  --chart-1: oklch(0.55 0.22 250);
-  --chart-2: oklch(0.65 0.2 160);
-  --chart-3: oklch(0.7 0.18 280);
-  --chart-4: oklch(0.6 0.24 330);
-  --chart-5: oklch(0.68 0.2 50);
-  /* Modern success and warning colors */
-  --success: oklch(0.65 0.2 160);
-  --warning: oklch(0.75 0.18 80);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #ffffff;
+  --foreground: #001845;              /* text.primary = brand.navy */
+  --card: #ffffff;
+  --card-foreground: #001845;
+  --popover: #ffffff;
+  --popover-foreground: #001845;
+
+  /* Primario = navy corporativo */
+  --primary: #001845;
+  --primary-foreground: #ffffff;
+
+  /* Secundario / accent = tints fríos del DS */
+  --secondary: #eff6fa;               /* surface.muted */
+  --secondary-foreground: #001845;
+  --muted: #f9fafb;                   /* neutral.50 */
+  --muted-foreground: #4b6b7b;        /* neutral.700 = text.secondary */
+  --accent: #e3f0f7;                  /* neutral.200 (tint suave para hovers) */
+  --accent-foreground: #001845;
+
+  --destructive: #ee2525;             /* feedback.error */
+  --destructive-foreground: #ffffff;
+
+  --border: #e5eaf3;                  /* neutral.100 = border.subtle */
+  --input: #e5eaf3;
+  --ring: #001845;                    /* navy focus ring */
+
+  /* Charts — hues corporativos distinguibles sobre blanco */
+  --chart-1: #001845;                 /* navy */
+  --chart-2: #4254f8;                 /* info blue */
+  --chart-3: #37b27a;                 /* success green */
+  --chart-4: #fe7624;                 /* orange (legacy CTA) */
+  --chart-5: #2e5061;                 /* teal */
+
+  /* Feedback */
+  --success: #37b27a;
+  --warning: #fcd554;
+  --info: #4254f8;
+
+  --radius: 0.75rem;                  /* 12px — cards DS */
+
+  /* Sidebar = superficie navy del DS */
+  --sidebar: #001845;
+  --sidebar-foreground: #e5eaf3;
+  --sidebar-primary: #6efafb;         /* cyan accent */
+  --sidebar-primary-foreground: #001845;
+  --sidebar-accent: #0a2350;          /* navy un tono más claro */
+  --sidebar-accent-foreground: #6efafb;
+  --sidebar-border: #12294f;
+  --sidebar-ring: #6efafb;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  /* Brighter primary for dark mode */
-  --primary: oklch(0.65 0.25 250);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  /* Subtle accent for dark mode */
-  --accent: oklch(0.25 0.02 250);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  /* Brighter ring for dark mode */
-  --ring: oklch(0.65 0.25 250);
-  /* Updated chart colors for dark mode */
-  --chart-1: oklch(0.65 0.25 250);
-  --chart-2: oklch(0.7 0.22 160);
-  --chart-3: oklch(0.75 0.2 280);
-  --chart-4: oklch(0.68 0.26 330);
-  --chart-5: oklch(0.73 0.22 50);
-  /* Brighter success and warning for dark mode */
-  --success: oklch(0.7 0.22 160);
-  --warning: oklch(0.78 0.2 80);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  /* Modern blue sidebar primary */
-  --sidebar-primary: oklch(0.65 0.25 250);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --background: #001845;
+  --foreground: #ffffff;
+  --card: #0a2350;
+  --card-foreground: #ffffff;
+  --popover: #0a2350;
+  --popover-foreground: #ffffff;
+
+  --primary: #6efafb;                 /* cyan brilla sobre navy */
+  --primary-foreground: #001845;
+
+  --secondary: #12294f;
+  --secondary-foreground: #ffffff;
+  --muted: #12294f;
+  --muted-foreground: #a5bac4;        /* neutral.400 */
+  --accent: #12294f;
+  --accent-foreground: #6efafb;
+
+  --destructive: #ee2525;
+  --destructive-foreground: #ffffff;
+
+  --border: #1c3563;
+  --input: #1c3563;
+  --ring: #6efafb;
+
+  --chart-1: #6efafb;
+  --chart-2: #4254f8;
+  --chart-3: #37b27a;
+  --chart-4: #fe7624;
+  --chart-5: #89a1ad;
+
+  --success: #37b27a;
+  --warning: #fcd554;
+  --info: #6efafb;
+
+  --sidebar: #001845;
+  --sidebar-foreground: #e5eaf3;
+  --sidebar-primary: #6efafb;
+  --sidebar-primary-foreground: #001845;
+  --sidebar-accent: #0a2350;
+  --sidebar-accent-foreground: #6efafb;
+  --sidebar-border: #12294f;
+  --sidebar-ring: #6efafb;
 }
 
 @theme inline {
-  /* Changed font from Geist to Inter */
-  --font-sans: "Inter", "Inter Fallback", system-ui, -apple-system, sans-serif;
+  /* Fuentes corporativas (variables inyectadas por next/font en layout.tsx) */
+  --font-sans: var(--font-satoshi), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Switzer", var(--font-satoshi), ui-sans-serif, system-ui, sans-serif;
+  --font-ui: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback";
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -119,6 +138,7 @@
   --color-chart-5: var(--chart-5);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-info: var(--info);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -133,11 +153,93 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ============================================================
+   Colores de marca directos (utilidades: bg-brand-navy, text-brand-cyan…)
+   ============================================================ */
+@theme {
+  --color-brand-navy: #001845;
+  --color-brand-cyan: #6efafb;
+  --color-brand-teal: #2e5061;
+  --color-brand-orange: #fe7624;
+
+  --color-neutral-50: #f9fafb;
+  --color-neutral-100: #e5eaf3;
+  --color-neutral-200: #e3f0f7;
+  --color-neutral-300: #c4d5dd;
+  --color-neutral-400: #a5bac4;
+  --color-neutral-500: #89a1ad;
+  --color-neutral-600: #698695;
+  --color-neutral-700: #4b6b7b;
+  --color-neutral-800: #2d4f61;
+  --color-neutral-900: #1d1d1d;
+
+  --color-surface-muted: #eff6fa;
+  --color-surface-warm: #f7f4ea;
+
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-brand: 0 10px 30px -8px rgba(0, 24, 69, 0.15);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* ============================================================
+   Presets tipográficos del DS (uso: class="t-h2", class="t-body-md"…)
+   ============================================================ */
+@layer components {
+  .t-display {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 3.5rem;
+    line-height: 1.1;
+    letter-spacing: -1.5px;
+  }
+  .t-h1 {
+    font-family: var(--font-sans);
+    font-weight: 900;
+    font-size: 2.5rem;
+    line-height: 1.1;
+    letter-spacing: -1.2px;
+  }
+  .t-h2 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 2rem;
+    line-height: 1.1;
+    letter-spacing: -1px;
+  }
+  .t-h3 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 1.5rem;
+    line-height: 1.25;
+    letter-spacing: -0.5px;
+  }
+  .t-h4 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 1.25rem;
+    line-height: 1.35;
+    letter-spacing: -0.4px;
+  }
+  .t-body-md {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 1rem;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+  }
+  .t-caption {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    letter-spacing: -0.3px;
   }
 }

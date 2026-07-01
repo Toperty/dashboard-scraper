@@ -987,7 +987,7 @@ export function PropertyDatabaseView() {
               />
               {geocoding && (
                 <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
                 </div>
               )}
             </div>
@@ -995,7 +995,7 @@ export function PropertyDatabaseView() {
               <p className="text-muted-foreground">Busca propiedades cercanas a esta dirección</p>
               {currentCoordinates && (
                 <div className="space-y-1">
-                  <p className="text-green-600 font-medium">
+                  <p className="text-success font-medium">
                     ✓ Coordenadas obtenidas: {currentCoordinates.lat.toFixed(4)}, {currentCoordinates.lng.toFixed(4)}
                   </p>
                 </div>
@@ -1149,7 +1149,7 @@ export function PropertyDatabaseView() {
                           href={property.finca_raiz_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                          className="inline-flex items-center gap-1 text-primary hover:text-primary/80"
                         >
                           <ExternalLink className="h-4 w-4" />
                           Ver
@@ -1164,7 +1164,7 @@ export function PropertyDatabaseView() {
                           href={property.maps_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-green-600 hover:text-green-800"
+                          className="inline-flex items-center gap-1 text-success hover:text-success/80"
                         >
                           <MapPin className="h-4 w-4" />
                           Maps

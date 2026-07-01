@@ -92,9 +92,9 @@ export default function UserDashboardPage() {
         <Card className="max-w-md w-full">
           <CardContent className="pt-6">
             <div className="text-center">
-              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">Error</h2>
-              <p className="text-gray-600">{error}</p>
+              <p className="text-muted-foreground">{error}</p>
             </div>
           </CardContent>
         </Card>
@@ -121,8 +121,6 @@ export default function UserDashboardPage() {
       subValue: (dashboardData.data?.acabados?.ingresos_certificar_smmlv || dashboardData.data?.flujo_interno?.ingresos_certificar_smmlv) ? 
         `${parseFloat(dashboardData.data?.acabados?.ingresos_certificar_smmlv || dashboardData.data?.flujo_interno?.ingresos_certificar_smmlv).toFixed(2)} SMMLV` : null,
       icon: DollarSign,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50'
     }] : []),
     // Acabados Paquete - Solo si no es programa_1 o programa_7 Y con_alistamiento es "Si"
     ...(dashboardData.data?.configuracion_programa?.programa !== 'programa_1' && 
@@ -135,29 +133,21 @@ export default function UserDashboardPage() {
       subValue: dashboardData.data?.acabados?.valor_paquete_m2 ? 
         `${formatCurrency(dashboardData.data.acabados.valor_paquete_m2)} por m²` : null,
       icon: Receipt,
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50'
     }] : []),
     {
       title: 'Valor de la Propiedad',
       value: formatCurrency(dashboardData.data?.flujo_interno?.commercial_value),
       icon: Home,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50'
     },
     {
       title: 'Tu Cuota Inicial',
       value: formatCurrency(dashboardData.data?.flujo_interno?.user_down_payment),
       icon: User,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50'
     },
     {
       title: 'Meses en Programa',
       value: dashboardData.data?.flujo_interno?.program_months || '0',
       icon: Clock,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50'
     }
   ]
 
@@ -169,25 +159,25 @@ export default function UserDashboardPage() {
   const participacionPorcentaje = currentParticipacion * 100
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-muted">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-primary text-primary-foreground">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-start">
             {/* Logo */}
             <div className="flex items-center gap-4">
-              <TopertyLogo width={100} height={40} />
+              <TopertyLogo variant="white" width={100} height={40} />
             </div>
-            
+
             {/* Status e indicadores */}
             <div className="text-right">
-              <div className="flex items-center gap-2 text-sm text-orange-600">
+              <div className="flex items-center gap-2 text-sm text-brand-cyan">
                 <Clock className="w-4 h-4" />
                 <span>Válido por {dashboardData.days_remaining} días</span>
               </div>
               {/* Indicador de estado del plan */}
               {dashboardData.data?.plan_status && (
-                <div className={`flex items-center gap-2 text-sm mt-1 ${dashboardData.data.plan_status.valid ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`flex items-center gap-2 text-sm mt-1 ${dashboardData.data.plan_status.valid ? 'text-brand-cyan' : 'text-warning'}`}>
                   {dashboardData.data.plan_status.valid ? (
                     <CheckCircle className="w-4 h-4" />
                   ) : (
@@ -206,8 +196,8 @@ export default function UserDashboardPage() {
         <div className="space-y-6">
           {/* Título principal */}
           <div>
-            <h1 className="text-3xl font-bold mb-2">Tu Plan de Pagos</h1>
-            <p className="text-xl text-gray-600 mb-6">{dashboardData.data?.para_usuario?.client_name}</p>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">Tu Plan de Pagos</h1>
+            <p className="text-xl text-muted-foreground mb-6">{dashboardData.data?.para_usuario?.client_name}</p>
           </div>
 
           {/* Welcome message */}
@@ -215,7 +205,7 @@ export default function UserDashboardPage() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <h2 className="text-xl font-semibold mb-2">¡Felicidades por tu decisión!</h2>
-                <p className="text-gray-600">
+                <p className="text-muted-foreground">
                   Has iniciado el camino hacia la propiedad de tu hogar. Aquí tienes un resumen de tu plan de pagos.
                 </p>
               </div>
@@ -230,23 +220,23 @@ export default function UserDashboardPage() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div>
-                  <span className="text-sm text-gray-500">Valor de Lanzamiento</span>
+                  <span className="text-sm text-muted-foreground">Valor de Lanzamiento</span>
                   <p className="font-medium">{dashboardData.data?.flujo_interno?.valor_lanzamiento || '-'}</p>
                 </div>
                 <div>
-                  <span className="text-sm text-gray-500">Tipo de Programa</span>
+                  <span className="text-sm text-muted-foreground">Tipo de Programa</span>
                   <p className="font-medium">{dashboardData.data?.flujo_interno?.tipo_programa || '-'}</p>
                 </div>
                 <div>
-                  <span className="text-sm text-gray-500">Tipo de Vivienda</span>
+                  <span className="text-sm text-muted-foreground">Tipo de Vivienda</span>
                   <p className="font-medium">{dashboardData.data?.flujo_interno?.tipo_vivienda || '-'}</p>
                 </div>
                 <div>
-                  <span className="text-sm text-gray-500">Con Alistamiento</span>
+                  <span className="text-sm text-muted-foreground">Con Alistamiento</span>
                   <p className="font-medium">{dashboardData.data?.flujo_interno?.con_alistamiento === 'Si' ? 'Sí' : 'No'}</p>
                 </div>
                 <div>
-                  <span className="text-sm text-gray-500">Financiación Gastos Cierre</span>
+                  <span className="text-sm text-muted-foreground">Financiación Gastos Cierre</span>
                   <p className="font-medium">{dashboardData.data?.flujo_interno?.con_financiacion_gastos === 'Si' ? 'Sí' : 'No'}</p>
                 </div>
               </div>
@@ -264,15 +254,15 @@ export default function UserDashboardPage() {
                 <CardContent className="p-4">
                   <div className="flex flex-col space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className={`${metric.bgColor} p-2 rounded-lg`}>
-                        <metric.icon className={`w-4 h-4 ${metric.color}`} />
+                      <div className="bg-brand-navy p-2.5 rounded-full">
+                        <metric.icon className="w-4 h-4 text-brand-cyan" />
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-600 mb-1">{metric.title}</p>
+                      <p className="text-xs text-muted-foreground mb-1">{metric.title}</p>
                       <p className="text-lg font-bold">{metric.value}</p>
                       {metric.subValue && (
-                        <p className="text-xs text-gray-500 mt-1">{metric.subValue}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{metric.subValue}</p>
                       )}
                     </div>
                   </div>
@@ -290,14 +280,14 @@ export default function UserDashboardPage() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <span className="text-2xl font-bold text-green-600">
+                    <span className="text-2xl font-bold text-success">
                       {participacionPorcentaje.toFixed(2)}%
                     </span>
-                    <span className="text-sm text-gray-500 ml-2">
+                    <span className="text-sm text-muted-foreground ml-2">
                       de {((dashboardData.data?.flujo_interno?.potential_down_payment || 0.20) * 100).toFixed(0)}%
                     </span>
                   </div>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-muted-foreground">
                     Objetivo de adquisición
                   </span>
                 </div>
@@ -305,7 +295,7 @@ export default function UserDashboardPage() {
                   value={(participacionPorcentaje / ((dashboardData.data?.flujo_interno?.potential_down_payment || 0.20) * 100)) * 100} 
                   className="h-4" 
                 />
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-muted-foreground">
                   <p>
                     Este porcentaje representa tu participación actual en la propiedad. 
                   </p>
@@ -326,21 +316,21 @@ export default function UserDashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-3">
                   <div>
-                    <span className="text-sm text-gray-500">Área</span>
+                    <span className="text-sm text-muted-foreground">Área</span>
                     <p className="font-medium text-lg">{dashboardData.data?.para_usuario?.area || '-'} m²</p>
                   </div>
                   <div>
-                    <span className="text-sm text-gray-500">Valor Comercial</span>
+                    <span className="text-sm text-muted-foreground">Valor Comercial</span>
                     <p className="font-medium text-lg">{formatCurrency(dashboardData.data?.para_usuario?.commercial_value)}</p>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <span className="text-sm text-gray-500">Valor de Lanzamiento Toperty</span>
+                    <span className="text-sm text-muted-foreground">Valor de Lanzamiento Toperty</span>
                     <p className="font-medium text-lg">{formatCurrency(dashboardData.data?.para_usuario?.valor_lanzamiento)}</p>
                   </div>
                   <div>
-                    <span className="text-sm text-gray-500">Costo Financiero Toperty por m²</span>
+                    <span className="text-sm text-muted-foreground">Costo Financiero Toperty por m²</span>
                     <p className="font-medium text-lg">{formatCurrency(dashboardData.data?.para_usuario?.costo_financiero_m2)}</p>
                   </div>
                 </div>
@@ -384,9 +374,9 @@ export default function UserDashboardPage() {
                             />
                             <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : value} />
                             <Legend />
-                            <Bar dataKey={dashboardData.data.graficas.grafica1.label1 || 'Serie 1'} stackId="a" fill="#021945" />
+                            <Bar dataKey={dashboardData.data.graficas.grafica1.label1 || 'Serie 1'} stackId="a" fill="#001845" />
                             <Bar dataKey={dashboardData.data.graficas.grafica1.label2 || 'Serie 2'} stackId="a" fill="#6efafb" />
-                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica1.label3 || 'Serie 3'} stroke="#0466c9" strokeWidth={2} />
+                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica1.label3 || 'Serie 3'} stroke="#4254f8" strokeWidth={2} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       )
@@ -426,9 +416,9 @@ export default function UserDashboardPage() {
                             />
                             <Tooltip formatter={(value: any) => typeof value === 'number' ? formatCurrency(value) : value} />
                             <Legend />
-                            <Bar dataKey={dashboardData.data.graficas.grafica2.label1 || 'Serie 1'} fill="#021945" />
+                            <Bar dataKey={dashboardData.data.graficas.grafica2.label1 || 'Serie 1'} fill="#001845" />
                             <Bar dataKey={dashboardData.data.graficas.grafica2.label2 || 'Serie 2'} fill="#6efafb" />
-                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica2.label3 || 'Serie 3'} stroke="#0466c9" strokeWidth={2} />
+                            <Line type="monotone" dataKey={dashboardData.data.graficas.grafica2.label3 || 'Serie 3'} stroke="#4254f8" strokeWidth={2} />
                           </ComposedChart>
                         </ResponsiveContainer>
                       )
@@ -447,9 +437,9 @@ export default function UserDashboardPage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b bg-gray-50">
+                          <tr className="border-b bg-muted">
                             {dashboardData.data.graficas.tabla_comparativa.headers.filter((header: string, index: number) => index % 2 === 0).map((header: string, index: number) => (
-                              <th key={index} className={`px-2 py-3 ${index === 0 ? 'text-left' : 'text-center'} font-medium text-gray-700 ${index === 0 ? 'sticky left-0 z-10 bg-gray-50' : ''}`}>
+                              <th key={index} className={`px-2 py-3 ${index === 0 ? 'text-left' : 'text-center'} font-medium text-muted-foreground ${index === 0 ? 'sticky left-0 z-10 bg-muted' : ''}`}>
                                 {header}
                               </th>
                             ))}
@@ -457,7 +447,7 @@ export default function UserDashboardPage() {
                         </thead>
                         <tbody>
                           {dashboardData.data.graficas.tabla_comparativa.data.map((row: any[], rowIndex: number) => (
-                            <tr key={rowIndex} className="border-b hover:bg-gray-50">
+                            <tr key={rowIndex} className="border-b hover:bg-muted">
                               {row.filter((cell: any, cellIndex: number) => cellIndex % 2 === 0).map((filteredCell: any, newIndex: number) => {
                                 // Obtener el nombre de la fila (primera celda filtrada)
                                 const rowName = row.filter((cell: any, cellIndex: number) => cellIndex % 2 === 0)[0]?.toString().toLowerCase() || '';
@@ -527,7 +517,7 @@ export default function UserDashboardPage() {
                         <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.max(0, p - 1))} disabled={cashFlowPage === 0} className="h-7 px-2">
                           <ChevronLeft className="h-4 w-4" />
                         </Button>
-                        <span className="text-xs text-gray-600">{cashFlowPage + 1}/{totalPages}</span>
+                        <span className="text-xs text-muted-foreground">{cashFlowPage + 1}/{totalPages}</span>
                         <Button variant="outline" size="sm" onClick={() => setCashFlowPage(p => Math.min(totalPages - 1, p + 1))} disabled={cashFlowPage >= totalPages - 1} className="h-7 px-2">
                           <ChevronRight className="h-4 w-4" />
                         </Button>
@@ -539,80 +529,80 @@ export default function UserDashboardPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs border-collapse table-fixed">
                       <thead>
-                        <tr className="border-b bg-gray-100">
-                          <th className="px-2 py-1 text-left font-medium text-gray-700 sticky left-0 z-10 bg-gray-100 w-44">Concepto</th>
+                        <tr className="border-b bg-muted">
+                          <th className="px-2 py-1 text-left font-medium text-muted-foreground sticky left-0 z-10 bg-muted w-44">Concepto</th>
                           {visibleHeaders.map((header: string, index: number) => (
-                            <th key={index} className={`px-1 py-1 text-right font-medium text-gray-700 whitespace-nowrap w-[85px] ${allMonths[startIdx + index] <= 1 ? 'bg-blue-50' : ''}`}>{header || '-'}</th>
+                            <th key={index} className={`px-1 py-1 text-right font-medium text-muted-foreground whitespace-nowrap w-[85px] ${allMonths[startIdx + index] <= 1 ? 'bg-accent' : ''}`}>{header || '-'}</th>
                           ))}
-                          <th className="bg-gray-100"></th>
+                          <th className="bg-muted"></th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="bg-green-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-green-800">Pagos Rent to Own</td></tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="bg-success/10 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-success">Pagos Rent to Own</td></tr>
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Cuota Inicial</td>
                           {getSlice(cashFlow.cuota_inicial_usuario).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>
+                            <td key={i} className={`px-2 py-1 text-right text-success whitespace-nowrap`}>
                               {getCuotaInicialValue(value, i) ? formatCurrency(getCuotaInicialValue(value, i)) : '-'}
                             </td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Renta</td>
                           {getSlice(cashFlow.renta).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-success whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(+) Compra Parcial</td>
                           {getSlice(cashFlow.compra_parcial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-success whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white font-medium">Total Pagos Rent to Own</td>
                           {getSlice(cashFlow.total_pagos_rent_to_own).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-green-600 font-semibold whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-success font-semibold whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="bg-orange-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-orange-800">Gastos a tu Cargo</td></tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="bg-brand-orange/10 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-brand-orange">Gastos a tu Cargo</td></tr>
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Impuesto Predial</td>
                           {getSlice(cashFlow.impuesto_predial).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-destructive whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Administración</td>
                           {getSlice(cashFlow.administracion).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-destructive whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Seguro Todo Riesgo</td>
                           {getSlice(cashFlow.seguro_todo_riesgo).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-destructive whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="border-b hover:bg-gray-50">
+                        <tr className="border-b hover:bg-muted">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white">(-) Reparaciones</td>
                           {getSlice(cashFlow.reparaciones_estimadas).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-red-600 whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-destructive whitespace-nowrap`}>{value ? formatCurrency(value) : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
-                        <tr className="bg-blue-50 font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-blue-800">Tu Participación</td></tr>
-                        <tr className="border-b hover:bg-gray-50 bg-blue-50/30">
+                        <tr className="bg-accent font-medium"><td colSpan={visibleCount + 2} className="px-2 py-1 text-primary">Tu Participación</td></tr>
+                        <tr className="border-b hover:bg-muted bg-accent/30">
                           <td className="px-2 py-1 whitespace-nowrap sticky left-0 z-10 bg-white font-medium">(=) Total Participación</td>
                           {getSlice(cashFlow.participacion_adquirida).map((value: number, i: number) => (
-                            <td key={i} className={`px-2 py-1 text-right text-blue-700 font-semibold whitespace-nowrap`}>{value ? `${(value * 100).toFixed(2)}%` : '-'}</td>
+                            <td key={i} className={`px-2 py-1 text-right text-primary font-semibold whitespace-nowrap`}>{value ? `${(value * 100).toFixed(2)}%` : '-'}</td>
                           ))}
                           <td></td>
                         </tr>
@@ -679,7 +669,7 @@ export default function UserDashboardPage() {
                 ].map((step, index) => (
                   <div key={index} className="border rounded-lg">
                     <button
-                      className="w-full px-4 py-3 flex items-start gap-3 hover:bg-gray-50 transition-colors"
+                      className="w-full px-4 py-3 flex items-start gap-3 hover:bg-muted transition-colors"
                       onClick={() => {
                         if (expandedSteps.includes(index)) {
                           setExpandedSteps(expandedSteps.filter(i => i !== index))
@@ -688,7 +678,7 @@ export default function UserDashboardPage() {
                         }
                       }}
                     >
-                      <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                      <div className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
                         {index + 1}
                       </div>
                       <div className="flex-1 text-left">
@@ -703,7 +693,7 @@ export default function UserDashboardPage() {
                     </button>
                     {expandedSteps.includes(index) && (
                       <div className="px-4 pb-3 pl-13">
-                        <p className="text-gray-600">{step.content}</p>
+                        <p className="text-muted-foreground">{step.content}</p>
                       </div>
                     )}
                   </div>
@@ -725,7 +715,7 @@ export default function UserDashboardPage() {
             </CardHeader>
             {disclaimerExpanded && (
               <CardContent>
-                <div className="space-y-4 text-sm text-gray-600">
+                <div className="space-y-4 text-sm text-muted-foreground">
                   <p>
                     Toperty S.A.S. (en adelante "Toperty") pone a disposición el presente plan de pagos, el cual está sujeto a la negociación de Toperty con el actual propietario del inmueble. La obligación de Toperty con respecto a la adquisición del inmueble es de medio y no de resultado.
                   </p>

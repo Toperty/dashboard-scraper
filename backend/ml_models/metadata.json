@@ -1,7 +1,7 @@
 {
   "rent": {
     "lightgbm": {
-      "model_path": "models\\model_rent_lightgbm.txt",
+      "model_path": "model_rent_lightgbm.txt",
       "features": [
         "area",
         "rooms",
@@ -18,12 +18,25 @@
         "city_id",
         "property_type"
       ],
-      "trained_at": "2025-12-09T23:42:34.055223"
+      "cat_features": [
+        "is_new",
+        "age_bucket",
+        "city_id"
+      ],
+      "target": "log1p(price_per_m2)",
+      "metrics": {
+        "rmse": 0.33745662615274563,
+        "mape": 15701.646067637907,
+        "r2": 0.6400565908772694,
+        "n": 324215,
+        "best_iteration": 4989
+      },
+      "trained_at": "2026-07-01T03:13:33.718349+00:00"
     }
   },
   "sell": {
-    "catboost": {
-      "model_path": "models\\model_sell_catboost.cbm",
+    "lightgbm": {
+      "model_path": "model_sell_lightgbm.txt",
       "features": [
         "area",
         "rooms",
@@ -40,7 +53,20 @@
         "city_id",
         "property_type"
       ],
-      "trained_at": "2025-12-09T23:42:34.068906"
+      "cat_features": [
+        "is_new",
+        "age_bucket",
+        "city_id"
+      ],
+      "target": "log1p(price_per_m2)",
+      "metrics": {
+        "rmse": 0.26200547400632945,
+        "mape": 2825.8208104251034,
+        "r2": 0.6404188619969344,
+        "n": 350910,
+        "best_iteration": 4389
+      },
+      "trained_at": "2026-07-01T03:14:14.598526+00:00"
     }
   }
 }

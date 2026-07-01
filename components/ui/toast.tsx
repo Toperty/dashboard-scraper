@@ -15,10 +15,10 @@ export function Toast({ message, type, isVisible, progress, onClose }: ToastProp
   const baseClasses = "fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transition-all duration-300 transform"
   
   const typeClasses = {
-    success: "bg-green-600 text-white",
-    error: "bg-red-600 text-white", 
-    info: "bg-blue-600 text-white",
-    loading: "bg-gray-600 text-white"
+    success: "bg-success text-white",
+    error: "bg-destructive text-white", 
+    info: "bg-info text-white",
+    loading: "bg-neutral-700 text-white"
   }
   
   const typeIcons = {
@@ -43,7 +43,7 @@ export function Toast({ message, type, isVisible, progress, onClose }: ToastProp
         <span className="text-sm font-medium flex-1">{message}</span>
         <button 
           onClick={onClose}
-          className="ml-auto text-white hover:text-gray-200 text-lg leading-none"
+          className="ml-auto text-white hover:text-white/80 text-lg leading-none"
         >
           ×
         </button>

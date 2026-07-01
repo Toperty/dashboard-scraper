@@ -589,10 +589,10 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
                     placeholder="Describa las características principales del inmueble, ubicación, acabados, etc."
                     rows={14}
                     maxLength={680}
-                    className={valuationData.description.length > 540 ? 'border-yellow-500' : ''}
+                    className={valuationData.description.length > 540 ? 'border-brand-orange' : ''}
                   />
                   {valuationData.description.length > 540 && (
-                    <p className="text-sm text-yellow-600 mt-1">
+                    <p className="text-sm text-brand-orange mt-1">
                       Acercándose al límite de caracteres (recomendado: máximo 680)
                     </p>
                   )}
@@ -616,7 +616,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
                       type="text"
                       value={formatNumber(valuationData.purchase_price || 0)}
                       disabled
-                      className="bg-gray-50"
+                      className="bg-muted"
                     />
                   </div>
                   <div>
@@ -626,7 +626,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
                       type="text"
                       value={formatNumber(valuationData.closing_costs || 0)}
                       disabled
-                      className="bg-gray-50"
+                      className="bg-muted"
                     />
                   </div>
                 </div>
@@ -638,12 +638,12 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
                       type="text"
                       value={formatNumber(valuationData.user_down_payment || 0)}
                       disabled
-                      className="bg-gray-50"
+                      className="bg-muted"
                     />
                   </div>
                   <div>
                     <Label className="text-lg font-semibold">Inversión Total</Label>
-                    <div className="text-2xl font-bold text-green-600 mt-1">
+                    <div className="text-2xl font-bold text-success mt-1">
                       ${formatNumber(valuationData.total_investment || 0)}
                     </div>
                   </div>
@@ -741,7 +741,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
 
           <TabsContent value="images" className="space-y-4">
             {/* Imagen de Fachada - OBLIGATORIA - Se muestra primero */}
-            <Card className={!facadeImage ? "border-orange-500" : ""}>
+            <Card className={!facadeImage ? "border-brand-orange" : ""}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   Imagen de Fachada
@@ -755,7 +755,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
               </CardHeader>
               <CardContent className="space-y-4">
                 {!facadeImage ? (
-                  <div className="border-2 border-dashed border-orange-500 rounded-lg p-6 text-center hover:border-orange-600 transition-colors bg-orange-50">
+                  <div className="border-2 border-dashed border-brand-orange rounded-lg p-6 text-center hover:border-brand-orange/80 transition-colors bg-brand-orange/10">
                     <Input
                       id="facade-image-upload"
                       type="file"
@@ -767,11 +767,11 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
                       htmlFor="facade-image-upload"
                       className="cursor-pointer flex flex-col items-center gap-2"
                     >
-                      <Upload className="h-12 w-12 text-orange-500" />
-                      <span className="text-sm font-medium text-gray-700">
+                      <Upload className="h-12 w-12 text-brand-orange" />
+                      <span className="text-sm font-medium text-muted-foreground">
                         Subir imagen de fachada (Obligatoria)
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         PNG, JPG hasta 5MB
                       </span>
                     </Label>
@@ -795,7 +795,7 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
                         variant="ghost"
                         size="sm"
                         onClick={removeFacadeImage}
-                        className="text-red-600 hover:text-red-700"
+                        className="text-destructive hover:text-destructive/80"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
                         Eliminar
@@ -811,11 +811,11 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
               <CardHeader>
                 <CardTitle>Imágenes del Inmueble</CardTitle>
                 <CardDescription>
-                  <span className={images.length >= 6 ? "text-orange-600 font-semibold" : ""}>
+                  <span className={images.length >= 6 ? "text-brand-orange font-semibold" : ""}>
                     {images.length} de 6 imágenes
                   </span>
                   {images.length >= 6 && (
-                    <span className="text-orange-600 ml-2">• Límite alcanzado</span>
+                    <span className="text-brand-orange ml-2">• Límite alcanzado</span>
                   )}
                 </CardDescription>
               </CardHeader>
@@ -827,20 +827,20 @@ export function InvestorPresentationForm({ valuationId, valuationName, isOpen, o
                   >
                     <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
                       images.length >= 6 
-                        ? "border-gray-200 bg-gray-50" 
-                        : "border-gray-300 hover:border-gray-400"
+                        ? "border-border bg-muted" 
+                        : "border-border hover:border-neutral-400"
                     }`}>
                       <Upload className={`mx-auto h-12 w-12 ${
-                        images.length >= 6 ? "text-gray-300" : "text-gray-400"
+                        images.length >= 6 ? "text-neutral-300" : "text-neutral-400"
                       }`} />
                       <p className={`mt-2 text-sm ${
-                        images.length >= 6 ? "text-gray-400" : "text-gray-600"
+                        images.length >= 6 ? "text-neutral-400" : "text-muted-foreground"
                       }`}>
                         {images.length >= 6 
                           ? "Límite de imágenes alcanzado" 
                           : "Click para seleccionar imágenes o arrastra aquí"}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {images.length >= 6 
                           ? "Elimina una imagen para agregar otra" 
                           : `PNG, JPG hasta 5MB cada una • Puedes agregar ${6 - images.length} más`}
