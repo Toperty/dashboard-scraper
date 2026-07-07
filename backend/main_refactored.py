@@ -8,7 +8,15 @@ from fastapi.responses import JSONResponse
 import os
 import re
 
-from auth import verify_session, is_read_only
+from auth import verify_session, is_read_only, SESSION_SECRET
+
+# Sin secreto de sesión el login devuelve 500 y TODAS las escrituras 401 para todo
+# el mundo. Mejor no arrancar que arrancar roto (en Cloud Run el deploy falla visible).
+if not SESSION_SECRET:
+    raise RuntimeError(
+        "SESSION_SECRET no está configurado: define la variable de entorno "
+        "(o JWT_SECRET) antes de arrancar el backend."
+    )
 
 # Crear aplicación FastAPI
 app = FastAPI(title="Dashboard API", version="2.0.0")
@@ -33,6 +41,9 @@ _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 #  - /api/dashboard/{token}/sync → sync del share-link público de plan de pagos
 _PUBLIC_WRITE_PREFIXES = ("/api/auth/",)
 _PUBLIC_WRITE_REGEXES = (re.compile(r"^/api/dashboard/[^/]+/sync/?$"),)
+# POSTs de solo CÓMPUTO (no escriben nada): exigen sesión válida pero se permiten
+# a las cuentas de solo lectura — p. ej. el avalúo, que solo corre los modelos ML.
+_COMPUTE_ONLY_REGEXES = (re.compile(r"^/api/valuation/?$"),)
 
 
 @app.middleware("http")
@@ -51,16 +62,21 @@ async def auth_and_readonly_guard(request: Request, call_next):
             cors_headers = {
                 "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
                 "Access-Control-Allow-Credentials": "true",
+                # Sin esto el navegador oculta el header X-Readonly-Block al frontend.
+                "Access-Control-Expose-Headers": "X-Readonly-Block",
             }
             if claims is None:
                 return JSONResponse(
                     {"detail": "No autenticado"}, status_code=401, headers=cors_headers
                 )
-            if is_read_only(claims.get("email")):
+            compute_only = any(rx.match(path) for rx in _COMPUTE_ONLY_REGEXES)
+            if not compute_only and is_read_only(claims.get("email")):
+                # X-Readonly-Block distingue este 403 de cualquier otro 403 del API,
+                # para que el frontend no muestre avisos falsos de "solo lectura".
                 return JSONResponse(
                     {"detail": "Modo solo lectura: no puedes realizar esta acción."},
                     status_code=403,
-                    headers=cors_headers,
+                    headers={**cors_headers, "X-Readonly-Block": "1"},
                 )
     return await call_next(request)
 

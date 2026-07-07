@@ -204,6 +204,7 @@ export function PropertyValuation() {
     sheetUrl: string | null
     showEditButton: boolean // true para "Ver plan existente", false para después de crear/editar
     paymentPlanId?: number | null // ID del plan de pagos para carta de aprobación
+    isExpired: boolean // dashboard vencido: solo se ofrece ampliar el plazo
   }>({
     isOpen: false,
     title: '',
@@ -211,8 +212,10 @@ export function PropertyValuation() {
     dashboardUrl: null,
     sheetUrl: null,
     showEditButton: false,
-    paymentPlanId: null
+    paymentPlanId: null,
+    isExpired: false
   })
+  const [extendingDashboard, setExtendingDashboard] = useState(false)
 
   // Estado para el modal de carta de aprobación
   const [approvalLetterModal, setApprovalLetterModal] = useState<{
@@ -1902,15 +1905,19 @@ export function PropertyValuation() {
       
       if (dashboardCheck.exists) {
         setLoadingPaymentPlanId(null) // Quitar loading antes de mostrar el modal
+        const isExpired = !!dashboardCheck.is_expired
         // Dashboard exists, mostrar modal unificado
         setDashboardActionsModal({
           isOpen: true,
           title: 'Seleccione una acción',
-          message: `Ya existe un plan de pagos para "${valuation.valuation_name}".\n\nDashboard válido por ${dashboardCheck.days_remaining} días.`,
+          message: isExpired
+            ? `El dashboard de "${valuation.valuation_name}" ha expirado. Amplía el plazo para volver a habilitar las acciones.`
+            : `Ya existe un plan de pagos para "${valuation.valuation_name}".\n\nDashboard válido por ${dashboardCheck.days_remaining} días.`,
           dashboardUrl: dashboardCheck.dashboard_url,
           sheetUrl: dashboardCheck.sheet_url,
           showEditButton: true,
-          paymentPlanId: dashboardCheck.payment_plan_id || valuation.id
+          paymentPlanId: dashboardCheck.payment_plan_id || valuation.id,
+          isExpired
         })
         return // El modal maneja las acciones
       } else {
@@ -2036,6 +2043,37 @@ export function PropertyValuation() {
       co_applicant_name: '',
       co_applicant_id: ''
     })
+  }
+
+  // Ampliar el plazo de un dashboard vencido desde el modal de acciones.
+  // El tope de ampliación (10 días) también se valida en el backend.
+  const handleExtendDashboardFromModal = async () => {
+    if (!dashboardActionsModal.dashboardUrl) return
+    setExtendingDashboard(true)
+    try {
+      const token = dashboardActionsModal.dashboardUrl.split('/').pop()?.split('?')[0]
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/dashboard/${token}/extend?days=10`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        throw new Error(`Error ${response.status} al ampliar el plazo`)
+      }
+      // Reactivado: volver a mostrar las acciones normales del dashboard
+      setDashboardActionsModal(prev => ({
+        ...prev,
+        isExpired: false,
+        message: 'Plazo ampliado exitosamente.\n\nDashboard válido por 10 días.'
+      }))
+    } catch (error) {
+      console.error('Error ampliando el plazo del dashboard:', error)
+      setDashboardActionsModal(prev => ({
+        ...prev,
+        message: 'No se pudo ampliar el plazo del dashboard. Por favor, intenta nuevamente.'
+      }))
+    } finally {
+      setExtendingDashboard(false)
+    }
   }
 
   // Función para abrir el formulario de edición desde el modal de plan existente
@@ -2280,7 +2318,8 @@ export function PropertyValuation() {
           dashboardUrl: result.dashboard_url || null,
           sheetUrl: result.sheet_url || null,
           showEditButton: false,
-          paymentPlanId: result.payment_plan_id || null
+          paymentPlanId: result.payment_plan_id || null,
+          isExpired: false
         })
         
         // Recargar la tabla de valuations para actualizar el estado del botón
@@ -4340,8 +4379,24 @@ export function PropertyValuation() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1 py-4">
-            <div className="text-sm text-muted-foreground mb-2">Acciones disponibles:</div>
+            <div className="text-sm text-muted-foreground mb-2">
+              {dashboardActionsModal.isExpired ? 'Dashboard expirado:' : 'Acciones disponibles:'}
+            </div>
             <div className="space-y-1">
+              {dashboardActionsModal.isExpired && (
+                <button
+                  onClick={handleExtendDashboardFromModal}
+                  disabled={extendingDashboard}
+                  className="w-full text-left px-4 py-3 rounded-md transition-colors flex items-center justify-between group bg-brand-orange/10 hover:bg-brand-orange/15 text-brand-orange disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="font-medium">
+                    {extendingDashboard ? 'Ampliando plazo...' : 'Ampliar plazo (10 días)'}
+                  </span>
+                  <span className="text-brand-orange group-hover:text-brand-orange">→</span>
+                </button>
+              )}
+              {!dashboardActionsModal.isExpired && (
+              <>
               {dashboardActionsModal.dashboardUrl && (
                 <>
                   <button
@@ -4475,6 +4530,8 @@ export function PropertyValuation() {
                 <span className="font-medium">Generar Carta de Aprobación</span>
                 <span className="text-success group-hover:text-success">→</span>
               </button>
+              </>
+              )}
             </div>
             {/* Botón de cerrar separado */}
             <div className="mt-2 pt-2 border-t">
@@ -5019,12 +5076,12 @@ export function PropertyValuation() {
             >
               Cancelar
             </Button>
-            <Button 
+            <Button
+              variant="navy"
               onClick={handleGenerateUserPdf}
-              disabled={generatingUserPdf || 
-                       !userPdfForm.fullName || 
+              disabled={generatingUserPdf ||
+                       !userPdfForm.fullName ||
                        userPdfForm.additionalClients.some(c => c.fullName && !c.fullName.trim())}
-              className="bg-primary hover:bg-primary/90"
             >
               {generatingUserPdf ? (
                 <>

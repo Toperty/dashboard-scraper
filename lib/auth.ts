@@ -202,11 +202,34 @@ export class AuthService {
     this.notifyListeners();
   }
 
+  // ¿El token de sesión del backend sigue vigente? (solo lee el `exp` del payload;
+  // la firma la valida el backend en cada mutación)
+  private isSessionTokenValid(token: string | null): boolean {
+    if (!token) return false;
+    try {
+      const body = token.split('.')[0];
+      const base64 = body.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(window.atob(base64));
+      return typeof payload.exp === 'number' && payload.exp > Date.now() / 1000;
+    } catch {
+      return false;
+    }
+  }
+
   // Recuperar estado de autenticación del localStorage
   restoreSession(): void {
     if (typeof window === 'undefined') return;
 
     try {
+      // Sin token de sesión del backend (o vencido) no hay sesión que restaurar:
+      // el usuario se vería "logueado" pero toda escritura fallaría con 401.
+      // (Cubre también a quienes iniciaron sesión antes de que existiera el token.)
+      const sessionToken = localStorage.getItem('session_token');
+      if (!this.isSessionTokenValid(sessionToken)) {
+        this.logout();
+        return;
+      }
+
       const savedUser = localStorage.getItem('auth_user');
       if (savedUser) {
         const user = JSON.parse(savedUser);

@@ -3,8 +3,11 @@
 // El scraper no tiene un cliente API central: cada componente hace su propio `fetch`.
 // En vez de tocar decenas de llamadas, parcheamos `window.fetch` UNA vez para:
 //   1. Adjuntar `Authorization: Bearer <session_token>` a las llamadas al backend.
-//   2. Emitir un evento `api-readonly-blocked` cuando el backend responde 403
-//      (cuenta de solo lectura), para que la UI muestre un aviso.
+//   2. Emitir `api-readonly-blocked` cuando el backend bloquea por cuenta de solo
+//      lectura (403 + header `X-Readonly-Block`; un 403 a secas puede ser otra cosa,
+//      p. ej. un correo no autorizado en el login).
+//   3. Emitir `api-session-expired` en 401 (sesión vencida o ausente) para que la
+//      UI fuerce un nuevo login en vez de fallar en silencio.
 //
 // Solo afecta a las URLs del backend (API_BASE_URL / rutas `/api`); las peticiones
 // internas de Next quedan intactas.
@@ -49,9 +52,13 @@ export function installApiInterceptor(): void {
 
     const response = await originalFetch(input, init);
 
-    if (api && response.status === 403) {
+    if (api) {
       try {
-        window.dispatchEvent(new CustomEvent('api-readonly-blocked'));
+        if (response.status === 403 && response.headers.get('X-Readonly-Block') === '1') {
+          window.dispatchEvent(new CustomEvent('api-readonly-blocked'));
+        } else if (response.status === 401 && !url.includes('/api/auth/')) {
+          window.dispatchEvent(new CustomEvent('api-session-expired'));
+        }
       } catch {
         /* noop */
       }

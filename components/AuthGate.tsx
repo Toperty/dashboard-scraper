@@ -38,6 +38,18 @@ export function AuthGate({ children }: AuthGateProps) {
     }
     window.addEventListener('api-readonly-blocked', handleReadonlyBlocked)
 
+    // Sesión del backend vencida o ausente (401): forzar re-login en vez de
+    // dejar al usuario "logueado" con todas las escrituras fallando en silencio.
+    let lastSessionExpired = 0
+    const handleSessionExpired = () => {
+      const now = Date.now()
+      if (now - lastSessionExpired < 4000) return
+      lastSessionExpired = now
+      toast.error('Tu sesión expiró. Vuelve a iniciar sesión.')
+      authService.logout()
+    }
+    window.addEventListener('api-session-expired', handleSessionExpired)
+
     // Verificar si Google Auth está configurado
     if (!isGoogleAuthConfigured()) {
       setAuthState(prev => ({ 
@@ -97,6 +109,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
       unsubscribe()
       window.removeEventListener('auth-invalid-email', handleInvalidEmail as unknown as EventListener)
       window.removeEventListener('api-readonly-blocked', handleReadonlyBlocked)
+      window.removeEventListener('api-session-expired', handleSessionExpired)
       const buttonDiv = document.getElementById('google-signin-button')
       if (buttonDiv) {
         buttonDiv.remove()
@@ -247,6 +260,11 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
             </div>
 
             <div className="flex items-center gap-4">
+              {authState.user?.readonly && (
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-brand-cyan">
+                  Solo lectura
+                </span>
+              )}
               <div className="text-sm text-right">
                 <p className="font-medium leading-tight">{authState.user?.name}</p>
                 <p className="text-xs text-white/60">{authState.user?.email}</p>

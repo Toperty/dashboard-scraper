@@ -406,7 +406,10 @@ async def check_dashboard_exists(valuation_name: str):
                 "dashboard_url": full_dashboard_url,
                 "sheet_url": dashboard.sheet_url,
                 "expires_at": dashboard.expires_at.isoformat(),
-                "days_remaining": dashboard.days_remaining
+                "days_remaining": dashboard.days_remaining,
+                # days_remaining es 0 tanto vencido como a <24h de vencer;
+                # el frontend necesita el flag explícito para ofrecer "ampliar plazo".
+                "is_expired": dashboard.is_expired
             }
         
         return {"exists": False}
@@ -594,7 +597,10 @@ async def get_investor_dashboard(access_token: str):
 
 
 @router.post("/dashboard/{access_token}/extend")
-async def extend_dashboard_expiration(access_token: str, days: int = 10):
+async def extend_dashboard_expiration(
+    access_token: str,
+    days: int = Query(10, ge=1, le=10, description="Días de ampliación (tope: 10)"),
+):
     """Extend dashboard expiration date and reactivate if expired"""
     from models.payment_plan_dashboard import PaymentPlanDashboard
     from datetime import timedelta, datetime
