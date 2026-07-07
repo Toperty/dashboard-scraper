@@ -178,12 +178,12 @@ Casi todos los routers se montan bajo el prefijo `/api` (excepto `approval_lette
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/api/google-sheets` | Crea un Google Sheet con los datos del plan de pago |
-| GET | `/api/dashboard/check/{valuation_name}` | Verifica si ya existe un dashboard |
+| GET | `/api/dashboard/check/{valuation_name}` | Verifica si ya existe un dashboard (incluye `is_expired`; la UI ofrece "Ampliar plazo" si expiró) |
 | GET | `/api/dashboard/data/{valuation_name}` | Datos del plan de pago para edición |
 | GET | `/api/dashboard/{access_token}` | Dashboard completo (público) |
 | GET | `/api/dashboard/{access_token}/user` | Vista enfocada al usuario |
 | GET | `/api/dashboard/{access_token}/investor` | Vista enfocada al inversionista |
-| POST | `/api/dashboard/{access_token}/extend` | Extiende la expiración y reactiva |
+| POST | `/api/dashboard/{access_token}/extend` | Extiende la expiración y reactiva (`days` 1–10, tope validado en backend) |
 | POST | `/api/dashboard/{access_token}/sync` | Fuerza sincronización con Google Sheets |
 | DELETE | `/api/dashboard/{access_token}` | Soft delete del dashboard |
 | GET | `/api/dashboard/cleanup` | Reporta/desactiva dashboards expirados (cron) |
@@ -238,7 +238,8 @@ components/                            # Componentes de funcionalidad
 └── ui/                               # Primitivas shadcn/Radix (button, card, dialog, table, tabs, …)
 lib/
 ├── api.ts                            # Cliente tipado ÚNICO hacia el backend
-├── auth.ts                           # Google OAuth (AuthService, singleton)
+├── api-interceptor.ts                # Parche de window.fetch: Bearer de sesión + eventos 401/403
+├── auth.ts                           # Google OAuth + sesión del backend (AuthService, singleton)
 ├── excel-export.ts                   # Export CSV/Excel de propiedades
 ├── geocoding.ts                      # GeocodingService
 ├── investor-pdf-generator.ts         # PDF de inversionista (jsPDF + html2canvas)
@@ -262,8 +263,17 @@ El dashboard interno (`MonitoringDashboard`) tiene cuatro pestañas:
 3. **Análisis de Mercado** (`SimpleGoogleMap`) — mapa de Google.
 4. **Avalúo** (`PropertyValuation`) — calculadora ML.
 
-### Autenticación
-`AuthGate` exige login con **Google OAuth** para el dashboard interno. Solo se permiten correos de los dominios `@toperty.co` y `@valio.com.co` (más una allowlist puntual), validado en `lib/auth.ts`. Los dashboards públicos de planes de pago (`/dashboard/payment-plan/[token]`) **no** pasan por `AuthGate`; su seguridad es el token de acceso.
+### Autenticación y sesiones del backend
+`AuthGate` exige login con **Google OAuth** para el dashboard interno. Solo se permiten correos de los dominios `@toperty.co` y `@valio.com.co` (más una allowlist puntual). La validación ya **no es solo del cliente**: el frontend envía el credential de Google a `POST /api/auth/session` y el **backend lo verifica contra Google** (firma + audience, `backend/auth.py`), valida el dominio y emite una **sesión propia** (token HMAC-SHA256 firmado con `SESSION_SECRET`, 7 días). `lib/api-interceptor.ts` parchea `window.fetch` una sola vez para adjuntar esa sesión como `Authorization: Bearer` a todas las llamadas al backend (no hay que tocar cada componente).
+
+Reglas del guard (middleware en `main_refactored.py`):
+- Toda **mutación** (POST/PUT/PATCH/DELETE) exige sesión válida → **401** si falta o venció. Un 401 emite el evento `api-session-expired` y `AuthGate` fuerza re-login (en vez de fallar en silencio).
+- Las **cuentas de solo lectura** (allowlist `READ_ONLY_EMAILS` en `backend/auth.py`) entran y **ven todo** — no se ocultan vistas ni botones — pero las mutaciones devuelven **403 con el header `X-Readonly-Block: 1`** (distingue este 403 de cualquier otro) y la UI muestra un toast "Modo solo lectura". El header muestra el badge "Solo lectura" (flag `readonly` devuelto en el login).
+- Los POST de **solo cómputo** (p. ej. `/api/valuation`, que solo corre los modelos ML sin escribir) sí se permiten a las cuentas de solo lectura.
+- Exentos del guard: `/api/auth/*` (login) y `/api/dashboard/{token}/sync` (sync del share-link público). Las lecturas (GET) quedan abiertas como antes.
+- Sin `SESSION_SECRET` el backend **no arranca** (fail-fast en el startup), para no desplegar un login roto.
+
+Los dashboards públicos de planes de pago (`/dashboard/payment-plan/[token]`) **no** pasan por `AuthGate`; su seguridad es el token de acceso.
 
 ### Notas del cliente API (`lib/api.ts`)
 - Todas las llamadas usan `cache: 'no-store'`.
@@ -295,6 +305,10 @@ APPSCRIPT_PRESENTATION_URL=           # Apps Script: presentación de Slides
 APPSCRIPT_APPROVAL_LETTER_URL=        # Apps Script: carta de aprobación
 PRIVATE_KEY=                          # clave privada de cuenta de servicio (Sheets API)
 CLIENT_EMAIL=                         # email de cuenta de servicio (Sheets API)
+
+# Autenticación (sesiones + solo lectura)
+SESSION_SECRET=                       # firma HMAC de las sesiones (OBLIGATORIO: el backend no arranca sin él; alias JWT_SECRET)
+GOOGLE_CLIENT_ID=                     # client id de Google OAuth para verificar el credential del login (alias NEXT_PUBLIC_GOOGLE_CLIENT_ID)
 
 # SMTP (envío de Excel/emails)
 SMTP_SERVER=smtp.gmail.com

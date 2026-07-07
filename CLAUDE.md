@@ -62,11 +62,20 @@ Layered, registered in `main_refactored.py`:
 ### External integrations
 The investor/payment-plan flow is glued together with several **Google Apps Script web apps** (URLs in env: `GOOGLE_APPS_SCRIPT_URL`, `GOOGLE_APPS_SCRIPT_READER_URL`, `APPSCRIPT_PRESENTATION_URL`, `APPSCRIPT_APPROVAL_LETTER_URL`; the script source lives in `backend/scripts/appscript_final.gs`). Sheets formulas are computed asynchronously by Google, so `payment_plans.py` polls the reader Apps Script with backoff/retries until the data looks "complete" before serving it. PDFs are built server-side with reportlab (and client-side with jspdf/html2canvas in `lib/investor-pdf-generator.ts`).
 
-Expired public dashboards are deactivated by `backend/scripts/cleanup_dashboards.py`, intended to run as a cron hitting `/api/dashboard/cleanup`.
+Expired public dashboards are deactivated by `backend/scripts/cleanup_dashboards.py`, intended to run as a cron hitting `/api/dashboard/cleanup`. An expired dashboard can be re-enabled from the Avalúo actions modal ("Ampliar plazo"): `GET /api/dashboard/check/{valuation_name}` returns an explicit `is_expired` flag (`days_remaining` is 0 both when expired and when <24h remain, so the flag is needed), and `POST /api/dashboard/{token}/extend` reactivates it — `days` is clamped to 1–10 server-side.
+
+### Auth — server-side sessions + read-only accounts
+
+The backend enforces identity on every **mutation** (`backend/auth.py` + the `auth_and_readonly_guard` middleware in `main_refactored.py`); GETs stay open as before:
+
+- **Login**: the frontend exchanges the Google credential at `POST /api/auth/session` (`routers/auth.py`); the backend verifies it against Google (signature + audience via `GOOGLE_CLIENT_ID`), validates the allowed domains/emails, and issues its own session token (HMAC-SHA256 signed with `SESSION_SECRET`, 7 days, stdlib only — no new deps). The app **fails fast at startup if `SESSION_SECRET` is missing** rather than deploying with broken auth.
+- **Guard**: POST/PUT/PATCH/DELETE require a valid `Authorization: Bearer` session → 401 otherwise. Exempt: `/api/auth/*` and the public share-link sync `/api/dashboard/{token}/sync`.
+- **Read-only accounts** (`READ_ONLY_EMAILS` allowlist in `backend/auth.py`): they log in and see everything (views/buttons are NOT hidden — the server is the guarantee), but mutations return **403 with header `X-Readonly-Block: 1`**, which distinguishes this 403 from any other. **Compute-only POSTs** (`_COMPUTE_ONLY_REGEXES`, e.g. `/api/valuation` — runs the ML models, writes nothing) are allowed for read-only accounts.
+- **Frontend**: `lib/api-interceptor.ts` monkey-patches `window.fetch` once (there is no central API client for writes) to attach the Bearer token to backend calls and emit `api-readonly-blocked` (403 + `X-Readonly-Block` → "Modo solo lectura" toast) and `api-session-expired` (401 outside `/api/auth/` → toast + forced re-login). `AuthGate` listens for both; `restoreSession` in `lib/auth.ts` refuses to restore a session whose backend token is missing or expired. The header shows a "Solo lectura" badge from the `readonly` flag returned at login.
 
 ## Frontend architecture
 
-- `app/` — App Router. `app/page.tsx` is the internal monitoring dashboard, wrapped in `<AuthGate>` (Google OAuth, see `lib/auth.ts`). `app/dashboard/payment-plan/[token]/` serves the **public, token-gated** investor/user dashboards (no auth gate).
+- `app/` — App Router. `app/page.tsx` is the internal monitoring dashboard, wrapped in `<AuthGate>` (Google OAuth exchanged for a backend session — see "Auth" above and `lib/auth.ts` / `lib/api-interceptor.ts`). `app/dashboard/payment-plan/[token]/` serves the **public, token-gated** investor/user dashboards (no auth gate).
 - `components/` — feature components (`monitoring-dashboard`, `property-valuation`, `payment-plan-dashboard`, `investor-pdf-form`, etc.); `components/ui/` holds the shadcn/Radix primitives.
 - `lib/api.ts` — the single typed client for the backend; add backend calls here.
 - `contexts/`, `hooks/` — React context (geocoding) and shared hooks (toast, confirm, alert, geocoding).
@@ -74,4 +83,4 @@ Expired public dashboards are deactivated by `backend/scripts/cleanup_dashboards
 
 ## Configuration
 
-Backend reads Postgres creds from `ADMIN_USER`/`PASSWORD`/`HOST`/`DB_NAME`/`DB_PORT`, plus Google API/Sheets/Apps Script URLs, SMTP, and GCS/GCP project vars. Frontend reads `NEXT_PUBLIC_*` vars (API URL, Google OAuth client ID, Maps/Mapbox tokens, and per-program presentation template IDs). See `.env`, `.env.oauth.example`, and `.env.production.example`. Service-account JSON files (`gcs-credentials.json`, `service-account.json`) are git-ignored secrets — never commit them.
+Backend reads Postgres creds from `ADMIN_USER`/`PASSWORD`/`HOST`/`DB_NAME`/`DB_PORT`, plus Google API/Sheets/Apps Script URLs, SMTP, and GCS/GCP project vars. Auth requires `SESSION_SECRET` (or `JWT_SECRET`; **mandatory — the backend refuses to start without it**) and `GOOGLE_CLIENT_ID` (or `NEXT_PUBLIC_GOOGLE_CLIENT_ID`). Note these reach the container only through docker-compose's `environment:` block locally (the Dockerfiles do not define them) and must be set on the Cloud Run service in production. Frontend reads `NEXT_PUBLIC_*` vars (API URL, Google OAuth client ID, Maps/Mapbox tokens, and per-program presentation template IDs). See `.env`, `.env.oauth.example`, and `.env.production.example`. Service-account JSON files (`gcs-credentials.json`, `service-account.json`) are git-ignored secrets — never commit them.
