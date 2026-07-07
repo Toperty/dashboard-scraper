@@ -6,6 +6,8 @@ import { LogOut, AlertCircle, Settings } from "lucide-react"
 import AuthService, { isGoogleAuthConfigured } from "@/lib/auth"
 import { TopertyLogo, TopertyLogoCompact } from "@/components/toperty-logo"
 import { useConfirm } from "@/hooks/use-confirm"
+import { installApiInterceptor } from "@/lib/api-interceptor"
+import { toast } from "sonner"
 
 interface AuthGateProps {
   children: React.ReactNode
@@ -23,6 +25,19 @@ export function AuthGate({ children }: AuthGateProps) {
   const { confirm } = useConfirm()
 
   useEffect(() => {
+    // Adjuntar el token de sesión a las llamadas al API y avisar en 403 (solo lectura).
+    installApiInterceptor()
+
+    // Aviso cuando el backend bloquea una acción por ser cuenta de solo lectura.
+    let lastReadonlyToast = 0
+    const handleReadonlyBlocked = () => {
+      const now = Date.now()
+      if (now - lastReadonlyToast < 4000) return
+      lastReadonlyToast = now
+      toast.error('Modo solo lectura: no puedes realizar esta acción.')
+    }
+    window.addEventListener('api-readonly-blocked', handleReadonlyBlocked)
+
     // Verificar si Google Auth está configurado
     if (!isGoogleAuthConfigured()) {
       setAuthState(prev => ({ 
@@ -81,6 +96,7 @@ El correo ${event.detail.email} no está autorizado para acceder al sistema.`
     return () => {
       unsubscribe()
       window.removeEventListener('auth-invalid-email', handleInvalidEmail as unknown as EventListener)
+      window.removeEventListener('api-readonly-blocked', handleReadonlyBlocked)
       const buttonDiv = document.getElementById('google-signin-button')
       if (buttonDiv) {
         buttonDiv.remove()

@@ -5,6 +5,7 @@ interface GoogleUser {
   email: string;
   name: string;
   picture: string;
+  readonly?: boolean;
 }
 
 interface AuthState {
@@ -14,6 +15,9 @@ interface AuthState {
 
 // Client ID de Google OAuth (necesita ser configurado en Google Cloud Console)
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+
+// Base del backend (donde se verifica el credential y se emite la sesión).
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Verificar si el Client ID está configurado
 export function isGoogleAuthConfigured(): boolean {
@@ -26,6 +30,7 @@ export class AuthService {
     isAuthenticated: false,
     user: null
   };
+  private sessionToken: string | null = null;
   private listeners: Array<(state: AuthState) => void> = [];
 
   static getInstance(): AuthService {
@@ -90,15 +95,15 @@ export class AuthService {
 
   private async handleGoogleResponse(response: any): Promise<void> {
     try {
-      // Decodificar el JWT token de Google
+      // Pre-chequeo de UX en el cliente (la validación AUTORITATIVA la hace el backend).
       const userInfo = this.parseJWT(response.credential);
-      
+
       // Dominios y correos permitidos
       const allowedDomains = ['@toperty.co', '@valio.com.co'];
-      const allowedEmails = ['pipesanchezt2@gmail.com'];
-      
+      const allowedEmails = ['pipesanchezt2@gmail.com', 'marivigonzalezb@gmail.com'];
+
       // Verificar que el email sea de un dominio permitido o sea un correo específico
-      const isAllowedEmail = allowedDomains.some(domain => userInfo.email.endsWith(domain)) || 
+      const isAllowedEmail = allowedDomains.some(domain => userInfo.email.endsWith(domain)) ||
                              allowedEmails.includes(userInfo.email);
       if (!isAllowedEmail) {
         // Emitir evento personalizado para que el componente pueda manejarlo
@@ -109,20 +114,43 @@ export class AuthService {
         return;
       }
 
+      // Intercambiar el credential de Google por una SESIÓN del backend: el backend
+      // verifica el token contra Google, valida el dominio y devuelve el rol (readonly).
+      const res = await fetch(`${API_BASE_URL}/api/auth/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential }),
+      });
+      if (!res.ok) {
+        if (res.status === 403) {
+          window.dispatchEvent(new CustomEvent('auth-invalid-email', {
+            detail: { email: userInfo.email }
+          }));
+        }
+        this.logout();
+        return;
+      }
+      const data = await res.json();
+
+      // Guardar la sesión propia del backend (se usa como Bearer en cada llamada).
+      this.sessionToken = data.token;
+      localStorage.setItem('session_token', data.token);
+
       // Actualizar estado
       this.authState = {
         isAuthenticated: true,
         user: {
           id: userInfo.sub,
-          email: userInfo.email,
-          name: userInfo.name,
-          picture: userInfo.picture
+          email: data.user?.email || userInfo.email,
+          name: data.user?.name || userInfo.name,
+          picture: data.user?.picture || userInfo.picture,
+          readonly: !!data.user?.readonly,
         }
       };
 
       // Guardar en localStorage
       localStorage.setItem('auth_user', JSON.stringify(this.authState.user));
-      
+
       this.notifyListeners();
     } catch (error) {
       console.error('Error al procesar respuesta de Google:', error);
@@ -162,13 +190,15 @@ export class AuthService {
       isAuthenticated: false,
       user: null
     };
-    
+    this.sessionToken = null;
+
     localStorage.removeItem('auth_user');
-    
+    localStorage.removeItem('session_token');
+
     if (typeof window !== 'undefined' && window.google) {
       window.google.accounts.id.disableAutoSelect();
     }
-    
+
     this.notifyListeners();
   }
 
@@ -180,15 +210,16 @@ export class AuthService {
       const savedUser = localStorage.getItem('auth_user');
       if (savedUser) {
         const user = JSON.parse(savedUser);
-        
+
         // Dominios y correos permitidos
         const allowedDomains = ['@toperty.co', '@valio.com.co'];
-        const allowedEmails = ['pipesanchezt2@gmail.com'];
-        
+        const allowedEmails = ['pipesanchezt2@gmail.com', 'marivigonzalezb@gmail.com'];
+
         // Verificar que siga siendo un email válido
-        const isAllowedEmail = allowedDomains.some(domain => user.email.endsWith(domain)) || 
+        const isAllowedEmail = allowedDomains.some(domain => user.email.endsWith(domain)) ||
                                allowedEmails.includes(user.email);
         if (user.email && isAllowedEmail) {
+          this.sessionToken = localStorage.getItem('session_token');
           this.authState = {
             isAuthenticated: true,
             user
@@ -217,6 +248,18 @@ export class AuthService {
   // Obtener usuario actual
   getUser(): GoogleUser | null {
     return this.authState.user;
+  }
+
+  // Token de sesión del backend (para adjuntar como Bearer).
+  getSessionToken(): string | null {
+    if (this.sessionToken) return this.sessionToken;
+    if (typeof window !== 'undefined') return localStorage.getItem('session_token');
+    return null;
+  }
+
+  // ¿La cuenta actual es de solo lectura? (el enforcement real está en el backend)
+  isReadOnly(): boolean {
+    return !!this.authState.user?.readonly;
   }
 }
 
