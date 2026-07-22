@@ -40,6 +40,40 @@ RESUMEN_KEYS = [
     "valorizacion",
 ]
 
+# Filas del flujo de caja del inversionista que consume el landing
+# (las mismas que muestra el dashboard de inversionista de este repo)
+CASH_FLOW_KEYS = [
+    "fecha",
+    "mes_numero",
+    "cuota_inicial_usuario",
+    "renta",
+    "compra_parcial",
+    "venta",
+    "seguro_arrendamiento",
+    "ganancia_ocasional",
+    "ica",
+    "gmf",
+    "comision_toperty_gestion",
+    "comision_toperty_exit",
+    "flujo_caja_operativo",
+]
+
+
+def _cash_flow_snapshot(sheet_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Flujo del inversionista recortado a mes 0 + programa + cierre."""
+    if not sheet_data or not isinstance(sheet_data, dict):
+        return None
+    icf = sheet_data.get("investor_cash_flow")
+    if not isinstance(icf, dict) or not icf.get("mes_numero"):
+        return None
+    flujo = sheet_data.get("flujo_interno") or {}
+    try:
+        program_months = int(flujo.get("program_months") or 60)
+    except (TypeError, ValueError):
+        program_months = 60
+    total_cols = program_months + 2  # mes 0 + programa + cierre
+    return {k: (icf.get(k) or [])[:total_cols] for k in CASH_FLOW_KEYS}
+
 
 def _fresh_image_url(image_path: Optional[str]) -> Optional[str]:
     """URL firmada fresca (las almacenadas expiran a los 7 días)."""
@@ -92,6 +126,8 @@ async def list_investment_opportunities():
                     .order_by(PaymentPlanDashboard.created_at.desc())
                 ).first()
                 resumen = _resumen_snapshot(dashboard.sheet_data if dashboard else None)
+                cash_flow = _cash_flow_snapshot(dashboard.sheet_data if dashboard else None)
+                flujo = (dashboard.sheet_data or {}).get("flujo_interno", {}) if dashboard else {}
 
                 opportunities.append(
                     {
@@ -108,6 +144,9 @@ async def list_investment_opportunities():
                         "description": v.description,
                         "image_url": facade_url,
                         "resumen": resumen,
+                        "investor_cash_flow": cash_flow,
+                        "inversion_por_unidad": flujo.get("inversion_por_unidad"),
+                        "program_months": flujo.get("program_months"),
                         "updated_at": v.updated_at.isoformat() if v.updated_at else None,
                     }
                 )
