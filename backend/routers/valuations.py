@@ -1,6 +1,7 @@
 """
 Router de Avalúos - Endpoints de valuaciones de propiedades
 """
+import os
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
@@ -536,6 +537,16 @@ async def toggle_investment_opportunity(valuation_id: int):
             valuation.updated_at = get_local_now()
             session.add(valuation)
             session.commit()
+
+            # Purga el caché del landing de inversionistas para que el cambio
+            # se refleje al instante (best-effort, nunca bloquea el toggle)
+            revalidate_url = os.getenv("INVESTORS_REVALIDATE_URL")
+            if revalidate_url:
+                try:
+                    import requests
+                    requests.get(revalidate_url, timeout=3)
+                except Exception:
+                    pass
 
             estado = "publicado como" if valuation.investment_opportunity else "retirado de"
             return {
