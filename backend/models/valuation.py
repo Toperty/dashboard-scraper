@@ -46,6 +46,9 @@ class Valuation(SQLModel, table=True):
     # Campo de favorito
     is_favorite: bool = Field(default=False, description="Marca el avalúo como favorito")
     favorite_order: Optional[int] = Field(default=None, description="Orden del favorito (1-5)")
+
+    # Oportunidad de inversión (visible en el landing de inversionistas)
+    investment_opportunity: bool = Field(default=False, description="Publica el inmueble como oportunidad de inversión")
     
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")

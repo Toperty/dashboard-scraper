@@ -182,6 +182,7 @@ export interface Valuation {
   has_payment_plan?: boolean;
   is_favorite: boolean;
   favorite_order?: number;
+  investment_opportunity?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -384,6 +385,30 @@ export async function toggleValuationFavorite(
     return {
       status: 'error',
       message: 'Error de conexión al actualizar favoritos'
+    };
+  }
+}
+
+export async function toggleInvestmentOpportunity(
+  valuationId: number
+): Promise<{status: string, message: string, investment_opportunity?: boolean}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/valuations/${valuationId}/investment-opportunity`, {
+      method: 'PUT',
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error toggling investment opportunity:', error);
+    return {
+      status: 'error',
+      message: 'Error de conexión al actualizar la oportunidad de inversión'
     };
   }
 }

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2, FileText, X, Check, ExternalLink, Pin } from "lucide-react"
+import { Calculator, DollarSign, Home, MapPin, Search, Save, ChevronLeft, ChevronRight, History, Edit, Trash2, FileText, X, Check, ExternalLink, Pin, TrendingUp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
@@ -16,7 +16,7 @@ import { Toast } from '@/components/ui/toast'
 import { addInterFont } from '@/lib/inter-font'
 import { useGeocoding } from "@/hooks/use-geocoding"
 import { useConfirm } from "@/hooks/use-confirm"
-import { fetchValuations, deleteValuation, toggleValuationFavorite, type Valuation, type ValuationsResponse } from "@/lib/api"
+import { fetchValuations, deleteValuation, toggleValuationFavorite, toggleInvestmentOpportunity, type Valuation, type ValuationsResponse } from "@/lib/api"
 import { InvestorPresentationForm } from "@/components/investor-pdf-form"
 
 interface PropertyData {
@@ -138,6 +138,7 @@ export function PropertyValuation() {
   const [showFilters, setShowFilters] = useState(false)
   const [showFavoriteReplace, setShowFavoriteReplace] = useState<number | null>(null)
   const [updatingFavorite, setUpdatingFavorite] = useState<number | null>(null) // ID del favorito que se está actualizando
+  const [updatingOpportunity, setUpdatingOpportunity] = useState<number | null>(null) // ID de la oportunidad de inversión que se está actualizando
   
   // Estados temporales para los inputs de precio (para mostrar mientras se escribe)
   const [tempPriceMin, setTempPriceMin] = useState('')
@@ -2541,6 +2542,25 @@ export function PropertyValuation() {
     }
   }
 
+  // Publicar/despublicar como oportunidad de inversión (landing de inversionistas)
+  const toggleOpportunity = async (valuationId: number) => {
+    if (updatingOpportunity !== null) return
+
+    setUpdatingOpportunity(valuationId)
+    try {
+      const result = await toggleInvestmentOpportunity(valuationId)
+
+      if (result.status === 'error') {
+        setSaveMessage({ type: 'error', text: result.message })
+        setTimeout(() => setSaveMessage(null), 3000)
+      } else {
+        await loadValuations()
+      }
+    } finally {
+      setUpdatingOpportunity(null)
+    }
+  }
+
   // Los filtros ahora se aplican en el backend, no necesitamos filtrar en frontend
 
   const propertyTypes = [
@@ -3668,9 +3688,35 @@ export function PropertyValuation() {
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>
-                                {favoriteValuations.includes(valuation.id) 
-                                  ? 'Quitar de favoritos' 
+                                {favoriteValuations.includes(valuation.id)
+                                  ? 'Quitar de favoritos'
                                   : `Marcar como favorito (${favoriteValuations.length}/5)`}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleOpportunity(valuation.id)}
+                                disabled={updatingOpportunity !== null}
+                                className={`p-1 hover:bg-transparent ${
+                                  valuation.investment_opportunity
+                                    ? 'text-success'
+                                    : 'text-neutral-400 hover:text-muted-foreground'
+                                } ${
+                                  updatingOpportunity === valuation.id ? 'opacity-50' : ''
+                                }`}
+                              >
+                                <TrendingUp className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>
+                                {valuation.investment_opportunity
+                                  ? 'Retirar del landing de inversionistas'
+                                  : 'Publicar como oportunidad de inversión'}
                               </p>
                             </TooltipContent>
                           </Tooltip>

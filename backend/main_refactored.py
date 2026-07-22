@@ -104,6 +104,7 @@ from routers.approval_letter import router as approval_letter_router
 from routers.client_name import router as client_name_router
 from routers.investor_data import router as investor_data_router
 from routers.auth import router as auth_router
+from routers.investment_opportunities import router as investment_opportunities_router
 
 # Registrar routers
 app.include_router(dashboard_router)
@@ -118,6 +119,7 @@ app.include_router(approval_letter_router, prefix="/api/approval-letter")
 app.include_router(client_name_router)
 app.include_router(investor_data_router)
 app.include_router(auth_router)
+app.include_router(investment_opportunities_router)
 
 # Importar servicio de estadísticas para el root endpoint
 from services.stats_service import get_local_now

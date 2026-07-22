@@ -196,6 +196,35 @@ class GCSClient:
             logger.error(f"Failed to generate signed URL with IAM API: {e}")
             return None
     
+    def regenerate_signed_url(self, gcs_url: str) -> Optional[str]:
+        """
+        Regenerate a fresh signed URL from a stored (possibly expired) GCS URL.
+
+        Args:
+            gcs_url: Full GCS URL (signed or not) or blob path
+
+        Returns:
+            Fresh signed URL, or None if it could not be generated
+        """
+        if not self.client or not self.bucket:
+            return None
+
+        try:
+            if gcs_url.startswith("https://storage.googleapis.com/"):
+                url_without_params = gcs_url.split('?')[0]
+                parts = url_without_params.replace("https://storage.googleapis.com/", "").split('/', 1)
+                if len(parts) != 2:
+                    return None
+                blob_path = parts[1]
+            else:
+                blob_path = gcs_url.lstrip('/')
+
+            blob = self.bucket.blob(blob_path)
+            return self._generate_signed_url(blob)
+        except Exception as e:
+            logger.error(f"Failed to regenerate signed URL: {e}")
+            return None
+
     def delete_image(self, gcs_url: str) -> bool:
         """
         Delete image from GCS

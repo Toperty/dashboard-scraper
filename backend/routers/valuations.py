@@ -399,6 +399,7 @@ async def get_valuations(
                         "valuation_name": v.valuation_name,
                         "is_favorite": v.is_favorite,
                         "favorite_order": v.favorite_order,
+                        "investment_opportunity": v.investment_opportunity,
                         "area": v.area,
                         "property_type": v.property_type,
                         "rooms": v.rooms,
@@ -516,6 +517,31 @@ async def toggle_favorite(valuation_id: int):
                 "message": message,
                 "is_favorite": valuation.is_favorite,
                 "favorite_order": valuation.favorite_order
+            }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.put("/valuations/{valuation_id}/investment-opportunity")
+async def toggle_investment_opportunity(valuation_id: int):
+    """Publicar/despublicar un avalúo como oportunidad de inversión (landing de inversionistas)"""
+    try:
+        with Session(engine) as session:
+            valuation = session.get(Valuation, valuation_id)
+
+            if not valuation:
+                return {"status": "error", "message": "Avalúo no encontrado"}
+
+            valuation.investment_opportunity = not valuation.investment_opportunity
+            valuation.updated_at = get_local_now()
+            session.add(valuation)
+            session.commit()
+
+            estado = "publicado como" if valuation.investment_opportunity else "retirado de"
+            return {
+                "status": "success",
+                "message": f"Avalúo '{valuation.valuation_name}' {estado} oportunidad de inversión",
+                "investment_opportunity": valuation.investment_opportunity
             }
     except Exception as e:
         return {"status": "error", "message": str(e)}
